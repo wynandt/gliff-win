@@ -11,16 +11,21 @@
 //! texture (`IMFDXGIBuffer`) is an error, and `decode::VideoDecoder` falls
 //! back to the CPU.
 
+use std::cell::Cell;
 use std::mem::ManuallyDrop;
 use std::sync::OnceLock;
 use std::time::Instant;
 
+use windows::Win32::Foundation::CloseHandle;
+use windows::Win32::Foundation::HANDLE;
 use windows::Win32::Foundation::HMODULE;
+use windows::Win32::Foundation::WAIT_OBJECT_0;
 use windows::Win32::Graphics::Direct3D::D3D_DRIVER_TYPE_HARDWARE;
 use windows::Win32::Graphics::Direct3D::D3D_FEATURE_LEVEL_11_0;
 use windows::Win32::Graphics::Direct3D11::D3D11_CPU_ACCESS_READ;
 use windows::Win32::Graphics::Direct3D11::D3D11_CREATE_DEVICE_BGRA_SUPPORT;
 use windows::Win32::Graphics::Direct3D11::D3D11_CREATE_DEVICE_VIDEO_SUPPORT;
+use windows::Win32::Graphics::Direct3D11::D3D11_FENCE_FLAG_NONE;
 use windows::Win32::Graphics::Direct3D11::D3D11_MAP_READ;
 use windows::Win32::Graphics::Direct3D11::D3D11_MAPPED_SUBRESOURCE;
 use windows::Win32::Graphics::Direct3D11::D3D11_SDK_VERSION;
@@ -28,7 +33,10 @@ use windows::Win32::Graphics::Direct3D11::D3D11_TEXTURE2D_DESC;
 use windows::Win32::Graphics::Direct3D11::D3D11_USAGE_STAGING;
 use windows::Win32::Graphics::Direct3D11::D3D11CreateDevice;
 use windows::Win32::Graphics::Direct3D11::ID3D11Device;
+use windows::Win32::Graphics::Direct3D11::ID3D11Device5;
 use windows::Win32::Graphics::Direct3D11::ID3D11DeviceContext;
+use windows::Win32::Graphics::Direct3D11::ID3D11DeviceContext4;
+use windows::Win32::Graphics::Direct3D11::ID3D11Fence;
 use windows::Win32::Graphics::Direct3D11::ID3D11Multithread;
 use windows::Win32::Graphics::Direct3D11::ID3D11Texture2D;
 use windows::Win32::Graphics::Dxgi::Common::DXGI_FORMAT_NV12;
@@ -55,6 +63,7 @@ use windows::Win32::Media::MediaFoundation::MFCreateMemoryBuffer;
 use windows::Win32::Media::MediaFoundation::MFCreateSample;
 use windows::Win32::Media::MediaFoundation::MFMediaType_Video;
 use windows::Win32::Media::MediaFoundation::MFSTARTUP_LITE;
+use windows::Win32::Media::MediaFoundation::MFSampleExtension_Discontinuity;
 use windows::Win32::Media::MediaFoundation::MFStartup;
 use windows::Win32::Media::MediaFoundation::MFT_MESSAGE_COMMAND_DRAIN;
 use windows::Win32::Media::MediaFoundation::MFT_MESSAGE_NOTIFY_BEGIN_STREAMING;
@@ -68,6 +77,8 @@ use windows::Win32::System::Com::CLSCTX_INPROC_SERVER;
 use windows::Win32::System::Com::COINIT_MULTITHREADED;
 use windows::Win32::System::Com::CoCreateInstance;
 use windows::Win32::System::Com::CoInitializeEx;
+use windows::Win32::System::Threading::CreateEventW;
+use windows::Win32::System::Threading::WaitForSingleObject;
 use windows::core::Interface;
 
 use gliff_proto::msg::ChromaMode;
@@ -117,6 +128,74 @@ struct Gpu {
     context: ID3D11DeviceContext,
     manager: IMFDXGIDeviceManager,
     adapter: String,
+    /// Waits for the copy-back without spinning; `None` where the device
+    /// has no fences, then `Map` waits.
+    fence: Option<Fence>,
+}
+
+/// A D3D11 fence and an event, to sleep until the GPU has done the work
+/// queued so far. `Map` on a busy staging texture spins a CPU core in some
+/// drivers for as long as the decode takes.
+struct Fence {
+    fence: ID3D11Fence,
+    context: ID3D11DeviceContext4,
+    event: HANDLE,
+    value: Cell<u64>,
+}
+
+impl Fence {
+    fn new(device: &ID3D11Device, context: &ID3D11DeviceContext) -> Result<Self, GpuError> {
+        let device: ID3D11Device5 = device.cast().at("fence device")?;
+        let context: ID3D11DeviceContext4 = context.cast().at("fence context")?;
+        let mut fence: Option<ID3D11Fence> = None;
+        // SAFETY: the out pointer is a live local; a null name and no
+        // attributes make an unnamed auto-reset event.
+        let event = unsafe {
+            device
+                .CreateFence(0, D3D11_FENCE_FLAG_NONE, &mut fence)
+                .at("fence")?;
+            CreateEventW(None, false, false, windows::core::PCWSTR::null()).at("fence event")?
+        };
+        let Some(fence) = fence else {
+            // SAFETY: the event was just made and is not used again.
+            let _ = unsafe { CloseHandle(event) };
+            return Err(GpuError::new("fence", "none"));
+        };
+        Ok(Self {
+            fence,
+            context,
+            event,
+            value: Cell::new(0),
+        })
+    }
+
+    /// Sleeps until the GPU has done everything queued on the context.
+    fn wait(&self) -> Result<(), GpuError> {
+        let value = self.value.get() + 1;
+        self.value.set(value);
+        // SAFETY: plain calls on live interfaces and an event we own.
+        unsafe {
+            self.context.Signal(&self.fence, value).at("fence signal")?;
+            self.fence
+                .SetEventOnCompletion(value, self.event)
+                .at("fence event")?;
+            self.context.Flush();
+            match WaitForSingleObject(self.event, 2000) {
+                WAIT_OBJECT_0 => Ok(()),
+                other => Err(GpuError::new(
+                    "copy-back",
+                    format!("the GPU did not finish in 2 s ({other:?})"),
+                )),
+            }
+        }
+    }
+}
+
+impl Drop for Fence {
+    fn drop(&mut self) {
+        // SAFETY: the event is ours and closed once.
+        let _ = unsafe { CloseHandle(self.event) };
+    }
 }
 
 /// The GPU decoder: one Media Foundation decoder per stream on one
@@ -152,7 +231,6 @@ impl GpuDecoder {
 
     /// As `CpuDecoder::decode`.
     pub fn decode(&mut self, main: &[u8], aux: &[u8]) -> Result<Option<YuvFrame>, GpuError> {
-        self.held += 1;
         let frame = match &mut self.aux {
             None => self.main.decode(&self.gpu, main, &self.pool)?,
             Some(second) => {
@@ -161,11 +239,10 @@ impl GpuDecoder {
                 pair(&self.pool, m, a)?
             }
         };
-        let Some(frame) = frame else {
-            return Ok(None);
-        };
-        self.held = self.held.saturating_sub(1);
-        Ok(Some(frame))
+        // Low latency gives one picture per unit; should one call release
+        // two, only the newest is shown, but none stays counted as held.
+        self.held = (self.held + 1).saturating_sub(self.main.take_released());
+        Ok(frame)
     }
 
     /// As `CpuDecoder::has_pending`.
@@ -180,15 +257,13 @@ impl GpuDecoder {
             Some(second) => {
                 let m = self.main.drain(&self.gpu, &self.pool)?;
                 let a = second.drain(&self.gpu, &self.pool)?;
-                pair(&self.pool, m, a).unwrap_or(None)
+                pair(&self.pool, m, a)?
             }
         };
-        let Some(frame) = frame else {
-            self.held = 0;
-            return Ok(None);
-        };
-        self.held = self.held.saturating_sub(1);
-        Ok(Some(frame))
+        // Drained: nothing is held any more.
+        self.main.take_released();
+        self.held = 0;
+        Ok(frame)
     }
 
     /// As `CpuDecoder::reset`: new decoders on the same device.
@@ -275,6 +350,7 @@ impl Gpu {
         unsafe { manager.ResetDevice(&device, token) }.at("DXGI device manager reset")?;
         Ok(Self {
             adapter: adapter_name(&device),
+            fence: Fence::new(&device, &context).ok(),
             device,
             context,
             manager,
@@ -307,6 +383,11 @@ struct Stream {
     display: Option<(u32, u32)>,
     staging: Option<(ID3D11Texture2D, u32, u32)>,
     time: i64,
+    /// Pictures the decoder handed out since the last `take_released`.
+    released: u32,
+    /// The next unit is the first after a drain, which Media Foundation
+    /// wants marked as a discontinuity.
+    after_drain: bool,
 }
 
 impl Stream {
@@ -333,6 +414,8 @@ impl Stream {
             display: None,
             staging: None,
             time: 0,
+            released: 0,
+            after_drain: false,
         })
     }
 
@@ -419,7 +502,12 @@ impl Stream {
         }
         // SAFETY: plain call on a live interface.
         unsafe { self.mft.ProcessMessage(MFT_MESSAGE_COMMAND_DRAIN, 0) }.at("drain")?;
+        self.after_drain = true;
         self.outputs(gpu, pool)
+    }
+
+    fn take_released(&mut self) -> u32 {
+        std::mem::take(&mut self.released)
     }
 
     fn sample(&mut self, unit: &[u8]) -> Result<IMFSample, GpuError> {
@@ -439,6 +527,11 @@ impl Stream {
             sample.SetSampleTime(self.time).at("sample time")?;
             sample.SetSampleDuration(166_667).at("sample time")?;
             self.time += 166_667;
+            if std::mem::take(&mut self.after_drain) {
+                sample
+                    .SetUINT32(&MFSampleExtension_Discontinuity, 1)
+                    .at("sample discontinuity")?;
+            }
             Ok(sample)
         }
     }
@@ -469,6 +562,7 @@ impl Stream {
                 Ok(()) => {
                     if let Some(sample) = sample {
                         newest = Some(self.read_back(gpu, &sample, pool)?);
+                        self.released += 1;
                     }
                 }
                 Err(e) if e.code() == MF_E_TRANSFORM_NEED_MORE_INPUT => return Ok(newest),
@@ -540,6 +634,11 @@ impl Stream {
             let staging = self.staging(gpu, desc.Width, desc.Height)?;
             gpu.context
                 .CopySubresourceRegion(&staging, 0, 0, 0, 0, &texture, index, None);
+            if proto_readback() == "fence"
+                && let Some(fence) = &gpu.fence
+            {
+                fence.wait()?;
+            }
             let mut mapped = D3D11_MAPPED_SUBRESOURCE::default();
             gpu.context
                 .Map(&staging, 0, D3D11_MAP_READ, 0, Some(&mut mapped))
@@ -592,6 +691,7 @@ fn proto_readback() -> &'static str {
     WHICH.get_or_init(|| match std::env::var("GWIN_GPU_READBACK").as_deref() {
         Ok("none") => "none",
         Ok("lock2d") => "lock2d",
+        Ok("fence") => "fence",
         _ => "staging",
     })
 }
