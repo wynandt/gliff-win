@@ -237,6 +237,7 @@ fn first_config_resets_the_decoder_and_reports_geometry() {
             Action::Ui(UiEvent::StreamConfig(StreamInfo {
                 geometry: G1080,
                 fps_cap: 30,
+                chroma: ChromaMode::Single420,
                 pipeline: Some(VideoPipeline::Gpu),
                 decoder: DecoderChange::Reset,
             })),

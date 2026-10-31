@@ -98,6 +98,8 @@ pub enum DecoderChange {
 pub struct StreamInfo {
     pub geometry: Geometry,
     pub fps_cap: u32,
+    /// The colour the server picked (Dual420 only when Sharp colour offered it).
+    pub chroma: ChromaMode,
     pub pipeline: Option<VideoPipeline>,
     pub decoder: DecoderChange,
 }
@@ -646,6 +648,7 @@ impl Core {
         actions.push(Action::Ui(UiEvent::StreamConfig(StreamInfo {
             geometry,
             fps_cap,
+            chroma,
             pipeline,
             decoder,
         })));

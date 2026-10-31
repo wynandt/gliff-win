@@ -514,14 +514,16 @@ impl App {
             UiEvent::StreamConfig(config) => {
                 let g = config.geometry;
                 crate::logging::line(&format!(
-                    "session {}: stream config: view {}x{}, stream {}x{}, scale {}, cap {} fps",
+                    "session {}: stream config: view {}x{}, stream {}x{}, scale {}, cap {} fps, {:?}, encoder {}",
                     session.get(),
                     g.view.0,
                     g.view.1,
                     g.stream.0,
                     g.stream.1,
                     g.scale_milli,
-                    config.fps_cap
+                    config.fps_cap,
+                    config.chroma,
+                    config.pipeline.map_or("unstated", |p| p.label())
                 ));
                 view.fps_cap = config.fps_cap;
                 view.gate.on_view(g.view);
