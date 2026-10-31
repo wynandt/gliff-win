@@ -206,8 +206,9 @@ fn process_cpu_ms() -> Option<f64> {
 pub struct Compared {
     pub pictures: u64,
     pub differ: u64,
-    /// Pictures released by one decoder at a unit where the other released none.
-    pub release_mismatch: u64,
+    /// How many units earlier the GPU released a picture than the CPU,
+    /// smallest and largest.
+    pub gpu_lead_units: (i64, i64),
     pub first_difference: Option<String>,
 }
 
@@ -226,23 +227,26 @@ pub fn compare(clip: &Clip, aux: Option<&Clip>) -> anyhow::Result<(Compared, Mea
         ..run
     };
     let gpu_m = measure_with(clip, run, |i, p| gpu.push((i, fingerprint(p))))?;
-    let mut c = Compared::default();
-    let mut gpu_at: std::collections::BTreeMap<usize, &Fingerprint> =
-        gpu.iter().map(|(i, f)| (*i, f)).collect();
-    for (i, f) in &cpu {
-        match gpu_at.remove(i) {
-            Some(g) => {
-                c.pictures += 1;
-                if g != f {
-                    c.differ += 1;
-                    c.first_difference
-                        .get_or_insert_with(|| format!("unit {i}: {}", f.diff(g)));
-                }
-            }
-            None => c.release_mismatch += 1,
+    let mut c = Compared {
+        gpu_lead_units: (i64::MAX, i64::MIN),
+        ..Compared::default()
+    };
+    // Pictures are compared in release order. OpenH264 holds a High-profile
+    // picture for one unit, while the low-latency hardware decoder releases
+    // it at once, so the same picture can come out at different units.
+    for ((ci, f), (gi, g)) in cpu.iter().zip(&gpu) {
+        c.pictures += 1;
+        let lead = *ci as i64 - *gi as i64;
+        c.gpu_lead_units = (c.gpu_lead_units.0.min(lead), c.gpu_lead_units.1.max(lead));
+        if g != f {
+            c.differ += 1;
+            c.first_difference
+                .get_or_insert_with(|| format!("picture {}: {}", c.pictures - 1, f.diff(g)));
         }
     }
-    c.release_mismatch += gpu_at.len() as u64;
+    if c.pictures == 0 {
+        c.gpu_lead_units = (0, 0);
+    }
     Ok((c, cpu_m, gpu_m))
 }
 
@@ -332,8 +336,8 @@ pub fn lines(
             out.push(match compare(clip, aux) {
                 Ok((c, cpu, gpu)) => {
                     let ok = c.differ == 0
-                        && c.release_mismatch == 0
                         && c.pictures == cpu.pictures
+                        && c.pictures == gpu.pictures
                         && cpu.errors == 0
                         && gpu.errors == 0
                         && gpu.decoder == "gpu"
@@ -344,7 +348,8 @@ pub fn lines(
                         .with("dual420", aux.is_some())
                         .with("pictures_compared", c.pictures)
                         .with("pictures_differ", c.differ)
-                        .with("release_mismatch", c.release_mismatch)
+                        .with("gpu_lead_units_min", c.gpu_lead_units.0)
+                        .with("gpu_lead_units_max", c.gpu_lead_units.1)
                         .with("cpu_pictures", cpu.pictures)
                         .with("gpu_pictures", gpu.pictures)
                         .with("gpu_decoder", gpu.decoder);
