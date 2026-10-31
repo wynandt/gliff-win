@@ -36,7 +36,9 @@ privately through the Security tab, see [SECURITY.md](SECURITY.md).
   screen.
 - **Sharp video.** H.264 decoded on the CPU and presented with Direct3D 11 at
   vsync. *Sharp colour*, a choice per machine, asks for full-resolution
-  colour (4:4:4), so coloured text stays crisp. The strip's fullscreen button, the window menu or `F11` (while Windows has
+  colour (4:4:4), so coloured text stays crisp. *GPU decode*, another choice
+  per machine, decodes on the graphics card and falls back to the CPU on its
+  own ([details](docs/settings.md#gpu-decode)). The strip's fullscreen button, the window menu or `F11` (while Windows has
   the keyboard) toggles borderless fullscreen.
 - **Keyboard and mouse.** Every key, including Super chords, goes to Hyprland
   while the window has the keyboard. Your Windows layout is sent as an XKB
@@ -279,7 +281,7 @@ supported and blanks the picture for 10 seconds or more
 - **HTML and rich text on the clipboard.** The code is built and tested on the
   build machine, but the hardware gate has no case for it yet, so it is not
   claimed. Text, images and files are.
-- **Hardware decode**, and clipboard files that stream without a spool.
+- **Clipboard files that stream without a spool.**
 
 ## What's missing
 
@@ -295,17 +297,18 @@ means no document in this repository plans it.
    which smears coloured text a little. A server that encodes on the CPU sends
    4:2:0 unless it runs with `--full-chroma`
    ([details](docs/settings.md#sharp-colour)).
-3. **GPU video decode.** gliff-win decodes H.264 on the CPU (OpenH264) and
-   draws with Direct3D 11. The Linux client can decode on the GPU, and its
-   `--video cpu|gpu` choice has no match here. Planned after the first
-   release.
+3. **GPU video decode is off by default.** The Linux client chooses with
+   `--video cpu|gpu`. gliff-win decodes on the CPU (OpenH264) unless a
+   machine's *GPU decode* choice is on, and each decoded picture is copied
+   back from the graphics card before it is drawn
+   ([details](docs/settings.md#gpu-decode)).
 4. **System tray and start with Windows.** Not in the Linux client 0.4.1
    either. Here the tray is designed, not built. Planned after
    the first release.
-5. **A settings window.** The three connection choices for one machine, "Show
-   as" (mirror or own screen), "Share clipboard" and "Sharp colour", are in a
-   tab's right-click menu under *Connection settings*. Share clipboard applies
-   at once; Show as and Sharp colour apply the next time the tab connects.
+5. **A settings window.** The four connection choices for one machine, "Show
+   as" (mirror or own screen), "Share clipboard", "Sharp colour" and "GPU
+   decode", are in a tab's right-click menu under *Connection settings*. Share
+   clipboard applies at once; the others apply the next time the tab connects.
    Everything else is flags and `config.toml`; there is no window that edits
    them. The Linux client 0.4.1 has no settings window either, but its open
    pull request [omacom/gliff#98](https://github.com/omacom/gliff/pull/98) adds

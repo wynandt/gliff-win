@@ -12,11 +12,14 @@ is not listed here, please open an issue with a way to reproduce it.
   soft. Turn it on per machine in the tab's *Connection settings*. A server
   that encodes on the CPU still sends 4:2:0 unless it runs with
   `--full-chroma`; see [docs/settings.md](docs/settings.md#sharp-colour).
-- **GPU video decoding.** The client decodes H.264 on the CPU. With *Sharp
-  colour* it decodes two streams, so the decode work at least doubles.
+- **GPU video decoding is off by default.** Without *GPU decode* the client
+  decodes H.264 on the CPU, and with *Sharp colour* it decodes two streams,
+  so the decode work at least doubles. With *GPU decode* on, each picture is
+  still copied back from the graphics card and uploaded again to draw; see
+  [docs/settings.md](docs/settings.md#gpu-decode).
 - **System tray and start with Windows.**
-- **A settings window.** The three choices for one machine (Show as, Share
-  clipboard and Sharp colour) are in a tab's right-click menu. Everything else is a flag or a
+- **A settings window.** The four choices for one machine (Show as, Share
+  clipboard, Sharp colour and GPU decode) are in a tab's right-click menu. Everything else is a flag or a
   key in `config.toml`; see [docs/settings.md](docs/settings.md).
 - **A light theme.** The tab strip and the failure panel are always dark.
 - **Progress and Cancel for big pastes.** Progress is written to the log only.
