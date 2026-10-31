@@ -779,9 +779,9 @@ client for Windows that uses the server and the protocol as they are.
 
 Every number here has a source. Timings of the real client on a
 Windows machine are in [windows-quirks.md](windows-quirks.md#measured-on-the-windows-machine);
-this section holds the two build-machine numbers that decided the design. Their
+this section holds the build-machine numbers that decided the design. Their
 result files are not part of this repository. The programs that produced them were throwaway and are not in the
-repository, so these two cannot be re-run; the decode path they describe can be
+repository, so they cannot be re-run; the decode path they describe can be
 re-timed with `gwin-verify decode` (see [gwin-verify.md](gwin-verify.md#decode)).
 
 **CPU cost of one 3840x2400 frame (build machine, 8 vCPU, release
@@ -810,6 +810,38 @@ channel values, 100,662,684 matched exactly, 612 differed by 1, and none differe
 worst triple was (174, 0, 29). Only a GPU run can prove the real shader, and that is the
 `gwin-verify present` run in windows-quirks.md.
 
+**Sharp colour: Dual420 against Single420 (build machine, 8 vCPU, release
+build).** A synthetic screen of coloured monospace text on a dark background,
+with a band of red text on blue, went through the CPU server's encoder
+(`gliff_sw::Encoder`, bitrate per stream at the server's ceiling for 30 fps) and
+then through the client's own path: the session core, `CpuDecoder` and the
+`YuvFrame` it presents. 31 frames each; the first is the keyframe, and the
+P-frame columns leave it out. Quality is of the last frame against the source;
+colour error is in 8-bit Cb/Cr steps, with 4:2:0 shown the way `ps_yuv`
+samples it.
+
+| Run | RGB PSNR | Cb, Cr PSNR | worst colour error | decode, keyframe | decode, P-frame p50 | bytes per P-frame |
+|---|---|---|---|---|---|---|
+| 2560x1440 still, Single420 | 23.11 dB | 26.60, 25.89 dB | 129 | 53.9 ms | 3.56 ms | 20,893 |
+| 2560x1440 still, Dual420 | 34.04 dB | 40.60, 40.58 dB | 43 | 97.7 ms | 9.32 ms | 48,474 |
+| 2560x1440 scrolling 4 rows a frame, Single420 | 22.92 dB | 26.67, 25.96 dB | 126 | 55.5 ms | 3.98 ms | 14,630 |
+| 2560x1440 scrolling 4 rows a frame, Dual420 | 27.25 dB | 32.30, 31.95 dB | 93 | 97.8 ms | 17.61 ms | 201,228 |
+| 3840x2160 still, Single420 | 23.08 dB | 26.58, 25.81 dB | 124 | 164.8 ms | 9.44 ms | 48,413 |
+| 3840x2160 still, Dual420 | 33.92 dB | 40.45, 40.45 dB | 34 | 418.1 ms | 18.07 ms | 111,688 |
+
+Luma is the same in both modes (39.29 dB still, 36.36 dB scrolling, at
+2560x1440), so all of the gain is colour. Converting the last frame to BGRA on
+the CPU, as a model of the shader's work, took 1.56 ms for 4:2:0 and 3.01 ms
+for 4:4:4 at 2560x1440. What it showed: on dense coloured text, Dual420 cuts the
+worst colour error about threefold and costs two to four and a half times the
+decode time per frame and two to fourteen times the bytes; the scrolling case
+is the most expensive. A Sharp colour session that the server answers with
+Single420 gave a picture byte-identical to a session with the choice off, and a
+switch from Dual420 to Single420 in the middle of a session decoded every frame
+with no error, its first picture after the switch coming from the new keyframe.
+OpenH264 cannot encode 3840x2400, so the CPU server's 4:4:4 tops out at its
+3840x2160 limit.
+
 What has no number: the time from a server frame to the pixel on screen (the
 `present` check measures only decoded-to-`Present` returned), the CPU and GPU load
 of a session, memory use, the clipboard's transfer time or throughput, and
@@ -825,7 +857,7 @@ In rough priority order:
 3. **More hardware.** Long sessions have run on one set of hardware; a
    recorded session on other machines is still wanted.
 4. **Hardware decode.** OpenH264 decodes on the CPU, and *Sharp colour*
-   (Dual420) doubles that work.
+   (Dual420) at least doubles that work.
 5. **Virtual files on the clipboard, and streaming a big file without a spool**
    (an OLE `IDataObject`). The spool covers parity until then.
    HTML and RTF are written and unit-tested, but `gwin-verify clipboard` has no

@@ -13,7 +13,7 @@ is not listed here, please open an issue with a way to reproduce it.
   that encodes on the CPU still sends 4:2:0 unless it runs with
   `--full-chroma`; see [docs/settings.md](docs/settings.md#sharp-colour).
 - **GPU video decoding.** The client decodes H.264 on the CPU. With *Sharp
-  colour* it decodes two streams, so the decode work doubles.
+  colour* it decodes two streams, so the decode work at least doubles.
 - **System tray and start with Windows.**
 - **A settings window.** The three choices for one machine (Show as, Share
   clipboard and Sharp colour) are in a tab's right-click menu. Everything else is a flag or a
