@@ -171,16 +171,16 @@ pub const CLASS_NAME_TEXT: &str = "gliff-windows";
 pub const IDM_FULLSCREEN: usize = 0x0010;
 
 const TIMER_SETTLE: usize = 1;
-const TIMER_SIZE_MOVE: usize = 2;
+/// Presents while a drag's or a menu's modal loop runs in place of the
+/// main loop.
+const TIMER_MODAL: usize = 2;
 const TIMER_CLOSE: usize = 3;
 const TIMER_STATS: usize = 4;
 const TIMER_GRAB: usize = 5;
 /// The next tab retry (`Tabs::next_due`); re-armed after every event.
 const TIMER_RETRY: usize = 6;
-/// Presents while a menu's modal loop runs in place of the main loop.
-const TIMER_MENU: usize = 7;
-/// The size-move and menu timer: about one 60 Hz frame.
-const SIZE_MOVE_TICK: Duration = Duration::from_millis(16);
+/// The modal timer: about one 60 Hz frame.
+const MODAL_TICK: Duration = Duration::from_millis(16);
 /// How long a closing window waits for the session's Bye.
 const CLOSE_WAIT: Duration = Duration::from_secs(3);
 /// How often the stats file is rewritten.
@@ -270,6 +270,23 @@ impl SessionView {
     }
 }
 
+/// Which of Windows' modal loops runs in place of the main loop.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ModalKind {
+    /// A drag or resize of the window (`WM_ENTERSIZEMOVE`).
+    SizeMove,
+    /// A popup or window menu (`WM_ENTERMENULOOP`).
+    Menu,
+}
+
+/// A modal loop under way: which, when it began, and the pictures shown
+/// since.
+struct Modal {
+    kind: ModalKind,
+    began: Instant,
+    shown: u32,
+}
+
 /// Everything the UI thread owns.
 pub struct App {
     hwnd: HWND,
@@ -293,7 +310,6 @@ pub struct App {
     finals: Vec<(SessionId, SessionEnd)>,
     /// Sessions that never started.
     start_failures: u32,
-    moving: Moving,
     stages: Stages,
     log: PresentLog,
     resizes: ResizeLog,
@@ -314,9 +330,8 @@ pub struct App {
     chords: ChordsInfo,
     /// The waitable was signalled and not yet used by a `Present`.
     ready: bool,
-    /// A menu's modal loop is running: when it began and the pictures
-    /// shown since.
-    menu: Option<(Instant, u32)>,
+    /// One of Windows' modal loops runs in place of the main loop.
+    modal: Option<Modal>,
     /// `WM_CLOSE` sent Bye to every session; the window goes when they are
     /// over or the close timer fires.
     closing: bool,
@@ -365,7 +380,6 @@ impl App {
             shown: None,
             finals: Vec::new(),
             start_failures: 0,
-            moving: Moving::Free,
             stages: Stages::new(),
             log: PresentLog::new(parts.started),
             resizes: ResizeLog::default(),
@@ -380,7 +394,7 @@ impl App {
             input: parts.input,
             chords: parts.chords,
             ready: false,
-            menu: None,
+            modal: None,
             closing: false,
             title: "gliff".to_owned(),
             typing_sent: Last::new(),
@@ -755,8 +769,8 @@ impl App {
             PresentOutcome::Occluded => {}
             PresentOutcome::DeviceLost => self.recreate(),
         }
-        if let Some((_, shown)) = &mut self.menu {
-            *shown += 1;
+        if let Some(modal) = &mut self.modal {
+            modal.shown += 1;
         }
         true
     }
@@ -851,7 +865,7 @@ impl App {
             self.stages.on_resize(request_for(client, self.dpi), now);
             self.update_stage(now);
         }
-        let (dpi, moving) = (self.dpi, self.moving);
+        let (dpi, moving) = (self.dpi, self.moving());
         if let Some(delay) = self
             .view_mut()
             .and_then(|view| view.gate.on_size(client, dpi, moving, now))
@@ -872,14 +886,16 @@ impl App {
         }
     }
 
-    fn on_enter_size_move(&mut self) {
-        self.moving = Moving::InSizeMove;
-        self.set_timer(TIMER_SIZE_MOVE, SIZE_MOVE_TICK);
+    /// Whether a drag or resize of the window is under way.
+    fn moving(&self) -> Moving {
+        match &self.modal {
+            Some(modal) if modal.kind == ModalKind::SizeMove => Moving::InSizeMove,
+            _ => Moving::Free,
+        }
     }
 
     fn on_exit_size_move(&mut self) {
-        self.moving = Moving::Free;
-        self.kill_timer(TIMER_SIZE_MOVE);
+        self.on_exit_modal(ModalKind::SizeMove);
         let (client, dpi) = (self.client, self.dpi);
         if let Some(req) = self
             .view_mut()
@@ -889,12 +905,12 @@ impl App {
         }
     }
 
-    /// A modal loop (size-move, or a menu's) starves the main loop: poll
-    /// the waitable and present from here. True when a picture was drawn.
-    fn on_modal_tick(&mut self) -> bool {
+    /// A modal loop starves the main loop: poll the waitable and present
+    /// from here.
+    fn on_modal_tick(&mut self) {
         self.poll_waitable();
         self.drain_events();
-        self.present_due()
+        self.present_due();
     }
 
     /// Sets `ready` if the waitable is signalled, without waiting.
@@ -908,20 +924,32 @@ impl App {
         }
     }
 
-    /// A menu opened: Windows runs its own message loop until it closes,
-    /// so the main loop no longer waits on the waitable.
-    fn on_enter_menu_loop(&mut self) {
-        self.menu = Some((Instant::now(), 0));
-        self.set_timer(TIMER_MENU, SIZE_MOVE_TICK);
+    /// A drag began or a menu opened: Windows runs its own message loop
+    /// until it ends, so the main loop no longer waits on the waitable.
+    fn on_enter_modal(&mut self, kind: ModalKind) {
+        self.modal = Some(Modal {
+            kind,
+            began: Instant::now(),
+            shown: 0,
+        });
+        self.set_timer(TIMER_MODAL, MODAL_TICK);
     }
 
-    fn on_exit_menu_loop(&mut self) {
-        self.kill_timer(TIMER_MENU);
-        if let Some((opened, shown)) = self.menu.take() {
-            crate::logging::line(&format!(
-                "menu: {shown} pictures shown in {} ms while it was open",
-                opened.elapsed().as_millis()
-            ));
+    fn on_exit_modal(&mut self, kind: ModalKind) {
+        if !self.modal.as_ref().is_some_and(|modal| modal.kind == kind) {
+            return;
+        }
+        self.kill_timer(TIMER_MODAL);
+        if let Some(Modal { kind, began, shown }) = self.modal.take() {
+            let ms = began.elapsed().as_millis();
+            crate::logging::line(&match kind {
+                ModalKind::Menu => {
+                    format!("menu: {shown} pictures shown in {ms} ms while it was open")
+                }
+                ModalKind::SizeMove => {
+                    format!("move: {shown} pictures shown in {ms} ms while dragging")
+                }
+            });
         }
     }
 
@@ -1477,10 +1505,10 @@ impl App {
             // A hidden session's picture waits in its slot until its tab is shown.
             WM_APP_FRAME => {
                 if self.shown.is_some_and(|id| id.get() as usize == wparam.0) {
-                    // Inside a menu's loop the main loop never sees the
+                    // Inside a modal loop the main loop never sees the
                     // waitable, so look here: each picture goes out as it
                     // arrives, not on the next timer tick.
-                    if self.menu.is_some() {
+                    if self.modal.is_some() {
                         self.poll_waitable();
                     }
                     self.present_due();
@@ -1501,7 +1529,7 @@ impl App {
                 Some(LRESULT(0))
             }
             WM_ENTERSIZEMOVE => {
-                self.on_enter_size_move();
+                self.on_enter_modal(ModalKind::SizeMove);
                 Some(LRESULT(0))
             }
             WM_EXITSIZEMOVE => {
@@ -1509,22 +1537,17 @@ impl App {
                 Some(LRESULT(0))
             }
             WM_ENTERMENULOOP => {
-                self.on_enter_menu_loop();
+                self.on_enter_modal(ModalKind::Menu);
                 Some(LRESULT(0))
             }
             WM_EXITMENULOOP => {
-                self.on_exit_menu_loop();
+                self.on_exit_modal(ModalKind::Menu);
                 Some(LRESULT(0))
             }
             WM_TIMER => {
                 match wparam.0 {
                     TIMER_SETTLE => self.on_settle_timer(),
-                    TIMER_SIZE_MOVE => {
-                        self.on_modal_tick();
-                    }
-                    TIMER_MENU => {
-                        self.on_modal_tick();
-                    }
+                    TIMER_MODAL => self.on_modal_tick(),
                     TIMER_CLOSE => {
                         crate::logging::line("close: no Bye within 3 s");
                         self.destroy();
@@ -1593,8 +1616,7 @@ impl App {
         self.kill_timer(TIMER_STATS);
         self.kill_timer(TIMER_RETRY);
         self.kill_timer(TIMER_SETTLE);
-        self.kill_timer(TIMER_SIZE_MOVE);
-        self.kill_timer(TIMER_MENU);
+        self.kill_timer(TIMER_MODAL);
         // SAFETY: ends this thread's message loop.
         unsafe { PostQuitMessage(0) };
     }
