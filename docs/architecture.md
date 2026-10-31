@@ -47,8 +47,9 @@ server.
    output name outside `[A-Za-z0-9._-]`: the remote shell sees the command
    verbatim, so the check is a whitelist, not quoting.
 3. The session thread sends `Hello` (protocol version, the keymap built from the
-   Windows keyboard layout, and `client_caps`: H.264, Single420 only, a maximum
-   of at least 3840x2400), then runs the message loop.
+   Windows keyboard layout, and `client_caps`: H.264, a maximum of at least
+   3840x2400, and the chroma modes: Single420 only, or Dual420 and Single420
+   when the machine's *Sharp colour* choice is on), then runs the message loop.
 4. The server answers `HelloAck`, `StreamConfig`, then `VideoFrame`s. `link`
    reads each message with its payloads. `Core` turns each message into
    `Action`s that the driver performs.
@@ -110,8 +111,9 @@ Each choice names the alternative that was rejected.
 - **The protocol is not changed.** The stock `gliff-server` is the server. A
   feature the stock server cannot do, such as streaming virtual files, waits for
   upstream or for a client-side design that needs no wire change.
-- **CPU decode, GPU conversion.** OpenH264 decodes the single 4:2:0 stream the
-  client asks for; a D3D11 shader converts I420 to RGB. Rejected for now:
+- **CPU decode, GPU conversion.** OpenH264 decodes the 4:2:0 stream the
+  client asks for (two of them for Dual420); a D3D11 shader converts the planes
+  to RGB. Rejected for now:
   hardware decode (more drivers to test; it is on the not-built list) and converting to BGRA on the CPU the way `gliff_sw::Decoder`
   does. `to_bgra` is kept, and its output is checked byte for byte against
   upstream's, as the oracle for the shader.
@@ -200,9 +202,16 @@ perform, in order: `Send`, `Decode`, `ResetDecoder`, `Present` and `Ui`.
   frames that fail to decode and frames the slot later replaces. The ack is
   sent right after the decode call. A decode error also sends
   `RequestKeyframe`.
+- **Chroma.** `Core` knows which chroma modes the client offered and refuses a
+  `StreamConfig` for any other. A Single420 frame that carries an aux payload,
+  and a Dual420 frame that carries none, are acked, not decoded, and answered
+  with `RequestKeyframe`. A Dual420 frame is decoded only as a pair, so the two
+  decoders always see the same access units.
 - A `StreamConfig` resets the decoder only when the coded width, height or
   chroma changes (`DecoderChange::Reset` or `Kept`); a rate-only change keeps
-  it.
+  it. `ResetDecoder` carries the new chroma, so a switch between Single420 and
+  Dual420 in the middle of a session (the server's rate ladder) builds or drops
+  the second decoder. The server starts each new stream with a keyframe.
 - The geometry of each access unit (stream size, view, scale) is queued and
   paired with the picture the decoder releases for it, so a picture is always
   shown with the geometry it was encoded under. The CPU decoder holds one
@@ -245,7 +254,12 @@ keeps its own instrumented copy of this loop.
 ## Decode and present
 
 - **Decode.** `decode::CpuDecoder` wraps OpenH264 and returns tight I420
-  (`yuv::YuvFrame`, planes taken from a `YuvPool`). It mirrors
+  (`yuv::YuvFrame`, planes taken from a `YuvPool`). For Dual420 it runs a
+  second OpenH264 decoder on the aux stream and puts full-resolution U and V
+  back together from the two pictures (the inverse of upstream's
+  `split_yuv444`), so the frame is 4:4:4 (`Sampling::Full`). A picture from one
+  decoder without one from the other is an error (out of step), the same rule
+  as `gliff_sw::Decoder`. It mirrors
   `gliff_sw::Decoder` in its configuration, flush rule and even crop, but keeps
   I420 instead of converting to BGRA, because the display converts on the GPU.
   `YuvFrame::to_bgra` is upstream's CPU conversion, kept as the oracle for the
@@ -255,7 +269,9 @@ keeps its own instrumented copy of this loop.
 - **Frame slot.** `FrameSlot` holds one picture. A new picture replaces an
   untaken one, which counts as a drop: it was decoded and acked, never shown.
 - **Present.** `present::Presenter` uploads the three planes as `R8_UNORM`
-  textures and runs two passes of `present.hlsl`. `ps_yuv` converts to RGB at the
+  textures (U and V at half size for 4:2:0, full size for 4:4:4) and runs two
+  passes of `present.hlsl`. `ps_yuv` reads the chroma texture size, so one
+  shader serves both. `ps_yuv` converts to RGB at the
   stream size (BT.709 limited range, with upstream's 13-bit constants over
   8192). `ps_blit` draws that into the picture's rectangle in the back buffer,
   point-sampled at an integer zoom and linear otherwise (`layout`). The swap
@@ -742,7 +758,9 @@ client for Windows that uses the server and the protocol as they are.
   and resize rules as logic. The ported files are listed in [NOTICE](../NOTICE).
 - It starts ssh itself, with a checked server path, `BatchMode=yes`, no console
   window and stderr to a log file.
-- Video is CPU decode (OpenH264, Single420 only) and a D3D11 present.
+- Video is CPU decode (OpenH264) and a D3D11 present. It asks for Single420
+  unless the machine's *Sharp colour* choice is on; upstream asks for Dual420
+  by default.
 - The keyboard follows focus by default (upstream: hover). The release chord is
   Ctrl+Alt+Home (upstream: Shift+Esc; `--release-chord shift+esc` restores it).
   Keys that other programs inject are forwarded by default.
@@ -806,8 +824,8 @@ In rough priority order:
    running and monitors with different DPI.
 3. **More hardware.** Long sessions have run on one set of hardware; a
    recorded session on other machines is still wanted.
-4. **Hardware decode and 4:4:4.** The client asks for one 4:2:0 stream, which
-   smears coloured text; Dual420 comes after the first full release.
+4. **Hardware decode.** OpenH264 decodes on the CPU, and *Sharp colour*
+   (Dual420) doubles that work.
 5. **Virtual files on the clipboard, and streaming a big file without a spool**
    (an OLE `IDataObject`). The spool covers parity until then.
    HTML and RTF are written and unit-tested, but `gwin-verify clipboard` has no

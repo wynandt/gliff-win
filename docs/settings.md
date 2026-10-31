@@ -107,12 +107,13 @@ shown = "user@two"
 
 ## Connection choices for one machine
 
-Right-click a tab and open **Connection settings**. It holds two choices for that machine only:
+Right-click a tab and open **Connection settings**. It holds three choices for that machine only:
 
 - **Show as:** *Mirror the remote screen* or *Own screen*. This is the `screen` setting.
 - **Share clipboard:** ticked or not. This is the `share_clipboard` setting.
+- **Sharp colour:** ticked or not, off by default. This is the `sharp_colour` key, which exists only in a machine's table ([below](#sharp-colour)).
 
-A choice is saved at once. **Share clipboard** applies at once to the tab's session: turned off, nothing is copied or pasted either way, and if what that machine copied is still on the Windows clipboard it is taken off (anything copied on Windows since is left alone); turned back on, sharing resumes in the same session. A session that started without sharing has no clipboard to resume, so ticking it reconnects that tab. **Show as** is a Reconnect-class setting: it applies the next time the tab connects, and the menu says so under the choices. If the tab has a session and the saved Show as choice differs from what that session started with, the line is replaced by **Reconnect now to apply**, which does what **Reconnect** does: it ends the session and starts a new one with the saved choices. A row that a flag or the file has locked never counts as a change. If you change a choice and then change it back, the line stays as it was. A tab with no session (stopped, waiting to retry, or given up) keeps the line, because its next connect applies the choice anyway. There is no settings window and no OK button.
+A choice is saved at once. **Share clipboard** applies at once to the tab's session: turned off, nothing is copied or pasted either way, and if what that machine copied is still on the Windows clipboard it is taken off (anything copied on Windows since is left alone); turned back on, sharing resumes in the same session. A session that started without sharing has no clipboard to resume, so ticking it reconnects that tab. **Show as** and **Sharp colour** are Reconnect-class: they apply the next time the tab connects, and the menu says so under the choices. If the tab has a session and a saved Show as or Sharp colour choice differs from what that session started with, the line is replaced by **Reconnect now to apply**, which does what **Reconnect** does: it ends the session and starts a new one with the saved choices. A row that a flag or the file has locked never counts as a change. If you change a choice and then change it back, the line stays as it was. A tab with no session (stopped, waiting to retry, or given up) keeps the line, because its next connect applies the choice anyway. There is no settings window and no OK button.
 
 **Where it is saved.** In `config.toml`, in one table per machine, named by the target as it is written in `machines`:
 
@@ -120,6 +121,7 @@ A choice is saved at once. **Share clipboard** applies at once to the tab's sess
 [overrides."user@host"]
 screen = "own"
 share_clipboard = false
+sharp_colour = true
 ```
 
 A table holds only what the user changed for that machine, so a machine that was never changed has no table. The table is a layer between the flag and `[settings]`:
@@ -148,6 +150,22 @@ The reason is one plain sentence, one of these:
 - `Locked: config.toml has share_clipboard = false, which turns the clipboard off for every machine.`
 
 A locked row changes nothing and saves nothing. A choice saved earlier stays in the file and applies again when the flag is not given. `output = "NAME"` in `[settings]` does not lock: choosing *Mirror* for a machine mirrors that named screen, and choosing *Own screen* gives a private screen.
+
+## Sharp colour
+
+H.264 video normally carries colour at half the resolution in each direction (4:2:0), so the edges of coloured text are a little soft. With **Sharp colour** on, the client offers full-resolution colour (4:4:4) as well as 4:2:0 when the tab connects. The server then sends two 4:2:0 streams per frame, and the client decodes both and puts the full colour back together before it draws the frame. Off, the client offers 4:2:0 only, exactly as without the choice.
+
+- **The server decides.** The client offers; the server picks. A server that encodes on the GPU picks 4:4:4. A server that encodes on the CPU picks 4:2:0, because the second stream doubles its encode work, unless it runs with `--full-chroma`. A server started with `--low-bandwidth` always picks 4:2:0.
+- **Passing `--full-chroma`.** `server_path` takes one program, not a command line. To add the flag, put a small script on the remote machine and point `server_path` at it:
+
+  ```sh
+  #!/bin/sh
+  exec gliff-server --full-chroma "$@"
+  ```
+
+- **Slow links.** The server can drop back to 4:2:0 during a session when the link is short of room, and go back to 4:4:4 when there is room again. Each switch starts with a full frame, so the picture does not glitch.
+- **Cost.** The client decodes two streams instead of one, so its decode work about doubles, and the frame it uploads to the GPU is twice the size. [architecture.md](architecture.md#measurements) has the numbers.
+- **No flag and no `[settings]` key.** The choice is per machine only, and nothing locks it.
 
 ## Chords that overlap
 

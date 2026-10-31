@@ -35,7 +35,8 @@ privately through the Security tab, see [SECURITY.md](SECURITY.md).
   screen that follows your window instead, and `--output` mirrors a named
   screen.
 - **Sharp video.** H.264 decoded on the CPU and presented with Direct3D 11 at
-  vsync. The strip's fullscreen button, the window menu or `F11` (while Windows has
+  vsync. *Sharp colour*, a choice per machine, asks for full-resolution
+  colour (4:4:4), so coloured text stays crisp. The strip's fullscreen button, the window menu or `F11` (while Windows has
   the keyboard) toggles borderless fullscreen.
 - **Keyboard and mouse.** Every key, including Super chords, goes to Hyprland
   while the window has the keyboard. Your Windows layout is sent as an XKB
@@ -248,7 +249,8 @@ The keys, the defaults and the chord rules are in
 
 **Connection choices for one machine.** Right-click a tab and open
 *Connection settings* to choose, for that machine only, *Show as* (mirror the
-remote screen, or its own screen) and *Share clipboard*. The choice is saved in
+remote screen, or its own screen), *Share clipboard* and *Sharp colour*
+(full-resolution colour, off by default). The choice is saved in
 `config.toml` at once and applies the next time the tab connects. When a tab
 has a session that started with something else, the menu shows *Reconnect now
 to apply*, which reconnects that tab in one click. A flag (`--headless`,
@@ -277,8 +279,7 @@ supported and blanks the picture for 10 seconds or more
 - **HTML and rich text on the clipboard.** The code is built and tested on the
   build machine, but the hardware gate has no case for it yet, so it is not
   claimed. Text, images and files are.
-- **Hardware decode and 4:4:4 video**, and clipboard files that stream
-  without a spool.
+- **Hardware decode**, and clipboard files that stream without a spool.
 
 ## What's missing
 
@@ -288,9 +289,12 @@ means no document in this repository plans it.
 1. **Sound.** gliff-win plays no audio and sends no microphone. The Linux
    Gliff 0.4.1 has none either, so this is a gap in the protocol, not only in
    this client. Not planned yet.
-2. **Sharp coloured text.** The Linux client can ask for full-resolution colour
-   (4:4:4). gliff-win asks for 4:2:0 and decodes on the CPU, which smears
-   coloured text a little. Planned after the first release.
+2. **Sharp coloured text** ([#9](https://github.com/wynandt/gliff-win/issues/9)). The Linux client asks for
+   full-resolution colour (4:4:4) by default. gliff-win asks for it only for a
+   machine whose *Sharp colour* choice is on; otherwise it asks for 4:2:0,
+   which smears coloured text a little. A server that encodes on the CPU sends
+   4:2:0 unless it runs with `--full-chroma`
+   ([details](docs/settings.md#sharp-colour)).
 3. **GPU video decode.** gliff-win decodes H.264 on the CPU (OpenH264) and
    draws with Direct3D 11. The Linux client can decode on the GPU, and its
    `--video cpu|gpu` choice has no match here. Planned after the first
@@ -298,10 +302,10 @@ means no document in this repository plans it.
 4. **System tray and start with Windows.** Not in the Linux client 0.4.1
    either. Here the tray is designed, not built. Planned after
    the first release.
-5. **A settings window.** The two connection choices for one machine, "Show
-   as" (mirror or own screen) and "Share clipboard", are in a tab's right-click
-   menu under *Connection settings*. Share clipboard applies at once; Show as
-   applies the next time the tab connects.
+5. **A settings window.** The three connection choices for one machine, "Show
+   as" (mirror or own screen), "Share clipboard" and "Sharp colour", are in a
+   tab's right-click menu under *Connection settings*. Share clipboard applies
+   at once; Show as and Sharp colour apply the next time the tab connects.
    Everything else is flags and `config.toml`; there is no window that edits
    them. The Linux client 0.4.1 has no settings window either, but its open
    pull request [omacom/gliff#98](https://github.com/omacom/gliff/pull/98) adds
