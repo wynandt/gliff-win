@@ -1,5 +1,7 @@
-//! The I420 decoder against `gliff_sw::Decoder`, upstream's BGRA one.
+//! The I420 and 4:4:4 decoder against `gliff_sw::Decoder`, upstream's BGRA
+//! one.
 
+use gliff_proto::msg::ChromaMode;
 use gliff_sw::Decoder;
 use gliff_sw::Encoder;
 use gliff_sw::EncoderSettings;
@@ -24,6 +26,14 @@ fn source(width: u32, height: u32, t: u32) -> Vec<u8> {
 }
 
 fn clip(width: u32, height: u32, frames: u32) -> Vec<Vec<u8>> {
+    pairs(width, height, frames, false)
+        .into_iter()
+        .map(|(main, _)| main)
+        .collect()
+}
+
+/// Access units as (main, aux); aux is empty unless `dual` (Dual420).
+fn pairs(width: u32, height: u32, frames: u32, dual: bool) -> Vec<(Vec<u8>, Vec<u8>)> {
     let mut encoder = Encoder::new(
         EncoderSettings {
             width,
@@ -31,15 +41,15 @@ fn clip(width: u32, height: u32, frames: u32) -> Vec<Vec<u8>> {
             bitrate: 6_000_000,
             framerate: 30,
         },
-        false,
+        dual,
     )
     .expect("OpenH264 encoder");
     (0..frames)
         .map(|t| {
-            encoder
+            let unit = encoder
                 .encode_bgra(&source(width, height, t), t == 0)
-                .expect("encode")
-                .main
+                .expect("encode");
+            (unit.main, unit.aux.unwrap_or_default())
         })
         .collect()
 }
@@ -47,24 +57,47 @@ fn clip(width: u32, height: u32, frames: u32) -> Vec<Vec<u8>> {
 #[test]
 fn to_bgra_matches_gliff_sw_byte_for_byte() {
     // 1278x718 is neither a multiple of 16 nor of 4 (cropping and
-    // odd chroma rows in the coded size).
-    for (w, h) in [(640, 400), (1278, 718)] {
+    // odd chroma rows in the coded size). Dual420 is recombined to 4:4:4.
+    for (chroma, (w, h)) in [ChromaMode::Single420, ChromaMode::Dual420]
+        .into_iter()
+        .flat_map(|c| [(c, (640, 400)), (c, (1278, 718))])
+    {
+        let dual = chroma == ChromaMode::Dual420;
         let mut ours = CpuDecoder::new().expect("our decoder");
-        let mut theirs = Decoder::new(false, w, h).expect("gliff_sw decoder");
+        ours.reset(chroma).expect("decoder for the chroma");
+        let mut theirs = Decoder::new(dual, w, h).expect("gliff_sw decoder");
         let mut compared = 0;
-        for (i, au) in clip(w, h, 12).iter().enumerate() {
-            let a = ours.decode(au).expect("our decode");
-            let b = theirs.decode(au, &[]).expect("gliff_sw decode");
-            assert_eq!(a.is_some(), b.is_some(), "{w}x{h} unit {i}: release timing");
-            assert_eq!(ours.has_pending(), theirs.has_pending(), "{w}x{h} unit {i}");
+        for (i, (main, aux)) in pairs(w, h, 12, dual).iter().enumerate() {
+            let a = ours.decode(main, aux).expect("our decode");
+            let b = theirs.decode(main, aux).expect("gliff_sw decode");
+            assert_eq!(
+                a.is_some(),
+                b.is_some(),
+                "{chroma:?} {w}x{h} unit {i}: release timing"
+            );
+            assert_eq!(
+                ours.has_pending(),
+                theirs.has_pending(),
+                "{chroma:?} {w}x{h} unit {i}"
+            );
             if let (Some(a), Some(b)) = (a, b) {
                 let a = a.to_bgra();
-                assert_eq!((a.width, a.height), (b.width, b.height), "{w}x{h} unit {i}");
-                assert!(a.pixels == b.pixels, "{w}x{h} unit {i}: BGRA differs");
+                assert_eq!(
+                    (a.width, a.height),
+                    (b.width, b.height),
+                    "{chroma:?} {w}x{h} unit {i}"
+                );
+                assert!(
+                    a.pixels == b.pixels,
+                    "{chroma:?} {w}x{h} unit {i}: BGRA differs"
+                );
                 compared += 1;
             }
         }
-        assert_eq!(compared, 12, "{w}x{h}: Baseline releases every picture");
+        assert_eq!(
+            compared, 12,
+            "{chroma:?} {w}x{h}: Baseline releases every picture"
+        );
     }
 }
 
@@ -72,7 +105,10 @@ fn to_bgra_matches_gliff_sw_byte_for_byte() {
 fn planes_are_tight_and_even() {
     let mut decoder = CpuDecoder::new().expect("decoder");
     let au = &clip(1278, 718, 1)[0];
-    let frame = decoder.decode(au).expect("decode").expect("a Baseline IDR");
+    let frame = decoder
+        .decode(au, &[])
+        .expect("decode")
+        .expect("a Baseline IDR");
     assert_eq!(frame.size(), (1278, 718));
     assert_eq!(frame.y().len(), 1278 * 718);
     assert_eq!(frame.u().len(), 639 * 359);
@@ -83,10 +119,10 @@ fn planes_are_tight_and_even() {
 fn reset_decodes_the_next_idr() {
     let units = clip(320, 240, 2);
     let mut decoder = CpuDecoder::new().expect("decoder");
-    let _ = decoder.decode(&units[0]).expect("idr");
-    decoder.reset().expect("reset");
+    let _ = decoder.decode(&units[0], &[]).expect("idr");
+    decoder.reset(ChromaMode::Single420).expect("reset");
     assert!(!decoder.has_pending(), "a fresh decoder holds nothing");
-    let again = decoder.decode(&units[0]).expect("idr after reset");
+    let again = decoder.decode(&units[0], &[]).expect("idr after reset");
     assert!(again.is_some(), "the IDR decodes on the fresh decoder");
 }
 

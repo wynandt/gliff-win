@@ -24,6 +24,7 @@ use std::time::Instant;
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
 
+use gliff_proto::msg::ChromaMode;
 use gliff_proto::msg::ClientMsg;
 use gliff_proto::msg::ServerMsg;
 use gliff_transport::Framed;
@@ -667,7 +668,7 @@ impl Run {
                 Action::Send(msg, _) => self.send(msg),
                 Action::Decode { frame_id, main } => {
                     let t = Instant::now();
-                    let result = self.decoder.decode(&main);
+                    let result = self.decoder.decode(&main, &[]);
                     let ms = t.elapsed().as_secs_f64() * 1000.0;
                     if let Phase::Measure { .. } = self.phase {
                         self.window.decode_ms.push(ms);
@@ -680,7 +681,7 @@ impl Run {
                     }));
                 }
                 Action::ResetDecoder => {
-                    if let Err(e) = self.decoder.reset() {
+                    if let Err(e) = self.decoder.reset(ChromaMode::Single420) {
                         self.failures
                             .push(Failure::Link(format!("decoder reset: {e}")));
                     }

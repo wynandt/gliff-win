@@ -385,11 +385,7 @@ impl Presenter {
         }
     }
 
-    fn make_planes(
-        &self,
-        (w, h): (u32, u32),
-        sampling: Sampling,
-    ) -> windows::core::Result<Planes> {
+    fn make_planes(&self, (w, h): (u32, u32), sampling: Sampling) -> windows::core::Result<Planes> {
         let chroma = sampling.chroma_size((w, h));
         let y = self.texture((w, h), DXGI_FORMAT_R8_UNORM, Bind::Read)?;
         let u = self.texture(chroma, DXGI_FORMAT_R8_UNORM, Bind::Read)?;

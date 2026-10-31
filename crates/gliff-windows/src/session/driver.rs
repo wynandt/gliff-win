@@ -16,6 +16,7 @@ use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
 
 use bytes::Bytes;
+use gliff_proto::msg::ChromaMode;
 use gliff_proto::msg::ClientMsg;
 use gliff_proto::msg::ServerMsg;
 use gliff_transport::Framed;
@@ -652,7 +653,7 @@ impl Session {
                 }
                 Action::Decode { frame_id, main } => {
                     let t = Instant::now();
-                    let result = self.decoder.decode(&main);
+                    let result = self.decoder.decode(&main, &[]);
                     let ms = t.elapsed().as_secs_f64() * 1000.0;
                     queue.extend(self.core.decoded(Decoded {
                         frame_id,
@@ -662,7 +663,7 @@ impl Session {
                     }));
                 }
                 Action::ResetDecoder => {
-                    if let Err(e) = self.decoder.reset() {
+                    if let Err(e) = self.decoder.reset(ChromaMode::Single420) {
                         self.errors.push(format!("decoder reset: {e}"));
                     }
                 }
