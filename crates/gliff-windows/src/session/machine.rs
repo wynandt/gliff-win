@@ -34,6 +34,7 @@ use crate::session::Colour;
 use crate::session::Histogram;
 use crate::session::input_side::InputSide;
 use crate::session::input_side::KeyOut;
+use crate::yuv::Sampling;
 use crate::yuv::YuvFrame;
 
 /// The largest stream the client accepts (upstream `MAX_DECODE`,
@@ -288,6 +289,39 @@ impl SessionStats {
     }
 }
 
+/// What happened to the colour of the pictures since the last
+/// [`Core::take_colour`]: proof that a Sharp colour (Dual420) stream's
+/// second half arrives, decodes and is shown as 4:4:4. Counters only.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct ColourCounts {
+    /// VideoFrames received.
+    pub frames: u64,
+    /// Dual420 frames that carried their aux half; both halves went to the
+    /// decoders.
+    pub with_aux: u64,
+    /// Dual420 frames without their aux half: dropped, keyframe asked.
+    pub without_aux: u64,
+    /// Aux halves on a Single420 stream: dropped, keyframe asked.
+    pub stray_aux: u64,
+    /// Pictures handed on with full colour (main and aux recombined).
+    pub full: u64,
+    /// Pictures handed on with 4:2:0 colour.
+    pub half: u64,
+    /// Decodes where one half gave a picture and the other did not.
+    pub out_of_step: u64,
+    /// Decodes whose main and aux pictures differed in size.
+    pub size_mismatch: u64,
+    /// Any other decode error.
+    pub other_errors: u64,
+}
+
+impl ColourCounts {
+    /// True when nothing was counted.
+    pub fn is_empty(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Phase {
     AwaitHelloAck,
@@ -328,6 +362,8 @@ pub struct Core {
     /// released, oldest first (upstream `in_decoder`, net.rs:463-467).
     in_decoder: VecDeque<(u64, Geometry)>,
     stats: SessionStats,
+    /// Counted since the last [`Core::take_colour`].
+    colour_counts: ColourCounts,
     input: InputSide,
 }
 
@@ -346,6 +382,7 @@ impl Core {
             geometry: None,
             in_decoder: VecDeque::new(),
             stats: SessionStats::default(),
+            colour_counts: ColourCounts::default(),
             input: InputSide::new(KeyPipeline::new(
                 Chord::ctrl_alt_home(),
                 KeyPolicy::default(),
@@ -374,6 +411,14 @@ impl Core {
 
     pub fn stats(&self) -> &SessionStats {
         &self.stats
+    }
+
+    /// With Sharp colour offered: the current stream's chroma (`None` before
+    /// the first StreamConfig) and the colour counts since the last call,
+    /// which restart at zero. `None` when Sharp colour was not offered.
+    pub fn take_colour(&mut self) -> Option<(Option<ChromaMode>, ColourCounts)> {
+        let counts = std::mem::take(&mut self.colour_counts);
+        (self.colour == Colour::Sharp).then(|| (self.coded.map(|c| c.chroma), counts))
     }
 
     /// Asks a server that stopped sending pictures for its output again: a
@@ -484,8 +529,14 @@ impl Core {
             Ok(Some(frame)) => actions.push(self.present(frame, done.frame_id)),
             // The CPU decoder holds the picture; its geometry stays queued.
             Ok(None) => {}
-            Err(_) => {
+            Err(e) => {
                 self.stats.decode_errors += 1;
+                let counter = match e {
+                    DecodeError::OutOfStep => &mut self.colour_counts.out_of_step,
+                    DecodeError::AuxSize { .. } => &mut self.colour_counts.size_mismatch,
+                    _ => &mut self.colour_counts.other_errors,
+                };
+                *counter += 1;
                 self.in_decoder.clear();
                 actions.push(self.request_keyframe());
             }
@@ -657,7 +708,14 @@ impl Core {
 
     fn on_video_frame(&mut self, frame_id: u64, main: Bytes, aux: Bytes) -> Vec<Action> {
         self.stats.frames += 1;
+        self.colour_counts.frames += 1;
         let dual = self.coded.is_some_and(|c| c.chroma == ChromaMode::Dual420);
+        match (dual, aux.is_empty()) {
+            (true, false) => self.colour_counts.with_aux += 1,
+            (true, true) => self.colour_counts.without_aux += 1,
+            (false, false) => self.colour_counts.stray_aux += 1,
+            (false, true) => {}
+        }
         if dual == aux.is_empty() {
             // An aux payload on a Single420 stream, which no decoder takes,
             // or a Dual420 frame without its aux half. Neither decoder is
@@ -711,6 +769,10 @@ impl Core {
             .pop_front()
             .unwrap_or_else(|| (fallback_id, self.current_geometry()));
         self.stats.presented += 1;
+        match frame.sampling() {
+            Sampling::Full => self.colour_counts.full += 1,
+            Sampling::Half => self.colour_counts.half += 1,
+        }
         Action::Present(Picture {
             frame,
             geometry,

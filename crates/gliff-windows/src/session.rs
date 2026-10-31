@@ -7,6 +7,7 @@ pub mod machine;
 pub mod resync;
 
 pub use machine::Action;
+pub use machine::ColourCounts;
 pub use machine::Core;
 pub use machine::Decoded;
 pub use machine::DecoderChange;

@@ -9,6 +9,7 @@ use super::ClientMsg;
 use super::ClipboardMsg;
 use super::Codec;
 use super::Colour;
+use super::ColourCounts;
 use super::Core;
 use super::DecodeError;
 use super::Decoded;
@@ -25,6 +26,8 @@ use super::UiCmd;
 use super::UiEvent;
 use super::VideoPipeline;
 use super::YuvFrame;
+use crate::yuv::PooledBuf;
+use crate::yuv::Sampling;
 
 const PANEL: ResizeReq = ResizeReq {
     width: 3840,
@@ -394,6 +397,16 @@ fn sharp_colour_decodes_dual420_pairs_and_falls_back_to_single420() {
         }],
         "both halves go to the decoder together"
     );
+    let full = YuvFrame::sampled(
+        Sampling::Full,
+        (2, 2),
+        PooledBuf::detached(vec![16; 4]),
+        PooledBuf::detached(vec![128; 4]),
+        PooledBuf::detached(vec![128; 4]),
+        std::time::Instant::now(),
+    )
+    .expect("a 2x2 4:4:4 picture");
+    let _ = core.decoded(done(1, Ok(Some(full))));
     let half = core.on_server(frame(2), au(), Bytes::new());
     assert!(
         matches!(
@@ -404,6 +417,27 @@ fn sharp_colour_decodes_dual420_pairs_and_falls_back_to_single420() {
             ]
         ),
         "half a pair is acked, not decoded, and a keyframe asked for: {half:?}"
+    );
+    let _ = core.decoded(done(3, Err(DecodeError::OutOfStep)));
+    assert_eq!(
+        core.take_colour(),
+        Some((
+            Some(ChromaMode::Dual420),
+            ColourCounts {
+                frames: 2,
+                with_aux: 1,
+                without_aux: 1,
+                full: 1,
+                out_of_step: 1,
+                ..ColourCounts::default()
+            }
+        )),
+        "the colour report counts each half, each 4:4:4 picture and why a pair failed"
+    );
+    assert_eq!(
+        core.take_colour().map(|(_, c)| c.is_empty()),
+        Some(true),
+        "a report restarts the counts"
     );
     let single = core.on_server(
         config((1920, 1080), (1920, 1080), 1000, 30),
@@ -431,6 +465,11 @@ fn video_frame_is_decoded_and_counted() {
         "a Single420 unit goes to the decoder"
     );
     assert_eq!(core.stats().frames, 1, "frame counted");
+    assert_eq!(
+        core.take_colour(),
+        None,
+        "no colour report without Sharp colour"
+    );
 }
 
 #[test]
