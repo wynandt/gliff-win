@@ -166,6 +166,7 @@ H.264 video normally carries colour at half the resolution in each direction (4:
 - **Slow links.** The server can drop back to 4:2:0 during a session when the link is short of room, and go back to 4:4:4 when there is room again. Each switch starts with a full frame, so the picture does not glitch.
 - **Cost.** The client decodes two streams instead of one. On dense coloured text that took two to four and a half times the decode time per frame, the server sent two to fourteen times the bytes (most when scrolling), and the frame the client uploads to the GPU is twice the size. [architecture.md](architecture.md#measurements) has the numbers.
 - **Which one you got.** Each `stream config` line in the log ends with the chroma the server picked (`Dual420` or `Single420`) and where it encodes (`encoder gpu` or `encoder cpu`).
+- **Whether it reaches the screen.** While Sharp colour is on, each session logs a `sharp colour` line about every 5 seconds while pictures arrive. It counts the frames received, how many carried their second (aux) half, the pictures shown at 4:4:4 and at 4:2:0, and decode errors by kind: `out of step` (one half gave a picture and the other did not), `size mismatch`, or `other`. On a working Dual420 stream, `shown 4:4:4` follows `with aux` and every other count stays at zero.
 - **No flag and no `[settings]` key.** The choice is per machine only, and nothing locks it.
 
 ## Chords that overlap
