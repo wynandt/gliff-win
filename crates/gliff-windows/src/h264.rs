@@ -1,5 +1,6 @@
 //! Just enough H.264 to report what a stream signals: Annex B NAL
-//! splitting and the SPS header fields (ITU-T H.264 §7.3.2.1.1).
+//! splitting and the SPS header fields (ITU-T H.264 §7.3.2.1.1), and to
+//! tell a decoder that a stream never reorders (§E.1.1).
 
 /// The highest `level_idc` the OpenH264 decoder accepts (5.2). Above it,
 /// every unit fails with dsNoParamSets (libx264's level 6.0 clips).
@@ -112,7 +113,78 @@ pub fn find_sps(au: &[u8]) -> Option<Result<SpsInfo, SpsError>> {
 /// Parses an SPS NAL unit (header byte included).
 pub fn parse_sps(nal: &[u8]) -> Result<SpsInfo, SpsError> {
     let rbsp = unescape(nal.get(1..).ok_or(SpsError::Truncated)?);
-    let mut r = BitReader::new(&rbsp);
+    parse_sps_rbsp(&rbsp).map(|sps| sps.info)
+}
+
+/// The access unit with VUI bitstream restrictions (no reordering, a
+/// decoded picture buffer of `max_num_ref_frames`) added to every SPS that
+/// has no VUI; `None` when no SPS needed it.
+///
+/// Without them, a decoder must assume a POC type 0 stream may reorder,
+/// and the Windows decoder then holds pictures until its whole picture
+/// buffer is full. Every gliff encoder sends I and P pictures only, in
+/// decode order, and writes no VUI. An SPS that has a VUI is left alone.
+pub fn without_reorder_delay(au: &[u8]) -> Option<Vec<u8>> {
+    let nals = nal_units(au);
+    let rewritten: Vec<Option<Vec<u8>>> = nals.iter().map(|nal| restrict_sps(nal)).collect();
+    if rewritten.iter().all(Option::is_none) {
+        return None;
+    }
+    let mut out = Vec::with_capacity(au.len() + 8 * nals.len());
+    for (nal, new) in nals.iter().zip(&rewritten) {
+        out.extend_from_slice(&[0, 0, 0, 1]);
+        out.extend_from_slice(new.as_deref().unwrap_or(nal));
+    }
+    Some(out)
+}
+
+/// One SPS NAL with a VUI that holds only the bitstream restrictions;
+/// `None` for any other NAL, an SPS that already has a VUI, or one that
+/// does not parse.
+fn restrict_sps(nal: &[u8]) -> Option<Vec<u8>> {
+    if nal.first()? & 0x1f != 7 {
+        return None;
+    }
+    let rbsp = unescape(&nal[1..]);
+    let sps = parse_sps_rbsp(&rbsp).ok()?;
+    if sps.has_vui {
+        return None;
+    }
+    let mut w = BitWriter::default();
+    for i in 0..sps.vui_flag_bit {
+        w.bit((rbsp[i / 8] >> (7 - i % 8)) & 1 == 1);
+    }
+    w.bit(true); // vui_parameters_present_flag
+    // aspect ratio, overscan, video signal, chroma location, timing, NAL
+    // and VCL HRD, pic_struct: none.
+    for _ in 0..8 {
+        w.bit(false);
+    }
+    w.bit(true); // bitstream_restriction_flag
+    w.bit(true); // motion_vectors_over_pic_boundaries_flag
+    w.ue(2); // max_bytes_per_pic_denom: the default
+    w.ue(1); // max_bits_per_mb_denom: the default
+    w.ue(16); // log2_max_mv_length_horizontal: the default
+    w.ue(16); // log2_max_mv_length_vertical: the default
+    w.ue(0); // max_num_reorder_frames
+    w.ue(sps.max_num_ref_frames.max(1)); // max_dec_frame_buffering
+    w.bit(true); // rbsp_stop_one_bit
+    let mut out = vec![nal[0]];
+    out.extend(escape(&w.finish()));
+    Some(out)
+}
+
+/// What [`restrict_sps`] needs beyond [`SpsInfo`].
+struct ParsedSps {
+    info: SpsInfo,
+    max_num_ref_frames: u32,
+    has_vui: bool,
+    /// The bit offset of vui_parameters_present_flag in the RBSP.
+    vui_flag_bit: usize,
+}
+
+fn parse_sps_rbsp(rbsp: &[u8]) -> Result<ParsedSps, SpsError> {
+    let mut r = BitReader::new(rbsp);
     let profile_idc = r.bits(8)? as u8;
     let constraint_flags = r.bits(8)? as u8;
     let level_idc = r.bits(8)? as u8;
@@ -161,7 +233,7 @@ pub fn parse_sps(nal: &[u8]) -> Result<SpsInfo, SpsError> {
         2 => {}
         _ => return Err(SpsError::Invalid("pic_order_cnt_type")),
     }
-    let _max_num_ref_frames = r.ue()?;
+    let max_num_ref_frames = r.ue()?;
     let _gaps_allowed = r.bits(1)?;
     let width_mbs = r.ue()? + 1;
     let height_map_units = r.ue()? + 1;
@@ -194,12 +266,19 @@ pub fn parse_sps(nal: &[u8]) -> Result<SpsInfo, SpsError> {
     if crop_w >= coded_w || crop_h >= coded_h {
         return Err(SpsError::Invalid("frame cropping"));
     }
-    Ok(SpsInfo {
-        profile_idc,
-        constraint_flags,
-        level_idc,
-        width: coded_w - crop_w,
-        height: coded_h - crop_h,
+    let vui_flag_bit = r.pos;
+    let has_vui = r.bits(1)? == 1;
+    Ok(ParsedSps {
+        info: SpsInfo {
+            profile_idc,
+            constraint_flags,
+            level_idc,
+            width: coded_w - crop_w,
+            height: coded_h - crop_h,
+        },
+        max_num_ref_frames,
+        has_vui,
+        vui_flag_bit,
     })
 }
 
@@ -229,6 +308,21 @@ fn unescape(data: &[u8]) -> Vec<u8> {
         if zeros >= 2 && b == 3 {
             zeros = 0;
             continue;
+        }
+        zeros = if b == 0 { zeros + 1 } else { 0 };
+        out.push(b);
+    }
+    out
+}
+
+/// Adds emulation-prevention bytes (00 00 0x with x <= 3 -> 00 00 03 0x).
+fn escape(rbsp: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(rbsp.len() + rbsp.len() / 64 + 1);
+    let mut zeros = 0;
+    for &b in rbsp {
+        if zeros >= 2 && b <= 3 {
+            out.push(3);
+            zeros = 0;
         }
         zeros = if b == 0 { zeros + 1 } else { 0 };
         out.push(b);
@@ -292,6 +386,42 @@ impl<'a> BitReader<'a> {
         let k = i64::from(self.ue()?);
         let v = if k % 2 == 1 { (k + 1) / 2 } else { -(k / 2) };
         Ok(v as i32)
+    }
+}
+
+#[derive(Default)]
+struct BitWriter {
+    bytes: Vec<u8>,
+    bits: usize,
+}
+
+impl BitWriter {
+    fn bit(&mut self, one: bool) {
+        if self.bits.is_multiple_of(8) {
+            self.bytes.push(0);
+        }
+        if one {
+            let last = self.bytes.len() - 1;
+            self.bytes[last] |= 0x80 >> (self.bits % 8);
+        }
+        self.bits += 1;
+    }
+
+    /// Unsigned exp-Golomb.
+    fn ue(&mut self, v: u32) {
+        let code = u64::from(v) + 1;
+        let len = 64 - code.leading_zeros();
+        for _ in 1..len {
+            self.bit(false);
+        }
+        for i in (0..len).rev() {
+            self.bit(code >> i & 1 == 1);
+        }
+    }
+
+    /// The bytes, the last one zero-padded.
+    fn finish(self) -> Vec<u8> {
+        self.bytes
     }
 }
 

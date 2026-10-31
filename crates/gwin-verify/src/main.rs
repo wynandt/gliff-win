@@ -98,6 +98,10 @@ enum Check {
         /// Feed units at this rate (0: as fast as they decode).
         #[arg(long, default_value_t = 0.0)]
         pace_fps: f64,
+        /// After every unit, drain a held picture as the session does when
+        /// the screen goes still.
+        #[arg(long)]
+        idle_drain: bool,
     },
     /// Start the server over ssh as the client does (BatchMode, no
     /// console), handshake, Bye; prints the remote path it launched.
@@ -655,6 +659,7 @@ fn run(check: Check, report: &mut Report) -> anyhow::Result<()> {
             decoder,
             aux_clip,
             pace_fps,
+            idle_drain,
         } => {
             anyhow::ensure!(
                 aux_clip.is_empty() || aux_clip.len() == clip.len(),
@@ -678,7 +683,9 @@ fn run(check: Check, report: &mut Report) -> anyhow::Result<()> {
             for clip in clips {
                 let aux = aux_clips.next().map(|p| Clip::load(&p)).transpose();
                 let lines = match clip.and_then(|c| aux.map(|a| (c, a))) {
-                    Ok((c, a)) => decode_check::lines(&c, a.as_ref(), decoder, pace_fps, limits),
+                    Ok((c, a)) => {
+                        decode_check::lines(&c, a.as_ref(), decoder, pace_fps, idle_drain, limits)
+                    }
                     Err(e) => vec![Line::new("decode", false).with("error", format!("{e:#}"))],
                 };
                 for line in lines {

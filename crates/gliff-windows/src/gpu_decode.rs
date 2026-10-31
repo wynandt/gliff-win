@@ -480,7 +480,10 @@ impl Stream {
         if !self.streaming {
             return Err(GpuError::new("decode", "no SPS before the first picture"));
         }
-        let sample = self.sample(unit)?;
+        // Without this, the decoder holds every picture until its whole
+        // picture buffer is full (see `h264::without_reorder_delay`).
+        let restricted = h264::without_reorder_delay(unit);
+        let sample = self.sample(restricted.as_deref().unwrap_or(unit))?;
         let mut frame = None;
         // SAFETY: plain call on live interfaces.
         match unsafe { self.mft.ProcessInput(0, &sample, 0) } {

@@ -61,6 +61,7 @@ gwin-verify config [--client PATH] [--log-dir DIR]
 gwin-verify decode --clip F [--clip F ...] | --sizes 1920x1080,2560x1440 [--frames 300]
                    [--max-p95-ms 33.3] [--min-fps 30] [--kill-rule]
                    [--decoder cpu|gpu|both] [--aux-clip F] [--pace-fps N]
+                   [--idle-drain]
 ```
 
 - `--decoder` picks the decoder (`cpu` by default). `gpu` is the client's
@@ -73,6 +74,10 @@ gwin-verify decode --clip F [--clip F ...] | --sizes 1920x1080,2560x1440 [--fram
   live stream arrives, so the line's `cpu_pct` (process CPU time over wall time,
   as a share of one core) is the cost at that frame rate. Every line also has
   `cpu_ms_per_frame`.
+- `--idle-drain` drains the decoder after every unit that leaves a picture
+  held, as the session does when the screen goes still, and reports the count
+  as `drains` (`cpu_drains` and `gpu_drains` with `both`). A decoder that shows
+  each picture as it decodes it holds none, so it never drains.
 
 - `--clip` decodes `.gwclip` files; `--sizes` encodes the synthetic desktop in
   process with OpenH264 Baseline (3840x2160 at most) and decodes it.

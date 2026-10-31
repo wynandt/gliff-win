@@ -57,6 +57,9 @@ pub struct Measured {
     pub cpu_ms: Option<f64>,
     /// The decoder's own log lines (a start, a fallback).
     pub notes: Vec<String>,
+    /// Drains of a held picture: idle ones (`Run::idle_drain`) and the
+    /// final one.
+    pub drains: u64,
 }
 
 /// How one clip is decoded.
@@ -68,6 +71,9 @@ pub struct Run<'a> {
     /// Feed units at this rate (0: as fast as they decode), so the CPU
     /// share is the share a stream at that rate costs.
     pub pace_fps: f64,
+    /// After every unit, drain a held picture as the session does when no
+    /// unit follows for `IDLE_DRAIN`: a desktop that changes now and then.
+    pub idle_drain: bool,
 }
 
 impl Default for Run<'_> {
@@ -76,6 +82,7 @@ impl Default for Run<'_> {
             aux: None,
             decoder: DecoderKind::Cpu,
             pace_fps: 0.0,
+            idle_drain: false,
         }
     }
 }
@@ -108,8 +115,23 @@ pub fn measure_with(
     let mut samples_ms = Vec::with_capacity(clip.units.len() + 1);
     let (mut pictures, mut errors, mut wrong_size) = (0u64, 0u64, 0u64);
     let mut first_error = None;
+    let mut drains = 0u64;
     let cpu_start = process_cpu_ms();
     let start = Instant::now();
+    let mut take = |index: usize, result: Result<Option<YuvFrame>, _>, what: &str| match result {
+        Ok(Some(picture)) => {
+            pictures += 1;
+            if picture.size() != want {
+                wrong_size += 1;
+            }
+            seen(index, &picture);
+        }
+        Ok(None) => {}
+        Err(e) => {
+            errors += 1;
+            first_error.get_or_insert_with(|| (index, format!("{what}{e}")));
+        }
+    };
     for (index, unit) in clip.units.iter().enumerate() {
         if let Some(period) = period {
             let due = start + period * index as u32;
@@ -122,42 +144,23 @@ pub fn measure_with(
         let result = decoder.decode(unit, aux);
         samples_ms.push(t.elapsed().as_secs_f64() * 1000.0);
         notes.extend(decoder.take_notes());
-        match result {
-            Ok(Some(picture)) => {
-                pictures += 1;
-                if picture.size() != want {
-                    wrong_size += 1;
-                }
-                seen(index, &picture);
-            }
-            Ok(None) => {}
-            Err(e) => {
-                errors += 1;
-                first_error.get_or_insert_with(|| (index, e.to_string()));
-            }
+        take(index, result, "");
+        if run.idle_drain && decoder.has_pending() {
+            drains += 1;
+            let result = decoder.flush();
+            notes.extend(decoder.take_notes());
+            take(index, result, "idle drain: ");
         }
     }
     // A High-profile stream holds one picture until flushed; it is judged
     // like any other.
     if decoder.has_pending() {
+        drains += 1;
         let t = Instant::now();
         let result = decoder.flush();
         samples_ms.push(t.elapsed().as_secs_f64() * 1000.0);
         notes.extend(decoder.take_notes());
-        match result {
-            Ok(Some(picture)) => {
-                pictures += 1;
-                if picture.size() != want {
-                    wrong_size += 1;
-                }
-                seen(clip.units.len(), &picture);
-            }
-            Ok(None) => {}
-            Err(e) => {
-                errors += 1;
-                first_error.get_or_insert_with(|| (clip.units.len(), format!("flush: {e}")));
-            }
-        }
+        take(clip.units.len(), result, "flush: ");
     }
     Ok(Measured {
         samples_ms,
@@ -169,6 +172,7 @@ pub fn measure_with(
         decoder: decoder.kind().name(),
         cpu_ms: cpu_start.and_then(|a| process_cpu_ms().map(|b| b - a)),
         notes,
+        drains,
     })
 }
 
@@ -214,10 +218,15 @@ pub struct Compared {
 
 /// Decodes `clip` with both decoders and compares every picture byte for
 /// byte: hardware H.264 decode is bit-exact, so any difference is a bug.
-pub fn compare(clip: &Clip, aux: Option<&Clip>) -> anyhow::Result<(Compared, Measured, Measured)> {
+pub fn compare(
+    clip: &Clip,
+    aux: Option<&Clip>,
+    idle_drain: bool,
+) -> anyhow::Result<(Compared, Measured, Measured)> {
     let mut cpu = Vec::new();
     let run = Run {
         aux,
+        idle_drain,
         ..Run::default()
     };
     let cpu_m = measure_with(clip, run, |i, p| cpu.push((i, fingerprint(p))))?;
@@ -304,6 +313,7 @@ pub fn lines(
     aux: Option<&Clip>,
     choice: crate::DecoderChoice,
     pace_fps: f64,
+    idle_drain: bool,
     limits: Limits,
 ) -> Vec<Line> {
     let timed = |kind: DecoderKind| -> Line {
@@ -311,12 +321,14 @@ pub fn lines(
             aux,
             decoder: kind,
             pace_fps,
+            idle_drain,
         };
         match measure_with(clip, run, |_, _| {}) {
             Ok(m) => {
                 let mut line = judge(clip, &m, limits)
                     .with("dual420", aux.is_some())
-                    .with("pace_fps", pace_fps);
+                    .with("pace_fps", pace_fps)
+                    .with("drains", m.drains);
                 if kind == DecoderKind::Gpu && m.decoder != "gpu" {
                     line.ok = false;
                 }
@@ -333,7 +345,7 @@ pub fn lines(
         crate::DecoderChoice::Gpu => vec![timed(DecoderKind::Gpu)],
         crate::DecoderChoice::Both => {
             let mut out = vec![timed(DecoderKind::Cpu), timed(DecoderKind::Gpu)];
-            out.push(match compare(clip, aux) {
+            out.push(match compare(clip, aux, idle_drain) {
                 Ok((c, cpu, gpu)) => {
                     let ok = c.differ == 0
                         && c.pictures == cpu.pictures
@@ -352,6 +364,8 @@ pub fn lines(
                         .with("gpu_lead_units_max", c.gpu_lead_units.1)
                         .with("cpu_pictures", cpu.pictures)
                         .with("gpu_pictures", gpu.pictures)
+                        .with("cpu_drains", cpu.drains)
+                        .with("gpu_drains", gpu.drains)
                         .with("gpu_decoder", gpu.decoder);
                     match c.first_difference {
                         Some(d) => line.with("first_difference", d),
@@ -487,6 +501,7 @@ mod tests {
             decoder: "cpu",
             cpu_ms: None,
             notes: Vec::new(),
+            drains: 0,
         }
     }
 

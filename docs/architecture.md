@@ -279,7 +279,15 @@ keeps its own instrumented copy of this loop.
   size and split into the same tight I420 `YuvFrame` the
   CPU path makes, so the frame slot, presenter and shader do not change.
   Dual420 runs two decoders on the same device and the same recombine as the
-  CPU path. Any GPU error ends GPU decode for the rest of the session: the
+  CPU path. Before a unit reaches the decoder, `h264::without_reorder_delay`
+  gives every SPS that has no VUI a bitstream restriction with no reordering
+  and a picture buffer of the SPS's reference count. The gliff encoders write
+  no VUI, and without one a POC type 0 stream may reorder, so the Windows
+  decoder held a picture buffer's worth of pictures (eleven at 1440p, level
+  5.2) before showing any. Those held pictures then set off the idle drain,
+  and after a drain this decoder decodes nothing until the next IDR, which the
+  endless GOP never sends unprompted. An SPS that has a VUI is left alone.
+  Any GPU error ends GPU decode for the rest of the session: the
   `VideoDecoder` logs why, starts a `CpuDecoder` with the current chroma, and
   returns the error, so the core acks the frame and asks for a keyframe as for
   any decode error. A GPU error while draining the last picture at idle falls
