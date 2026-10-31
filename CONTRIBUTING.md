@@ -19,6 +19,12 @@ Run the same checks CI runs:
     cargo clippy --workspace --all-targets --locked -- -D warnings
     cargo test --workspace --locked
 
+A change to how keys are held or let go (the hook, the grab, the key ledger,
+the local chords) also runs the model check in
+[formal/held-keys](formal/held-keys/README.md):
+
+    formal/held-keys/run
+
 Keep PRs small and about one thing. Explain the problem, the root cause and the
 fix; the PR template shows how.
 

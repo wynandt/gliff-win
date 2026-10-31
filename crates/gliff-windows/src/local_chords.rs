@@ -236,14 +236,18 @@ impl LocalChords {
             }
             return ChordDecision::Forward;
         }
-        if local || self.chords.is_empty() {
-            return ChordDecision::Forward;
-        }
         if self.taking == Some(vk) {
             if press == Press::Up {
                 self.taking = None;
             }
-            return ChordDecision::Swallow;
+            // A local Up (no session to send it to) ends the take too, or
+            // the next press of the key would be swallowed.
+            if !local {
+                return ChordDecision::Swallow;
+            }
+        }
+        if local || self.chords.is_empty() {
+            return ChordDecision::Forward;
         }
         if press != Press::Down {
             return ChordDecision::Forward;
@@ -271,6 +275,12 @@ impl LocalChords {
             .zip(self.held)
             .filter_map(|(m, held)| held.then_some(m.vk))
             .collect()
+    }
+
+    /// The chord just taken was not done: its trigger is a key like any
+    /// other.
+    pub fn cancel_take(&mut self) {
+        self.taking = None;
     }
 
     /// Forget everything, for a mode change or a hook reinstall.

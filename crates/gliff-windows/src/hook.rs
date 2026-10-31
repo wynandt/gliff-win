@@ -69,6 +69,7 @@ use crate::chord_watch::Taker;
 use crate::chord_watch::switch_word;
 use crate::grab_state::HookMode;
 use crate::input::KeyPolicy;
+use crate::key_ledger::KeyId;
 use crate::key_ledger::KeyLedger;
 use crate::key_ledger::Physical;
 use crate::key_ledger::Route;
@@ -230,6 +231,15 @@ fn physical_saw(vk: u16, press: Press) {
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
         .saw(vk, press);
+}
+
+/// True if the hook has handled an event of this key later than a key
+/// message from `time_ms` (see [`Physical::saw_later`]).
+pub fn saw_later(key: KeyId, time_ms: u32) -> bool {
+    PHYSICAL
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .saw_later(key, time_ms)
 }
 
 /// What Windows, the ledger and the hook's own view say is down: a count and
@@ -596,7 +606,12 @@ impl Ctx {
         {
             return false;
         }
-        physical_saw(vk, press);
+        {
+            let mut real = PHYSICAL.lock().unwrap_or_else(PoisonError::into_inner);
+            real.saw(vk, press);
+            let extended = key.flags.0 & LLKHF_EXTENDED.0 != 0;
+            real.moved(KeyId::of_hook(vk, extended), key.time);
+        }
         self.test_hooks
             .on_key(vk, press, key.flags.0 & LLKHF_INJECTED.0 != 0);
         let mut gate = GATE.lock().unwrap_or_else(PoisonError::into_inner);
@@ -707,7 +722,12 @@ impl Ctx {
             ChordDecision::Forward => {}
             ChordDecision::Swallow => return true,
             ChordDecision::Take { modifiers, trigger } => {
-                return self.local_chord(&raw, &modifiers, trigger);
+                if self.local_chord(&raw, &modifiers, trigger) {
+                    return true;
+                }
+                // No session to take the chord from: the key goes on as any
+                // other key below, and its Up with it.
+                self.chords.cancel_take();
             }
         }
         // No session (or a closed channel) means the key goes to Windows
@@ -730,11 +750,13 @@ impl Ctx {
     /// The hook lets this key go to Windows while it is grabbing: Windows
     /// sees its Down, so Windows must get its Up. Noted in the ledger and in
     /// the pass log, so the window does not take the message for a silent
-    /// hook.
-    fn windows_gets(&self, raw: &RawKey, now: HookMode) {
+    /// hook, and in the local chords, so a modifier let go here is not
+    /// replayed by a local chord later in the grab.
+    fn windows_gets(&mut self, raw: &RawKey, now: HookMode) {
         if now != HookMode::Grab {
             return;
         }
+        self.chords.push(raw.vk, raw.press, true);
         LEDGER
             .lock()
             .unwrap_or_else(PoisonError::into_inner)

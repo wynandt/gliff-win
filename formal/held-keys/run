@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+# Model-checks the held-keys model (model/HeldKeys.tla) with TLC.
+#
+#   run            the gate (must pass) and each known finding (must still
+#                  break the rule it is known to break)
+#   run gate       the gate only
+#
+# Exit: 0 all as expected; 1 the gate broke a rule (a new bug, or the model is
+# out of date); 2 a known finding no longer breaks its rule, or breaks a
+# different one (fixed? update README.md); 3 the tools could not be set up.
+#
+# Env: HELD_KEYS_TOOLS (default <repo>/target/tla-tools): where the pinned TLC
+# and, on x86-64 Linux, a pinned Java runtime are kept. HELD_KEYS_OUT (default
+# <repo>/target/held-keys): TLC's output, one file per model. TLC's state
+# files go in a scratch folder in there that is deleted after each model.
+set -euo pipefail
+
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+repo="$(cd "$here/../.." && pwd)"
+tools="${HELD_KEYS_TOOLS:-$repo/target/tla-tools}"
+out="${HELD_KEYS_OUT:-$repo/target/held-keys}"
+
+TLC_VERSION=1.7.4
+TLC_SHA256=936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88
+JRE_NAME=jdk-21.0.13+9-jre
+JRE_URL=https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.13%2B9/OpenJDK21U-jre_x64_linux_hotspot_21.0.13_9.tar.gz
+JRE_SHA256=a535a1df9c6284d9618872984e026ae0352d1f7e9e0605425c0e6114f47351dd
+
+fetch() { # url file sha256
+  local tmp="$2.part"
+  curl -fsSL -o "$tmp" "$1" || { echo "run: could not download $1" >&2; exit 3; }
+  echo "$3  $tmp" | sha256sum -c --quiet - || { echo "run: checksum mismatch for $1" >&2; rm -f "$tmp"; exit 3; }
+  mv "$tmp" "$2"
+}
+
+mkdir -p "$tools" "$out"
+scratch="$(mktemp -d "$out/states.XXXXXX")"
+trap 'rm -rf "$scratch"' EXIT
+jar="$tools/tla2tools-$TLC_VERSION.jar"
+[ -f "$jar" ] || fetch "https://github.com/tlaplus/tlaplus/releases/download/v$TLC_VERSION/tla2tools.jar" "$jar" "$TLC_SHA256"
+
+java="$tools/$JRE_NAME/bin/java"
+if [ ! -x "$java" ]; then
+  if [ "$(uname -s)-$(uname -m)" = "Linux-x86_64" ]; then
+    fetch "$JRE_URL" "$tools/jre.tar.gz" "$JRE_SHA256"
+    tar -xzf "$tools/jre.tar.gz" -C "$tools" && rm -f "$tools/jre.tar.gz"
+  elif command -v java >/dev/null; then
+    java="$(command -v java)"   # Java 11 or later
+  else
+    echo "run: no Java; install Java 11 or later" >&2; exit 3
+  fi
+fi
+
+# tlc NAME WORKERS: checks model/NAME.cfg, prints a one-line result, and sets
+# `broke` to the rule that broke (empty when none).
+tlc() {
+  local log="$out/$1.out"
+  (cd "$here/model" && "$java" -XX:+UseParallelGC -cp "$jar" tlc2.TLC \
+      -workers "$2" -deadlock -metadir "$scratch/$1" -config "$1.cfg" HeldKeys.tla) >"$log" 2>&1 || true
+  rm -rf "${scratch:?}/$1"
+  broke="$(sed -n 's/^Error: Invariant \(.*\) is violated.*/\1/p' "$log" | head -n1)"
+  local states; states="$(grep -o '[0-9]* distinct states found' "$log" | tail -n1)"
+  if [ -n "$broke" ]; then
+    echo "$1: $broke breaks ($states) path:"
+    sed -n 's/^State \([0-9]*\): <\([A-Za-z]*\).*/  \1 \2/p' "$log"
+  elif grep -q "No error has been found" "$log"; then
+    echo "$1: every rule holds ($states)"
+  else
+    echo "$1: TLC did not finish, see $log" >&2; exit 3
+  fi
+  echo "  full output: $log"
+}
+
+status=0
+tlc Gate auto
+[ -z "$broke" ] || status=1
+
+if [ "${1:-}" != gate ]; then
+  # Known findings, as model:rule pairs (model/NAME.cfg and the rule it
+  # breaks), separated by spaces. None now. See README.md.
+  findings=""
+  for pair in $findings; do
+    tlc "${pair%%:*}" 1
+    if [ "$broke" != "${pair#*:}" ]; then
+      echo "  expected ${pair#*:} to break: the finding changed, update README.md"
+      [ "$status" -ne 0 ] || status=2
+    fi
+  done
+fi
+exit "$status"

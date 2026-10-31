@@ -58,6 +58,11 @@ fn the_repeats_and_the_up_of_the_trigger_are_swallowed_once() {
         ChordDecision::Forward,
         "a second Up is not the chord's"
     );
+    // The Up reaches Windows as a local key (the session ended): the take
+    // ends all the same, and the next press is the chord again.
+    chords.push(S, Press::Down, false);
+    chords.push(S, Press::Up, true);
+    assert_eq!(chords.push(S, Press::Down, false), take(&[LSHIFT, LWIN]));
 }
 
 #[test]
