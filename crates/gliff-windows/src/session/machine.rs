@@ -30,6 +30,7 @@ use crate::input::KeyPolicy;
 use crate::keymap::Chord;
 use crate::keymap::KeyEvent;
 use crate::pointer::PointerEvent;
+use crate::session::Colour;
 use crate::session::Histogram;
 use crate::session::input_side::InputSide;
 use crate::session::input_side::KeyOut;
@@ -196,13 +197,16 @@ pub enum Action {
     /// Write this message, then this payload (empty for every message
     /// the client sends so far), through the writer task.
     Send(ClientMsg, Bytes),
-    /// Decode `main`, then call [`Core::decoded`] with the result.
+    /// Decode `main` (and `aux`, which is empty unless the stream is
+    /// Dual420), then call [`Core::decoded`] with the result.
     Decode {
         frame_id: u64,
         main: Bytes,
+        aux: Bytes,
     },
-    /// Replace the decoder before the next [`Action::Decode`].
-    ResetDecoder,
+    /// Replace the decoder with one for this chroma before the next
+    /// [`Action::Decode`].
+    ResetDecoder(ChromaMode),
     /// Hand the picture to the frame slot.
     Present(Picture),
     Ui(UiEvent),
@@ -313,6 +317,9 @@ pub struct Core {
     /// The server's output is a private headless one (HelloAck's `headless`);
     /// true until the HelloAck says otherwise, as before there was a mirror.
     headless: bool,
+    /// What `client_caps` offered; a StreamConfig for anything else ends
+    /// the session.
+    colour: Colour,
     coded: Option<Coded>,
     geometry: Option<Geometry>,
     /// (frame_id, geometry) of each unit fed to the decoder and not yet
@@ -332,6 +339,7 @@ impl Core {
             last_resize: None,
             resyncing: false,
             headless: true,
+            colour: Colour::Standard,
             coded: None,
             geometry: None,
             in_decoder: VecDeque::new(),
@@ -341,6 +349,12 @@ impl Core {
                 KeyPolicy::default(),
             )),
         }
+    }
+
+    /// The colour the Hello offered (`Colour::Standard` unless set).
+    pub fn with_colour(mut self, colour: Colour) -> Self {
+        self.colour = colour;
+        self
     }
 
     /// Replaces the key pipeline (the release chord, the stand-in chord and
@@ -603,7 +617,7 @@ impl Core {
         else {
             return Vec::new();
         };
-        if let Err(problem) = validate_stream(codec, chroma, (width, height)) {
+        if let Err(problem) = validate_stream(codec, chroma, (width, height), self.colour) {
             return self.end(EndReason::Link(problem));
         }
         let coded = Coded {
@@ -626,7 +640,7 @@ impl Core {
             self.coded = Some(coded);
             self.in_decoder.clear();
             self.stats.resets += 1;
-            actions.push(Action::ResetDecoder);
+            actions.push(Action::ResetDecoder(chroma));
             DecoderChange::Reset
         };
         actions.push(Action::Ui(UiEvent::StreamConfig(StreamInfo {
@@ -640,8 +654,11 @@ impl Core {
 
     fn on_video_frame(&mut self, frame_id: u64, main: Bytes, aux: Bytes) -> Vec<Action> {
         self.stats.frames += 1;
-        if !aux.is_empty() {
-            // Dual420 was never advertised; no decoder takes an aux plane.
+        let dual = self.coded.is_some_and(|c| c.chroma == ChromaMode::Dual420);
+        if dual == aux.is_empty() {
+            // An aux payload on a Single420 stream, which no decoder takes,
+            // or a Dual420 frame without its aux half. Neither decoder is
+            // fed, so a Dual420 pair stays in step until the keyframe.
             // decoded_at_ms is 0 (never decoded); gliff-server never reads
             // the field (only frame_id, session.rs:499-503).
             return vec![self.ack(frame_id, 0), self.request_keyframe()];
@@ -652,7 +669,11 @@ impl Core {
         if std::mem::take(&mut self.resyncing) {
             actions.push(Action::Ui(UiEvent::Resynced));
         }
-        actions.push(Action::Decode { frame_id, main });
+        actions.push(Action::Decode {
+            frame_id,
+            main,
+            aux,
+        });
         actions
     }
 
@@ -727,14 +748,16 @@ fn validate_stream(
     codec: Codec,
     chroma: ChromaMode,
     (width, height): (u32, u32),
+    colour: Colour,
 ) -> Result<(), String> {
-    match (codec, chroma) {
-        (Codec::H264, ChromaMode::Single420) => {}
-        (codec, chroma) => {
-            return Err(format!(
-                "unsupported stream {codec:?}/{chroma:?}; the client advertised H264/Single420 only"
-            ));
-        }
+    if codec != Codec::H264 || !colour.offered().contains(&chroma) {
+        let offered = match colour {
+            Colour::Standard => "Single420",
+            Colour::Sharp => "Dual420 and Single420",
+        };
+        return Err(format!(
+            "unsupported stream {codec:?}/{chroma:?}; the client advertised H264/{offered} only"
+        ));
     }
     let fits = width > 0
         && height > 0

@@ -19,6 +19,7 @@ use gliff_windows::connect::SshFailure;
 use gliff_windows::input::InputOptions;
 use gliff_windows::keymap::Press;
 use gliff_windows::pointer::PointerEvent;
+use gliff_windows::session::Colour;
 use gliff_windows::session::EndReason;
 use gliff_windows::session::ResizeReq;
 use gliff_windows::session::UiCmd;
@@ -90,6 +91,7 @@ fn session_with(name: &str, env: &str, server_path: &str) -> (SessionHandle, Arc
         },
         panel: (3840, 2400),
         initial: SIZE,
+        colour: Colour::Standard,
         input: InputOptions::default(),
     };
     let waker = Arc::new(Counting::default());

@@ -30,14 +30,41 @@ use gliff_proto::msg::features;
 /// fullscreen window never needs a new handshake.
 pub const ADVERTISED_FLOOR: (u32, u32) = (3840, 2400);
 
-/// What the client advertises: H.264, Single420 only (CPU decode), and a
-/// maximum of the component-wise max of `panel` and [`ADVERTISED_FLOOR`].
-pub fn client_caps(panel: (u32, u32)) -> ClientCaps {
+/// The colour a session asks for: a machine's *Sharp colour* choice.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Colour {
+    /// 4:2:0 only, as before the choice existed.
+    #[default]
+    Standard,
+    /// Full-resolution colour (Dual420), with 4:2:0 for the server to fall
+    /// back to.
+    Sharp,
+}
+
+impl Colour {
+    /// `Sharp` when the choice is on.
+    pub fn sharp(on: bool) -> Self {
+        if on { Self::Sharp } else { Self::Standard }
+    }
+
+    /// The chroma modes the client offers, preferred first.
+    pub fn offered(self) -> &'static [ChromaMode] {
+        match self {
+            Self::Standard => &[ChromaMode::Single420],
+            Self::Sharp => &[ChromaMode::Dual420, ChromaMode::Single420],
+        }
+    }
+}
+
+/// What the client advertises: H.264 (CPU decode), the chroma modes of
+/// `colour`, and a maximum of the component-wise max of `panel` and
+/// [`ADVERTISED_FLOOR`].
+pub fn client_caps(panel: (u32, u32), colour: Colour) -> ClientCaps {
     ClientCaps {
         codecs: vec![Codec::H264],
         max_width: panel.0.max(ADVERTISED_FLOOR.0),
         max_height: panel.1.max(ADVERTISED_FLOOR.1),
-        chroma: vec![ChromaMode::Single420],
+        chroma: colour.offered().to_vec(),
         features: features(),
     }
 }
@@ -138,21 +165,33 @@ mod tests {
     use gliff_proto::msg::PROTOCOL_VERSION;
 
     use super::ADVERTISED_FLOOR;
+    use super::Colour;
     use super::Histogram;
     use super::client_caps;
     use super::hello;
 
     #[test]
     fn caps_never_advertise_below_the_floor() {
-        let caps = client_caps((1920, 1080));
+        let caps = client_caps((1920, 1080), Colour::Standard);
         assert_eq!((caps.max_width, caps.max_height), ADVERTISED_FLOOR);
         assert_eq!(caps.codecs, [Codec::H264]);
         assert_eq!(caps.chroma, [ChromaMode::Single420]);
+        let sharp = client_caps((1920, 1080), Colour::Sharp);
+        assert_eq!(
+            sharp.chroma,
+            [ChromaMode::Dual420, ChromaMode::Single420],
+            "Sharp colour offers Dual420 and leaves Single420 to fall back to"
+        );
+        assert_eq!(
+            (sharp.max_width, sharp.max_height, sharp.codecs),
+            (caps.max_width, caps.max_height, caps.codecs),
+            "only the chroma differs"
+        );
     }
 
     #[test]
     fn caps_grow_with_a_larger_panel_per_axis() {
-        let caps = client_caps((5120, 1440));
+        let caps = client_caps((5120, 1440), Colour::Standard);
         assert_eq!((caps.max_width, caps.max_height), (5120, 2400));
     }
 
@@ -160,7 +199,10 @@ mod tests {
     fn hello_carries_this_protocol_version() {
         let ClientMsg::Hello {
             version, keymap, ..
-        } = hello(client_caps((3840, 2400)), "xkb text".to_owned())
+        } = hello(
+            client_caps((3840, 2400), Colour::Standard),
+            "xkb text".to_owned(),
+        )
         else {
             panic!("hello builds a Hello");
         };

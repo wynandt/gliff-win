@@ -58,6 +58,7 @@ use crate::machine_choices::Rules;
 use crate::present::Presenter;
 use crate::resize_gate::request_for;
 use crate::route::InputRoute;
+use crate::session::Colour;
 use crate::session::driver::Options;
 use crate::session::driver::SessionHandle;
 use crate::session::driver::Waker;
@@ -313,6 +314,7 @@ fn starter(
             spec,
             panel: panel_size(hwnd),
             initial,
+            colour: Colour::Standard,
             input: settings.input_options(keymap.text),
         };
         let handle = start_with_clipboard(opts, Arc::clone(&waker) as Arc<dyn Waker>, launch.clip)?;

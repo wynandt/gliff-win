@@ -8,6 +8,7 @@ use super::ChromaMode;
 use super::ClientMsg;
 use super::ClipboardMsg;
 use super::Codec;
+use super::Colour;
 use super::Core;
 use super::DecodeError;
 use super::Decoded;
@@ -232,7 +233,7 @@ fn first_config_resets_the_decoder_and_reports_geometry() {
     assert_eq!(
         actions,
         vec![
-            Action::ResetDecoder,
+            Action::ResetDecoder(ChromaMode::Single420),
             Action::Ui(UiEvent::StreamConfig(StreamInfo {
                 geometry: G1080,
                 fps_cap: 30,
@@ -258,7 +259,7 @@ fn pace_only_and_scale_only_configs_keep_the_decoder() {
         Bytes::new(),
     );
     assert!(
-        !pace.contains(&Action::ResetDecoder),
+        !pace.contains(&Action::ResetDecoder(ChromaMode::Single420)),
         "an fps-only config must not reset (net.rs:676-683): {pace:?}"
     );
     let scale = core.on_server(
@@ -267,7 +268,7 @@ fn pace_only_and_scale_only_configs_keep_the_decoder() {
         Bytes::new(),
     );
     assert!(
-        !scale.contains(&Action::ResetDecoder),
+        !scale.contains(&Action::ResetDecoder(ChromaMode::Single420)),
         "a scale-only config must not reset: {scale:?}"
     );
     assert!(
@@ -296,7 +297,7 @@ fn a_new_stream_size_resets_and_clears_the_fifo() {
     );
     assert_eq!(
         actions.first(),
-        Some(&Action::ResetDecoder),
+        Some(&Action::ResetDecoder(ChromaMode::Single420)),
         "size change resets: {actions:?}"
     );
     // The held 1080p unit is gone with the old decoder, so a picture
@@ -355,10 +356,64 @@ fn invalid_or_unsupported_configs_end_the_link() {
             "{name}: must end the link: {actions:?}"
         );
         assert!(
-            !actions.contains(&Action::ResetDecoder),
+            !actions.contains(&Action::ResetDecoder(ChromaMode::Single420)),
             "{name}: no reset: {actions:?}"
         );
     }
+}
+
+#[test]
+fn sharp_colour_decodes_dual420_pairs_and_falls_back_to_single420() {
+    let mut core = Core::new(PANEL).with_colour(Colour::Sharp);
+    let _ = core.on_server(hello_ack(PROTOCOL_VERSION), Bytes::new(), Bytes::new());
+    let dual = ServerMsg::StreamConfig {
+        codec: Codec::H264,
+        chroma: ChromaMode::Dual420,
+        pipeline: Some(VideoPipeline::Gpu),
+        width: 1920,
+        height: 1080,
+        scale_milli: 1000,
+        extradata: Vec::new(),
+        aux_extradata: Some(Vec::new()),
+        view_width: 1920,
+        view_height: 1080,
+        fps_cap: 30,
+    };
+    let actions = core.on_server(dual, Bytes::new(), Bytes::new());
+    assert!(
+        actions.contains(&Action::ResetDecoder(ChromaMode::Dual420)),
+        "an offered Dual420 stream gets a Dual420 decoder: {actions:?}"
+    );
+    assert_eq!(
+        core.on_server(frame(1), au(), au()),
+        vec![Action::Decode {
+            frame_id: 1,
+            main: au(),
+            aux: au(),
+        }],
+        "both halves go to the decoder together"
+    );
+    let half = core.on_server(frame(2), au(), Bytes::new());
+    assert!(
+        matches!(
+            half.as_slice(),
+            [
+                Action::Send(ClientMsg::FrameAck { frame_id: 2, .. }, _),
+                Action::Send(ClientMsg::RequestKeyframe, _)
+            ]
+        ),
+        "half a pair is acked, not decoded, and a keyframe asked for: {half:?}"
+    );
+    let single = core.on_server(
+        config((1920, 1080), (1920, 1080), 1000, 30),
+        Bytes::new(),
+        Bytes::new(),
+    );
+    assert!(
+        single.contains(&Action::ResetDecoder(ChromaMode::Single420)),
+        "the server's fall back to Single420 swaps the decoder: {single:?}"
+    );
+    assert_eq!(ended(&single), None, "falling back keeps the session");
 }
 
 #[test]
@@ -369,7 +424,8 @@ fn video_frame_is_decoded_and_counted() {
         actions,
         vec![Action::Decode {
             frame_id: 7,
-            main: au()
+            main: au(),
+            aux: Bytes::new(),
         }],
         "a Single420 unit goes to the decoder"
     );
@@ -646,7 +702,8 @@ fn the_first_picture_after_a_resync_reports_resynced_once() {
             Action::Ui(UiEvent::Resynced),
             Action::Decode {
                 frame_id: 1,
-                main: au()
+                main: au(),
+                aux: Bytes::new(),
             }
         ]
     );
@@ -655,7 +712,8 @@ fn the_first_picture_after_a_resync_reports_resynced_once() {
         second,
         vec![Action::Decode {
             frame_id: 2,
-            main: au()
+            main: au(),
+            aux: Bytes::new(),
         }]
     );
 }

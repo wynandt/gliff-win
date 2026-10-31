@@ -16,7 +16,6 @@ use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
 
 use bytes::Bytes;
-use gliff_proto::msg::ChromaMode;
 use gliff_proto::msg::ClientMsg;
 use gliff_proto::msg::ServerMsg;
 use gliff_transport::Framed;
@@ -24,6 +23,7 @@ use tokio::process::Child;
 use tokio::sync::mpsc;
 
 use super::Action;
+use super::Colour;
 use super::Core;
 use super::Decoded;
 use super::EndReason;
@@ -85,6 +85,8 @@ pub struct Options {
     pub panel: (u32, u32),
     /// The first Resize, sent after HelloAck.
     pub initial: ResizeReq,
+    /// The chroma modes the client offers (the machine's Sharp colour).
+    pub colour: Colour,
     /// Keys: the layout, the chords and the policy.
     pub input: InputOptions,
 }
@@ -334,7 +336,9 @@ async fn run(
     let (in_tx, mut in_rx) = mpsc::channel(INBOUND_QUEUE);
     let reader = tokio::spawn(read_loop(Framed::new(link.stdout), in_tx));
     let mut session = Session {
-        core: Core::new(opts.initial).with_pipeline(opts.input.pipeline()),
+        core: Core::new(opts.initial)
+            .with_colour(opts.colour)
+            .with_pipeline(opts.input.pipeline()),
         decoder,
         tx: Some(tx),
         engine,
@@ -347,7 +351,10 @@ async fn run(
         watch: Watch::default(),
     };
     session.send(
-        hello(client_caps(opts.panel), opts.input.keymap.clone()),
+        hello(
+            client_caps(opts.panel, opts.colour),
+            opts.input.keymap.clone(),
+        ),
         Bytes::new(),
     );
     session.run(&mut in_rx, &mut cmds, &mut child).await;
@@ -651,9 +658,13 @@ impl Session {
                         engine.peer(msg, payload);
                     }
                 }
-                Action::Decode { frame_id, main } => {
+                Action::Decode {
+                    frame_id,
+                    main,
+                    aux,
+                } => {
                     let t = Instant::now();
-                    let result = self.decoder.decode(&main, &[]);
+                    let result = self.decoder.decode(&main, &aux);
                     let ms = t.elapsed().as_secs_f64() * 1000.0;
                     queue.extend(self.core.decoded(Decoded {
                         frame_id,
@@ -662,8 +673,8 @@ impl Session {
                         now_ms: now_ms(),
                     }));
                 }
-                Action::ResetDecoder => {
-                    if let Err(e) = self.decoder.reset(ChromaMode::Single420) {
+                Action::ResetDecoder(chroma) => {
+                    if let Err(e) = self.decoder.reset(chroma) {
                         self.errors.push(format!("decoder reset: {e}"));
                     }
                 }
