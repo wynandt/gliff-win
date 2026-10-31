@@ -1131,7 +1131,10 @@ impl App {
             }
             return;
         }
-        if let MenuCommand::ShowAs(_) | MenuCommand::ShareClipboard(_) = command {
+        if let MenuCommand::ShowAs(_)
+        | MenuCommand::ShareClipboard(_)
+        | MenuCommand::SharpColour(_) = command
+        {
             self.choose(command, id);
             return;
         }
@@ -1140,8 +1143,8 @@ impl App {
     }
 
     /// A choice from the Connection settings submenu: kept for the tab's
-    /// machine and saved at once. The screen applies at the next connect;
-    /// the clipboard applies to the tab's session at once. A row a flag has
+    /// machine and saved at once. The screen and the colour apply at the
+    /// next connect; the clipboard applies to the tab's session at once. A row a flag has
     /// locked is greyed in the menu and cannot get here; if it did, the
     /// rules would still ignore it.
     fn choose(&mut self, command: MenuCommand, id: crate::tabs::TabId) {
@@ -1153,6 +1156,7 @@ impl App {
             match command {
                 MenuCommand::ShowAs(screen) => book.set_screen(&machine, screen),
                 MenuCommand::ShareClipboard(share) => book.set_share_clipboard(&machine, share),
+                MenuCommand::SharpColour(sharp) => book.set_sharp_colour(&machine, sharp),
                 _ => return,
             }
         }

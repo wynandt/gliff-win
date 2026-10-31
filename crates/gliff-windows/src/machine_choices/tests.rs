@@ -43,6 +43,7 @@ fn own() -> Choice {
     Choice {
         screen: Some(Screen::Own),
         share_clipboard: None,
+        sharp_colour: None,
     }
 }
 
@@ -50,6 +51,7 @@ fn mirror() -> Choice {
     Choice {
         screen: Some(Screen::Mirror),
         share_clipboard: None,
+        sharp_colour: None,
     }
 }
 
@@ -57,6 +59,7 @@ fn sharing(share: bool) -> Choice {
     Choice {
         screen: None,
         share_clipboard: Some(share),
+        sharp_colour: None,
     }
 }
 
@@ -232,7 +235,8 @@ fn a_saved_choice_is_remembered_per_machine_without_regard_to_host_case() {
         choices.of(&host("me@ONE")),
         Choice {
             screen: Some(Screen::Own),
-            share_clipboard: Some(false)
+            share_clipboard: Some(false),
+            sharp_colour: None,
         }
     );
     assert_eq!(choices.of(&host("other@one")), Choice::default());
@@ -318,6 +322,7 @@ fn started(screen: Screen, share_clipboard: bool) -> Running {
     Running {
         screen,
         share_clipboard,
+        sharp_colour: false,
     }
 }
 

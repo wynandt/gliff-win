@@ -32,6 +32,9 @@ pub enum Command {
     /// Choose whether the machine's clipboard is shared. The value is the
     /// new choice.
     ShareClipboard(bool),
+    /// Choose whether the machine's session asks for full-resolution colour
+    /// (Dual420). The value is the new choice.
+    SharpColour(bool),
 }
 
 /// How a row of a choice is drawn.
@@ -119,7 +122,8 @@ pub fn tab_menu(status: &Status, connection: &Connection, live: Option<&Running>
 }
 
 /// The rows of a tab's Connection settings submenu: how the machine is
-/// shown and whether its clipboard is shared. A choice a flag has made for
+/// shown, whether its clipboard is shared and whether it asks for sharp
+/// colour. A choice a flag has made for
 /// every machine is greyed, with the reason under it. The last row is the
 /// Reconnect command when a change `pending` waits for the next connect, and
 /// a line that says when it applies otherwise.
@@ -151,6 +155,13 @@ fn connection_rows(connection: &Connection, pending: bool) -> Vec<Entry> {
     if let Some(reason) = &connection.share_lock {
         rows.push(Entry::Note(reason.clone()));
     }
+    rows.push(Entry::Choice {
+        command: Command::SharpColour(!connection.sharp_colour),
+        label: "Sharp colour",
+        mark: Mark::Check,
+        selected: connection.sharp_colour,
+        enabled: true,
+    });
     rows.push(Entry::Separator);
     rows.push(if pending {
         item(Command::Reconnect, "Reconnect now to apply")
@@ -172,14 +183,17 @@ pub fn dot_command(status: &Status) -> Command {
 }
 
 /// Runs a command on the tabs; the effects are for the caller to carry out.
-/// `CopyAddress`, `ShowAs` and `ShareClipboard` have none: the caller reads
-/// the address or saves the choice.
+/// `CopyAddress`, `ShowAs`, `ShareClipboard` and `SharpColour` have none:
+/// the caller reads the address or saves the choice.
 pub fn run(command: Command, id: TabId, tabs: &mut Tabs) -> Vec<crate::tabs::Effect> {
     match command {
         Command::Connect | Command::Reconnect => tabs.reconnect(id),
         Command::Disconnect => tabs.stop(id),
         Command::Forget => tabs.forget(id),
-        Command::CopyAddress | Command::ShowAs(_) | Command::ShareClipboard(_) => Vec::new(),
+        Command::CopyAddress
+        | Command::ShowAs(_)
+        | Command::ShareClipboard(_)
+        | Command::SharpColour(_) => Vec::new(),
     }
 }
 
