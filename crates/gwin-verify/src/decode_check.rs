@@ -1,11 +1,16 @@
-//! `gwin-verify decode`: CPU decode time per access unit through the
-//! client's own `CpuDecoder`, the copy to tight I420 included. The display
-//! converts on the GPU, so BGRA conversion is not in the client's
-//! per-frame CPU cost and is not timed here.
+//! `gwin-verify decode`: decode time per access unit through the client's
+//! own `VideoDecoder` (the CPU decoder, or the GPU decoder with
+//! `--decoder gpu`), the copy to tight I420 included, and the process CPU
+//! time it took. The display converts on the GPU, so BGRA conversion is
+//! not in the client's per-frame CPU cost and is not timed here.
 
+use std::time::Duration;
 use std::time::Instant;
 
-use gliff_windows::decode::CpuDecoder;
+use gliff_proto::msg::ChromaMode;
+use gliff_windows::decode::DecoderKind;
+use gliff_windows::decode::VideoDecoder;
+use gliff_windows::yuv::YuvFrame;
 
 use crate::clip::Clip;
 use crate::line::Line;
@@ -46,24 +51,84 @@ pub struct Measured {
     /// The first decode error and the unit it came from.
     pub first_error: Option<(usize, String)>,
     pub wall_ms: f64,
+    /// The decoder that ran to the end ("cpu" or "gpu").
+    pub decoder: &'static str,
+    /// Process CPU time over the run, ms; `None` where it is not read.
+    pub cpu_ms: Option<f64>,
+    /// The decoder's own log lines (a start, a fallback).
+    pub notes: Vec<String>,
 }
 
-pub fn measure(clip: &Clip) -> anyhow::Result<Measured> {
-    let mut decoder = CpuDecoder::new()?;
+/// How one clip is decoded.
+#[derive(Debug, Clone, Copy)]
+pub struct Run<'a> {
+    /// The aux stream of a Dual420 pair, unit for unit with the clip.
+    pub aux: Option<&'a Clip>,
+    pub decoder: DecoderKind,
+    /// Feed units at this rate (0: as fast as they decode), so the CPU
+    /// share is the share a stream at that rate costs.
+    pub pace_fps: f64,
+}
+
+impl Default for Run<'_> {
+    fn default() -> Self {
+        Self {
+            aux: None,
+            decoder: DecoderKind::Cpu,
+            pace_fps: 0.0,
+        }
+    }
+}
+
+#[cfg(test)]
+fn measure(clip: &Clip) -> anyhow::Result<Measured> {
+    measure_with(clip, Run::default(), |_, _| {})
+}
+
+/// Decodes `clip` as `run` says, handing each released picture (with the
+/// index of the unit that released it) to `seen`.
+pub fn measure_with(
+    clip: &Clip,
+    run: Run<'_>,
+    mut seen: impl FnMut(usize, &YuvFrame),
+) -> anyhow::Result<Measured> {
+    let mut decoder = VideoDecoder::new(run.decoder == DecoderKind::Gpu)?;
+    let mut notes = decoder.take_notes();
+    if let Some(aux) = run.aux {
+        anyhow::ensure!(
+            aux.units.len() == clip.units.len(),
+            "aux clip has {} units, main has {}",
+            aux.units.len(),
+            clip.units.len()
+        );
+        decoder.reset(ChromaMode::Dual420)?;
+    }
+    let want = (clip.size.width & !1, clip.size.height & !1);
+    let period = (run.pace_fps > 0.0).then(|| Duration::from_secs_f64(1.0 / run.pace_fps));
     let mut samples_ms = Vec::with_capacity(clip.units.len() + 1);
     let (mut pictures, mut errors, mut wrong_size) = (0u64, 0u64, 0u64);
     let mut first_error = None;
+    let cpu_start = process_cpu_ms();
     let start = Instant::now();
     for (index, unit) in clip.units.iter().enumerate() {
+        if let Some(period) = period {
+            let due = start + period * index as u32;
+            if let Some(wait) = due.checked_duration_since(Instant::now()) {
+                std::thread::sleep(wait);
+            }
+        }
+        let aux = run.aux.map_or(&[][..], |a| &a.units[index][..]);
         let t = Instant::now();
-        let result = decoder.decode(unit, &[]);
+        let result = decoder.decode(unit, aux);
         samples_ms.push(t.elapsed().as_secs_f64() * 1000.0);
+        notes.extend(decoder.take_notes());
         match result {
             Ok(Some(picture)) => {
                 pictures += 1;
-                if picture.size() != (clip.size.width, clip.size.height) {
+                if picture.size() != want {
                     wrong_size += 1;
                 }
+                seen(index, &picture);
             }
             Ok(None) => {}
             Err(e) => {
@@ -78,12 +143,14 @@ pub fn measure(clip: &Clip) -> anyhow::Result<Measured> {
         let t = Instant::now();
         let result = decoder.flush();
         samples_ms.push(t.elapsed().as_secs_f64() * 1000.0);
+        notes.extend(decoder.take_notes());
         match result {
             Ok(Some(picture)) => {
                 pictures += 1;
-                if picture.size() != (clip.size.width, clip.size.height) {
+                if picture.size() != want {
                     wrong_size += 1;
                 }
+                seen(clip.units.len(), &picture);
             }
             Ok(None) => {}
             Err(e) => {
@@ -99,7 +166,119 @@ pub fn measure(clip: &Clip) -> anyhow::Result<Measured> {
         wrong_size,
         first_error,
         wall_ms: start.elapsed().as_secs_f64() * 1000.0,
+        decoder: decoder.kind().name(),
+        cpu_ms: cpu_start.and_then(|a| process_cpu_ms().map(|b| b - a)),
+        notes,
     })
+}
+
+/// This process's user plus kernel CPU time, ms.
+#[cfg(windows)]
+fn process_cpu_ms() -> Option<f64> {
+    use windows::Win32::Foundation::FILETIME;
+    use windows::Win32::System::Threading::GetCurrentProcess;
+    use windows::Win32::System::Threading::GetProcessTimes;
+    let (mut created, mut exited, mut kernel, mut user) = Default::default();
+    // SAFETY: four live FILETIME out-parameters for the current process.
+    unsafe {
+        GetProcessTimes(
+            GetCurrentProcess(),
+            &mut created,
+            &mut exited,
+            &mut kernel,
+            &mut user,
+        )
+    }
+    .ok()?;
+    let ms = |t: FILETIME| {
+        ((u64::from(t.dwHighDateTime) << 32) | u64::from(t.dwLowDateTime)) as f64 / 10_000.0
+    };
+    Some(ms(kernel) + ms(user))
+}
+
+#[cfg(not(windows))]
+fn process_cpu_ms() -> Option<f64> {
+    None
+}
+
+/// What `--decoder both` found: the GPU's pictures against the CPU's.
+#[derive(Debug, Default)]
+pub struct Compared {
+    pub pictures: u64,
+    pub differ: u64,
+    /// Pictures released by one decoder at a unit where the other released none.
+    pub release_mismatch: u64,
+    pub first_difference: Option<String>,
+}
+
+/// Decodes `clip` with both decoders and compares every picture byte for
+/// byte: hardware H.264 decode is bit-exact, so any difference is a bug.
+pub fn compare(clip: &Clip, aux: Option<&Clip>) -> anyhow::Result<(Compared, Measured, Measured)> {
+    let mut cpu = Vec::new();
+    let run = Run {
+        aux,
+        ..Run::default()
+    };
+    let cpu_m = measure_with(clip, run, |i, p| cpu.push((i, fingerprint(p))))?;
+    let mut gpu = Vec::new();
+    let run = Run {
+        decoder: DecoderKind::Gpu,
+        ..run
+    };
+    let gpu_m = measure_with(clip, run, |i, p| gpu.push((i, fingerprint(p))))?;
+    let mut c = Compared::default();
+    let mut gpu_at: std::collections::BTreeMap<usize, &Fingerprint> =
+        gpu.iter().map(|(i, f)| (*i, f)).collect();
+    for (i, f) in &cpu {
+        match gpu_at.remove(i) {
+            Some(g) => {
+                c.pictures += 1;
+                if g != f {
+                    c.differ += 1;
+                    c.first_difference
+                        .get_or_insert_with(|| format!("unit {i}: {}", f.diff(g)));
+                }
+            }
+            None => c.release_mismatch += 1,
+        }
+    }
+    c.release_mismatch += gpu_at.len() as u64;
+    Ok((c, cpu_m, gpu_m))
+}
+
+/// A picture's size and planes, kept whole for the compare.
+#[derive(PartialEq, Eq)]
+struct Fingerprint {
+    size: (u32, u32),
+    planes: [Vec<u8>; 3],
+}
+
+impl Fingerprint {
+    fn diff(&self, other: &Self) -> String {
+        if self.size != other.size {
+            return format!("size {:?} vs {:?}", self.size, other.size);
+        }
+        for (name, (a, b)) in ["y", "u", "v"]
+            .iter()
+            .zip(self.planes.iter().zip(&other.planes))
+        {
+            if let Some(at) = a.iter().zip(b).position(|(x, y)| x != y) {
+                let n = a.iter().zip(b).filter(|(x, y)| x != y).count();
+                return format!("plane {name}: {n} bytes differ, first at {at}");
+            }
+            if a.len() != b.len() {
+                return format!("plane {name}: {} vs {} bytes", a.len(), b.len());
+            }
+        }
+        "equal".to_owned()
+    }
+}
+
+fn fingerprint(p: &YuvFrame) -> Fingerprint {
+    Fingerprint {
+        size: p.size(),
+        planes: [p.y().to_vec(), p.u().to_vec(), p.v().to_vec()],
+    }
 }
 
 /// Nearest-rank quantile of `samples` (the smallest value with at least
@@ -112,6 +291,73 @@ pub fn quantile(samples: &[f64], q: f64) -> f64 {
     sorted.sort_by(f64::total_cmp);
     let rank = (q.clamp(0.0, 1.0) * sorted.len() as f64).ceil() as usize;
     sorted[rank.clamp(1, sorted.len()) - 1]
+}
+
+/// The result lines for one clip (and its Dual420 aux): one per decoder
+/// run, and with `Both` the compare.
+pub fn lines(
+    clip: &Clip,
+    aux: Option<&Clip>,
+    choice: crate::DecoderChoice,
+    pace_fps: f64,
+    limits: Limits,
+) -> Vec<Line> {
+    let timed = |kind: DecoderKind| -> Line {
+        let run = Run {
+            aux,
+            decoder: kind,
+            pace_fps,
+        };
+        match measure_with(clip, run, |_, _| {}) {
+            Ok(m) => {
+                let mut line = judge(clip, &m, limits)
+                    .with("dual420", aux.is_some())
+                    .with("pace_fps", pace_fps);
+                if kind == DecoderKind::Gpu && m.decoder != "gpu" {
+                    line.ok = false;
+                }
+                if !m.notes.is_empty() {
+                    line = line.with("decoder_notes", m.notes.join(" | "));
+                }
+                line
+            }
+            Err(e) => Line::new("decode", false).with("error", format!("{e:#}")),
+        }
+    };
+    match choice {
+        crate::DecoderChoice::Cpu => vec![timed(DecoderKind::Cpu)],
+        crate::DecoderChoice::Gpu => vec![timed(DecoderKind::Gpu)],
+        crate::DecoderChoice::Both => {
+            let mut out = vec![timed(DecoderKind::Cpu), timed(DecoderKind::Gpu)];
+            out.push(match compare(clip, aux) {
+                Ok((c, cpu, gpu)) => {
+                    let ok = c.differ == 0
+                        && c.release_mismatch == 0
+                        && c.pictures == cpu.pictures
+                        && cpu.errors == 0
+                        && gpu.errors == 0
+                        && gpu.decoder == "gpu"
+                        && c.pictures > 0;
+                    let line = Line::new("decode-compare", ok)
+                        .with("size", clip.size.to_string())
+                        .with("source", clip.source.clone())
+                        .with("dual420", aux.is_some())
+                        .with("pictures_compared", c.pictures)
+                        .with("pictures_differ", c.differ)
+                        .with("release_mismatch", c.release_mismatch)
+                        .with("cpu_pictures", cpu.pictures)
+                        .with("gpu_pictures", gpu.pictures)
+                        .with("gpu_decoder", gpu.decoder);
+                    match c.first_difference {
+                        Some(d) => line.with("first_difference", d),
+                        None => line,
+                    }
+                }
+                Err(e) => Line::new("decode-compare", false).with("error", format!("{e:#}")),
+            });
+            out
+        }
+    }
 }
 
 /// One result line for one clip.
@@ -146,7 +392,14 @@ pub fn judge(clip: &Clip, m: &Measured, limits: Limits) -> Line {
         .with("decode_max_ms", round2(max))
         .with("decode_fps", round2(fps))
         .with("limit_p95_ms", limits.max_p95_ms)
-        .with("limit_fps", limits.min_fps);
+        .with("limit_fps", limits.min_fps)
+        .with("decoder", m.decoder);
+    let line = match m.cpu_ms {
+        Some(cpu) if m.wall_ms > 0.0 => line
+            .with("cpu_pct", round2(cpu * 100.0 / m.wall_ms))
+            .with("cpu_ms_per_frame", round2(cpu / frames.max(1) as f64)),
+        _ => line,
+    };
     match &m.first_error {
         Some((unit, error)) => line
             .with("first_error_unit", *unit)
@@ -226,6 +479,9 @@ mod tests {
             first_error: None,
             wrong_size: 0,
             wall_ms,
+            decoder: "cpu",
+            cpu_ms: None,
+            notes: Vec::new(),
         }
     }
 
