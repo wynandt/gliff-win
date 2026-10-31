@@ -1,27 +1,44 @@
-# Tag-triggered release. Same idea as Gliff's release job (tag must equal the
-# Cargo.toml version, gh release create --generate-notes) plus what a Windows
-# download needs: a zip, a SHA-256 file, and a build-provenance attestation.
+# Release for gliff-win. A pushed `v*` tag builds the Windows programs and
+# publishes a GitHub release: a zip of both programs with LICENSE and NOTICE,
+# SHA256SUMS, a build-provenance attestation, and the CHANGELOG.md section for
+# the version as the notes.
 #
-# Hardening (docs/development.md, "CI and release"): the tagged commit must
+# `build` has a read-only token and makes the files. `publish` has the only
+# write permission, runs on a tag push only and checks out no code: it
+# downloads what `build` made, checks the sums and creates the release.
+#
+# Dry run: a pull request that changes the release files, or a manual run from
+# the Actions tab, builds everything and uploads it as the `release` artifact,
+# and publishes nothing.
+#
+# Hardening (docs/development.md, "CI and release"): a tagged commit must
 # already be on main, every action is pinned to a commit hash, the build has no
-# cache, and the token that can write releases is visible to the publish step
-# only.
+# cache, and the token that can write releases is visible to one step only.
 #
-# To cut a release:
-#   1. bump `version` in the workspace Cargo.toml (and Cargo.lock), merge it to main
-#   2. git tag v0.2.0 && git push origin v0.2.0   (from the merged commit)
+# To cut a release, see CONTRIBUTING.md, "Releasing".
 name: Release
 
 on:
   push:
     tags: ["v*"]
+  pull_request:
+    paths:
+      - ".github/workflows/release.yml"
+      - "scripts/release-notes"
+      - "scripts/install-nasm-windows.ps1"
+      - "CHANGELOG.md"
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   # A tag can point at any commit, including one on an unreviewed branch.
-  # Build only commits that are on main.
+  # Build only commits that are on main. A dry run has no tag to check.
   guard:
     name: tagged commit is on main
     runs-on: ubuntu-latest
@@ -34,7 +51,13 @@ jobs:
 
       - name: Require the tagged commit to be an ancestor of origin/main
         shell: bash
+        env:
+          REF_TYPE: ${{ github.ref_type }}
         run: |
+          if [[ "$REF_TYPE" != tag ]]; then
+            echo "::notice::Dry run on $GITHUB_REF_NAME: nothing will be published."
+            exit 0
+          fi
           if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
             echo "::error::Tag $GITHUB_REF_NAME points at $GITHUB_SHA, which is not on main. Merge it to main first, then tag the merged commit."
             exit 1
@@ -49,22 +72,26 @@ jobs:
     # `$/` form yet; switch to it and drop the ignore when it does.
     uses: ./.github/workflows/ci.yml # zizmor: ignore[self-repository]
 
-  release:
+  build:
+    name: build (windows)
     needs: ci
     runs-on: windows-latest
     timeout-minutes: 40
     permissions:
-      contents: write      # create the release
-      id-token: write      # attestation signing
-      attestations: write  # store the attestation
+      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
+      # On a tag push the tag must be v + the Cargo.toml version.
       - name: Check the tag against Cargo.toml
         id: version
         shell: bash
+        env:
+          REF_TYPE: ${{ github.ref_type }}
         run: |
           version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
           semver='^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$'
@@ -72,11 +99,19 @@ jobs:
             echo "::error::version in Cargo.toml is not a plain semantic version"
             exit 1
           fi
-          if [[ "v$version" != "$GITHUB_REF_NAME" ]]; then
+          if [[ "$REF_TYPE" == tag && "v$version" != "$GITHUB_REF_NAME" ]]; then
             echo "::error::Tag $GITHUB_REF_NAME does not match version $version in Cargo.toml"
             exit 1
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      # Fails here, before the long build, when CHANGELOG.md has no section for
+      # the version.
+      - name: Write the release notes
+        shell: bash
+        run: |
+          mkdir dist
+          scripts/release-notes > dist/RELEASE_NOTES.md
 
       # OpenH264's C and asm sources need nasm; the script installs a pinned
       # version and checks its SHA-256.
@@ -90,34 +125,85 @@ jobs:
         run: rustup toolchain install
 
       - name: Build
-        run: cargo build --release --locked -p gliff-windows
+        run: cargo build --release --workspace --locked
+
+      # gliff-windows.exe is a GUI program; piping its output lets it be read.
+      - name: Check the version the program prints
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          $out = (& target/release/gliff-windows.exe --version | Out-String).Trim()
+          Write-Host "gliff-windows.exe --version -> $out"
+          if ($LASTEXITCODE -ne 0 -or $out -ne "gliff-windows $env:VERSION") {
+            throw "expected 'gliff-windows $env:VERSION'"
+          }
 
       - name: Package
-        id: package
         shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
-          name="gliff-win-${GITHUB_REF_NAME}-x86_64-pc-windows-msvc"
+          name="gliff-win-v${VERSION}-x86_64-pc-windows-msvc"
           mkdir "$name"
-          cp target/release/gliff-windows.exe LICENSE NOTICE README.md "$name/"
-          7z a "$name.zip" "$name" > /dev/null
-          sha256sum "$name.zip" > "$name.zip.sha256"
-          echo "zip=$name.zip" >> "$GITHUB_OUTPUT"
+          cp target/release/gliff-windows.exe target/release/gwin-verify.exe \
+            LICENSE NOTICE README.md CHANGELOG.md "$name/"
+          7z a "dist/$name.zip" "$name" > /dev/null
+          cd dist
+          sha256sum "$name.zip" > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Upload the files
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14
+
+  # The only job with a write permission. It checks out no code.
+  publish:
+    name: publish release
+    needs: build
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write      # create the release
+      id-token: write      # attestation signing
+      attestations: write  # store the attestation
+    steps:
+      - name: Download the files
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release
+          path: dist
+
+      - name: Check the sums
+        shell: bash
+        run: cd dist && sha256sum -c SHA256SUMS
 
       - name: Attest build provenance
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
-          subject-path: ${{ steps.package.outputs.zip }}
+          subject-checksums: dist/SHA256SUMS
 
-      - name: Publish the release
+      # --verify-tag: the tag must already exist; gh never makes one.
+      - name: Create the release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          ZIP: ${{ steps.package.outputs.zip }}
-          VERSION: ${{ steps.version.outputs.version }}
+          VERSION: ${{ needs.build.outputs.version }}
         run: |
+          cd dist
+          flags=()
+          if [[ "$VERSION" == *-* ]]; then
+            flags+=(--prerelease)
+          fi
           gh release create "$GITHUB_REF_NAME" \
-            "$ZIP" \
-            "$ZIP.sha256" \
+            "gliff-win-v${VERSION}-x86_64-pc-windows-msvc.zip" SHA256SUMS \
+            --verify-tag \
             --title "gliff-win $VERSION" \
-            --generate-notes
+            --notes-file RELEASE_NOTES.md \
+            "${flags[@]}"

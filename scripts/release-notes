@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# Prints the release notes for one version: its section of CHANGELOG.md (from
+# its `## [X.Y.Z]` heading to the next `## ` heading), then how to check the
+# download. Fails when the section is missing or empty, so the release
+# workflow cannot publish a release without notes.
+#
+# Usage: scripts/release-notes [VERSION]   default: the workspace Cargo.toml version
+set -euo pipefail
+
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+version="${1:-$(sed -n 's/^version = "\(.*\)"/\1/p' "$root/Cargo.toml" | head -1)}"
+repo="$(sed -n 's|^repository = "https://github.com/\(.*\)"|\1|p' "$root/Cargo.toml" | head -1)"
+
+# A Windows checkout may have CRLF line ends; drop the CR before matching.
+body="$(awk -v heading="## [$version]" '
+  { sub(/\r$/, "") }
+  /^## / { if (inside) exit; inside = ($0 == heading); next }
+  inside
+' "$root/CHANGELOG.md" | sed -e '/./,$!d')"
+
+if [[ -z "${body//[[:space:]]/}" ]]; then
+  echo "release-notes: CHANGELOG.md has no section, or an empty one, for [$version]" >&2
+  exit 1
+fi
+
+cat <<NOTES
+$body
+
+## Download
+
+Unzip \`gliff-win-v$version-x86_64-pc-windows-msvc.zip\` anywhere and run
+\`gliff-windows.exe\`. To check the download, compare its hash with the line in
+\`SHA256SUMS\` (\`Get-FileHash <file>\` in PowerShell), or run
+\`gh attestation verify <file> --repo $repo\`.
+
+The programs are not code-signed, so Windows SmartScreen may show "Windows
+protected your PC" the first time one runs. If the hash matched, choose
+**More info**, then **Run anyway**.
+NOTES
