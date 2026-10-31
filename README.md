@@ -5,9 +5,9 @@ desktop for Hyprland. gliff-win shows the Hyprland session of another machine
 in a normal, resizable Windows window, with one tab for each machine. All it
 needs between the two machines is ssh: no open ports, no accounts, no relay.
 
-This is version 0.1. It works and is used daily, but it has no release
-binaries yet and has been tried on one set of hardware. See
-[Not in 0.1](#not-in-01) and [Verification](#verification).
+This is version 0.1. It works and is used daily, and has been tried on one
+set of hardware. See [Not in 0.1](#not-in-01) and
+[Verification](#verification).
 
 ## Status and contributing
 
@@ -64,9 +64,28 @@ privately through the Security tab, see [SECURITY.md](SECURITY.md).
 
 ## Install
 
-There are no release binaries yet. Build `gliff-windows.exe` from source and
-put it anywhere on the Windows machine. It needs no installer and no other
-files.
+Download `gliff-win-vX.Y.Z-x86_64-pc-windows-msvc.zip` from the
+[Releases page](https://github.com/wynandt/gliff-win/releases), unzip it
+anywhere and run `gliff-windows.exe`. It needs no installer and no other
+files. The zip also holds `gwin-verify.exe` (the check program, see
+[docs/gwin-verify.md](docs/gwin-verify.md)), `LICENSE` and `NOTICE`.
+
+To check the download, compare its hash with the line for it in the release's
+`SHA256SUMS` file. In PowerShell:
+
+```
+Get-FileHash .\gliff-win-vX.Y.Z-x86_64-pc-windows-msvc.zip
+```
+
+Each release also carries a build provenance attestation, which the GitHub CLI
+checks with `gh attestation verify <file> --repo wynandt/gliff-win`.
+
+**The programs are not code-signed.** The first time you run one, Windows
+SmartScreen may show "Windows protected your PC" with "Unknown publisher".
+If the hash matched, choose **More info**, then **Run anyway**. Ticking
+**Unblock** in the zip's Properties before you unzip it skips the prompt.
+
+### Build from source
 
 On Windows, with the Visual Studio Build Tools (the C++ workload) and `nasm`
 (`scripts/install-nasm-windows.ps1` installs it; CI builds this way):
@@ -260,7 +279,6 @@ supported and blanks the picture for 10 seconds or more
   claimed. Text, images and files are.
 - **Hardware decode and 4:4:4 video**, and clipboard files that stream
   without a spool.
-- **Release binaries.** You build from source.
 
 ## What's missing
 
@@ -313,8 +331,8 @@ means no document in this repository plans it.
     stops the client at start, and `release_chord = "none"` in `config.toml` is
     ignored and logged. Not planned yet.
 13. **A package or installer.** The Linux client ships as a package.
-    gliff-win is built from source. Release binaries are planned with the
-    first release run.
+    gliff-win ships as a zip of the programs on the Releases page, with no
+    installer and no code signature.
 
 The full list of limits and open issues is in [KNOWN-ISSUES.md](KNOWN-ISSUES.md).
 

@@ -419,16 +419,30 @@ passed on `main`. A release waits for all four.
 | `test (windows)` | windows | `cargo test -p gliff-windows`: the tests of the Windows-only code that can run without a desktop, such as the registry code in `lockreg.rs`. The hook, window and clipboard glue still need a hand check on Windows |
 | `lint workflows` | ubuntu | `scripts/lint-workflows`: zizmor and actionlint over `.github/workflows` |
 
-`.github/workflows/release.yml` runs when a `v*` tag is pushed. A `guard` job
-first fails unless the tagged commit is already on `main` (an ancestor of
-`origin/main`), then the CI jobs run, then the release job builds
-`gliff-windows.exe`, zips it, writes a SHA-256 file, attests the build
-provenance and creates the GitHub release. To cut a release: bump `version` in
-the workspace `Cargo.toml` and `Cargo.lock`, merge that to `main`, then
-`git tag v0.2.0 && git push origin v0.2.0` from the merged commit. The release
-job also refuses a `Cargo.toml` version that is not plain semantic versioning
-(`1.2.3` or `1.2.3-rc.1`), so the tag name cannot carry anything else into the
-scripts.
+`.github/workflows/release.yml` runs when a `v*` tag is pushed:
+
+1. `tagged commit is on main` fails unless the tagged commit is an ancestor of
+   `origin/main`.
+2. The four CI jobs run, called from `ci.yml`.
+3. `build (windows)`, with a read-only token, refuses a `Cargo.toml` version
+   that is not plain semantic versioning (`1.2.3` or `1.2.3-rc.1`) or that does
+   not equal the tag without its `v`, and a `CHANGELOG.md` with no section for
+   it. It builds both programs with no cache, checks that
+   `gliff-windows.exe --version` prints the version, makes
+   `gliff-win-vX.Y.Z-x86_64-pc-windows-msvc.zip` (both programs, `LICENSE`,
+   `NOTICE`, `README.md`, `CHANGELOG.md`), `SHA256SUMS` and the release notes
+   (`scripts/release-notes`), and uploads them as the `release` artifact.
+4. `publish release`, the only job that can write, runs on a tag push only and
+   runs no code from the repository. It checks the artifact against
+   `SHA256SUMS`, attests the build provenance and creates the release
+   (a prerelease when the version has a `-suffix`).
+
+The same workflow runs as a dry run on a pull request that changes the
+release files, and from the Actions tab (`workflow_dispatch`, any branch).
+Steps 1 and 4 are skipped, so it builds the artifact and publishes nothing.
+Download it from the run page to check it. Do not require the release jobs in
+the `main` ruleset: they do not run on most pull requests. The steps to cut a
+release are in [CONTRIBUTING.md](../CONTRIBUTING.md#releasing).
 
 ### Rules the workflows follow
 
@@ -447,9 +461,10 @@ These are enforced by `scripts/lint-workflows`, which CI runs, or by review.
   the first hash. Then run `scripts/lint-workflows`; its online checks confirm
   the hash belongs to the repository's history.
 - **Least privilege**: the workflow `permissions:` is `contents: read`. Only
-  the release job gets `contents: write` (create the release), `id-token: write`
-  and `attestations: write` (sign the attestation). `GH_TOKEN` is set on the one
-  step that publishes and nowhere else.
+  the `publish release` job gets `contents: write` (create the release),
+  `id-token: write` and `attestations: write` (sign the attestation), and it
+  checks out no code. `GH_TOKEN` is set on the one step that publishes and
+  nowhere else.
 - **No stored credentials**: every `actions/checkout` sets
   `persist-credentials: false`, so the job token is not left in `.git/config`
   for later steps (or a build script) to read.

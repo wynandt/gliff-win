@@ -35,6 +35,26 @@ thing (a command and its output, a log, a screenshot), and add a test that fails
 before the change and passes after when you can. It does not matter who or what
 wrote the change.
 
+## Releasing
+For the maintainer. A pushed `v*` tag runs `.github/workflows/release.yml`: it
+checks the tag equals the `Cargo.toml` version and that `CHANGELOG.md` has a
+section for it, runs CI, builds on Windows, and publishes a release with the
+zip, `SHA256SUMS` and that section as the notes.
+
+1. In a pull request, set `version` in the workspace `Cargo.toml` (run
+   `cargo check` so `Cargo.lock` follows) and add its `## [X.Y.Z]` section to
+   `CHANGELOG.md`. The release workflow's dry run on that pull request builds
+   the zip and sums as a workflow artifact and publishes nothing.
+2. Merge it, then tag the merged commit on `main`:
+
+       git switch main && git pull --ff-only
+       git tag -a vX.Y.Z -m "gliff-win X.Y.Z"
+       git push origin vX.Y.Z
+
+A tag on a commit that is not on `main`, or one that does not match the
+version, fails before anything is built. More detail is in
+[docs/development.md](docs/development.md#ci-and-release).
+
 ## Conduct
 Be civil and assume good faith. The maintainer may close, lock or block anything
 that is abusive or wastes time. There is no appeals process.
