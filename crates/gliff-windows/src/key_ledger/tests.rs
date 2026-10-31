@@ -1,3 +1,4 @@
+use super::KeyId;
 use super::KeyLedger;
 use super::Physical;
 use super::Route;
@@ -351,4 +352,23 @@ fn the_ledger_lists_what_windows_saw_go_down() {
     keys.windows_saw(F, Press::Down);
     keys.windows_saw(F, Press::Up);
     assert_eq!(keys.windows_held(), vec![LWIN]);
+}
+
+#[test]
+fn a_key_message_is_overtaken_only_by_a_later_event_of_the_same_key() {
+    // lparam: scan code in bits 16-23, the extended flag in bit 24.
+    let left_shift = 0x2a << 16;
+    let right_shift = 0x36 << 16;
+    let mut real = Physical::new();
+    real.moved(KeyId::of_hook(0xa1, false), 130);
+    assert!(real.saw_later(KeyId::of_message(0x10, right_shift), 110));
+    assert!(
+        !real.saw_later(KeyId::of_message(0x10, left_shift), 110),
+        "the right Shift does not overtake the left one"
+    );
+    assert!(!real.saw_later(KeyId::of_message(0x10, right_shift), 130));
+    assert!(!real.saw_later(
+        KeyId::of_message(0x10, right_shift),
+        130u32.wrapping_sub(60_000)
+    ));
 }

@@ -349,6 +349,14 @@ impl Grab {
         if !silent_hook_judge(self.state.mode(), crate::hook::mode(), was_passed) {
             return None;
         }
+        // A message the hook has already overtaken is dropped: it handled a
+        // later event of the key (its Up, say) after the window installed it
+        // again, and that event decided where the key's life goes. It is a
+        // key of the grab, so `DefWindowProc` does not see it either (a late
+        // Alt+F4 would close the window).
+        if crate::hook::saw_later(crate::key_ledger::KeyId::of_message(vk, lparam), time_ms) {
+            return Some(());
+        }
         self.counters.legacy_keys += 1;
         let raw = RawKey {
             vk,

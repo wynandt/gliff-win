@@ -21,6 +21,11 @@ use crate::keymap::Press;
 /// Virtual-key codes are one byte.
 const KEYS: usize = 256;
 
+/// How long after a key message a later event of the key makes it out of
+/// date (see [`Physical::saw_later`]), in milliseconds. Bounded, so an event
+/// from long ago does not look later once the clock wraps.
+const LATER_MS: i32 = 60_000;
+
 #[derive(Debug, Clone, Copy, Default)]
 struct Slot {
     /// Windows saw this key's Down and has not seen its Up.
@@ -163,6 +168,47 @@ impl KeyLedger {
     }
 }
 
+/// One key of the keyboard, named the same way by the hook and by a key
+/// message: the left and right Shift, Ctrl and Alt apart (a key message
+/// names the generic one), and the extended keys apart from the keypad keys
+/// that share their virtual key (Enter, the arrows, Insert, Delete, ...).
+/// A modifier's side is its virtual key alone: Windows sets the extended
+/// flag on the Shift it fakes around keypad keys.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct KeyId {
+    vk: u16,
+    extended: bool,
+}
+
+impl KeyId {
+    /// From the hook: its virtual key already tells left from right.
+    pub fn of_hook(vk: u16, extended: bool) -> Self {
+        let extended = extended && !(0xa0..=0xa5).contains(&vk);
+        Self { vk, extended }
+    }
+
+    /// From a key message's virtual key and `lparam` (scan code in bits
+    /// 16-23, extended flag in bit 24).
+    pub fn of_message(vk: u16, lparam: isize) -> Self {
+        let scan = (lparam >> 16) & 0xff;
+        let extended = (lparam >> 24) & 1 == 1;
+        let vk = match vk {
+            0x10 if scan == 0x36 => 0xa1,
+            0x10 => 0xa0,
+            0x11 if extended => 0xa3,
+            0x11 => 0xa2,
+            0x12 if extended => 0xa5,
+            0x12 => 0xa4,
+            other => other,
+        };
+        Self::of_hook(vk, extended)
+    }
+
+    fn index(self) -> usize {
+        usize::from(self.vk) + if self.extended { KEYS } else { 0 }
+    }
+}
+
 /// What the hook last saw of a key's real state.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Seen {
@@ -181,12 +227,16 @@ pub enum Seen {
 #[derive(Debug)]
 pub struct Physical {
     keys: [Seen; KEYS],
+    /// The time of each key's last event, by [`KeyId`]. In memory only,
+    /// never logged.
+    times: [Option<u32>; 2 * KEYS],
 }
 
 impl Physical {
     pub const fn new() -> Self {
         Self {
             keys: [Seen::Unknown; KEYS],
+            times: [None; 2 * KEYS],
         }
     }
 
@@ -198,6 +248,21 @@ impl Physical {
                 Seen::Up
             };
         }
+    }
+
+    /// The hook handled an event of this key at `time_ms`, its key time:
+    /// the clock of a key message's `GetMessageTime`.
+    pub fn moved(&mut self, key: KeyId, time_ms: u32) {
+        if let Some(time) = self.times.get_mut(key.index()) {
+            *time = Some(time_ms);
+        }
+    }
+
+    /// Whether the hook handled an event of this key after `time_ms`: a key
+    /// message from then that the window handles only now is out of date.
+    pub fn saw_later(&self, key: KeyId, time_ms: u32) -> bool {
+        let last = self.times.get(key.index()).copied().flatten();
+        last.is_some_and(|last| (1..LATER_MS).contains(&(last.wrapping_sub(time_ms) as i32)))
     }
 
     /// The keys the hook saw go down and not come up, for the log.
