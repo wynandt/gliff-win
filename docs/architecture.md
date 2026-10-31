@@ -886,7 +886,41 @@ one Windows machine with a hardware H.264 decoder; see
   again until the next connect, so a broken driver cannot make the picture
   flicker between decoders.
 
-GPU_DECODE_NUMBERS
+`gwin-verify decode` on 2560x1440 clips recorded from a server (300 frames
+each: a still desktop of text, and the same text scrolling), release build.
+Each row is the median of 5 runs, the sides interleaved, with the range
+after it. `paced` feeds the clip at 60 fps, as a session does; `free` feeds it
+as fast as the decoder goes. Decode time runs from handing the unit to the
+decoder to holding the I420 picture, copy-back included. CPU is the process's
+CPU time over the run (100% is one logical processor), and per frame. Every
+run decoded all 300 pictures with no errors.
+
+| Decoder, paced 60 fps | still p50 / p95 ms | scrolling p50 / p95 ms | CPU % still / scrolling | CPU ms per frame |
+|---|---|---|---|---|
+| CPU (OpenH264) | 9.91 [9.71-9.98] / 22.27 | 12.66 [12.58-13.92] / 22.13 | 73 / 82 | 12.2 / 13.6 |
+| GPU, fence copy-back (shipped) | 5.03 [4.71-5.07] / 6.51 | 4.77 [4.68-5.25] / 6.77 | 11 / 11 | 1.8 / 1.9 |
+| GPU, staging `Map` without the fence | 4.99 [4.92-5.09] / 6.51 | 4.66 [4.62-5.30] / 6.54 | 33 / 31 | 5.5 / 5.1 |
+| GPU, `IMF2DBuffer::Lock2D` | 9.76 [9.29-9.96] / 12.62 | 9.91 [9.64-62.60] / 11.89 | 17 / 16 | 2.8 / 2.6 |
+| GPU, no copy-back (floor, not a picture) | 0.36 / 0.63 | 0.40 / 0.68 | 4 / 3 | - |
+| Dual420 CPU (cannot keep 60) | 21.90 / 55.76 at 38 fps | 31.72 / 48.55 at 29 fps | 99 / 99 | 26.0 / 33.5 |
+| Dual420 GPU, fence | 10.56 [7.38-10.96] / 13.88 | 10.03 [8.72-12.00] / 14.16 | 32 / 35 | 5.4 / 5.8 |
+| Dual420 GPU, staging `Map` | 10.48 [8.31-11.04] / 13.62 | 10.16 [7.41-10.94] / 13.54 | 65 / 64 | 10.8 / 10.7 |
+
+Free-running, the GPU decodes 252 fps still and 244 fps scrolling (fence,
+p50 3.66 and 3.82 ms) against 85 and 75 fps on the CPU (p50 9.61 and
+12.26 ms); Dual420 106 fps against 39 and 30.
+
+- **Same pictures.** `--decoder both` compared every GPU picture with the
+  CPU's: 0 of 300 differ, single and Dual420, still and scrolling, and the GPU
+  gives each picture back on the unit that carried it.
+- **What limits it.** With no copy-back the decode costs 0.4 ms, so about
+  4.5 ms of the 5 ms is waiting for the copy into the staging texture and
+  splitting NV12 into I420 on the CPU. The fence takes the busy wait out:
+  same latency, a third of the CPU. `Lock2D` sleeps too, but Media
+  Foundation's own copy doubles the time. Drawing the NV12 texture directly
+  would remove the copy ("Not built yet").
+- **Noise.** Other programs ran on the machine; the interleaving gives both
+  sides the same share. The two `Lock2D` runs near 62 ms are such stalls.
 
 What has no number: the time from a server frame to the pixel on screen (the
 `present` check measures only decoded-to-`Present` returned), the CPU and GPU load
