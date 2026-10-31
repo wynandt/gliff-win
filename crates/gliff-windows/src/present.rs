@@ -1,5 +1,5 @@
 //! `Presenter`: the D3D11 device, the flip-model swap chain and the two
-//! passes of `present.hlsl` (I420 planes on the GPU, BT.709 in the
+//! passes of `present.hlsl` (4:2:0 or 4:4:4 planes on the GPU, BT.709 in the
 //! shader).
 //!
 //! One picture: three `R8_UNORM` planes are uploaded, `ps_yuv` converts
@@ -84,6 +84,7 @@ use crate::present_log::PresentOutcome;
 use crate::present_math::PRESENT_HLSL;
 use crate::stats_out::AdapterInfo;
 use crate::stats_out::SwapChainInfo;
+use crate::yuv::Sampling;
 use crate::yuv::YuvFrame;
 
 /// Two buffers, flip-discard: the minimum for flip model, and with a
@@ -100,6 +101,7 @@ const SWAP_FLAGS: DXGI_SWAP_CHAIN_FLAG = DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAIT
 /// The stream-sized textures: three planes in, one RGB picture out.
 struct Planes {
     size: (u32, u32),
+    sampling: Sampling,
     y: ID3D11Texture2D,
     u: ID3D11Texture2D,
     v: ID3D11Texture2D,
@@ -284,21 +286,27 @@ impl Presenter {
         filter: Filter,
     ) -> windows::core::Result<PresentOutcome> {
         let size = frame.size();
-        if self.planes.as_ref().is_none_or(|p| p.size != size) {
+        let sampling = frame.sampling();
+        if self
+            .planes
+            .as_ref()
+            .is_none_or(|p| p.size != size || p.sampling != sampling)
+        {
             self.planes = None;
             self.has_picture = false;
-            self.planes = Some(self.make_planes(size)?);
+            self.planes = Some(self.make_planes(size, sampling)?);
         }
         let planes = self.planes.as_ref().expect("planes were just made");
         let (w, h) = size;
-        // SAFETY: each source slice holds exactly one plane of `size`
-        // (YuvFrame's invariant: tight strides w and w/2, even sides), and
-        // the textures were made for that size.
+        let (cw, _) = sampling.chroma_size(size);
+        // SAFETY: each source slice holds exactly one plane of `size` and
+        // `sampling` (YuvFrame's invariant: tight strides w and the chroma
+        // width, even sides), and the textures were made for both.
         unsafe {
             let ctx = &self.context;
             ctx.UpdateSubresource(&planes.y, 0, None, frame.y().as_ptr().cast(), w, 0);
-            ctx.UpdateSubresource(&planes.u, 0, None, frame.u().as_ptr().cast(), w / 2, 0);
-            ctx.UpdateSubresource(&planes.v, 0, None, frame.v().as_ptr().cast(), w / 2, 0);
+            ctx.UpdateSubresource(&planes.u, 0, None, frame.u().as_ptr().cast(), cw, 0);
+            ctx.UpdateSubresource(&planes.v, 0, None, frame.v().as_ptr().cast(), cw, 0);
             // Pass 1: planes -> stream-sized RGB.
             ctx.PSSetShaderResources(3, Some(&[None]));
             ctx.OMSetRenderTargets(Some(&[Some(planes.rgb_rtv.clone())]), None);
@@ -377,10 +385,15 @@ impl Presenter {
         }
     }
 
-    fn make_planes(&self, (w, h): (u32, u32)) -> windows::core::Result<Planes> {
+    fn make_planes(
+        &self,
+        (w, h): (u32, u32),
+        sampling: Sampling,
+    ) -> windows::core::Result<Planes> {
+        let chroma = sampling.chroma_size((w, h));
         let y = self.texture((w, h), DXGI_FORMAT_R8_UNORM, Bind::Read)?;
-        let u = self.texture((w / 2, h / 2), DXGI_FORMAT_R8_UNORM, Bind::Read)?;
-        let v = self.texture((w / 2, h / 2), DXGI_FORMAT_R8_UNORM, Bind::Read)?;
+        let u = self.texture(chroma, DXGI_FORMAT_R8_UNORM, Bind::Read)?;
+        let v = self.texture(chroma, DXGI_FORMAT_R8_UNORM, Bind::Read)?;
         let rgb = self.texture((w, h), BACK_FORMAT, Bind::ReadWrite)?;
         let mut rtv = None;
         // SAFETY: views on textures of this device, default descs.
@@ -391,6 +404,7 @@ impl Presenter {
         };
         Ok(Planes {
             size: (w, h),
+            sampling,
             srvs: [
                 Some(srvs[0].clone()),
                 Some(srvs[1].clone()),

@@ -1,4 +1,5 @@
-//! Decoded pictures as tight I420, and the pool their planes come from.
+//! Decoded pictures as tight I420 or 4:4:4, and the pool their planes come
+//! from.
 //!
 //! The display path uploads these planes as-is and converts on the GPU.
 //! [`YuvFrame::to_bgra`] is upstream's CPU conversion,
@@ -123,12 +124,33 @@ pub enum FrameError {
     },
 }
 
-/// One decoded picture, tight I420: Y is `width * height` bytes, U and V
-/// are `width / 2 * height / 2`, rows without padding. Even size only.
+/// How much colour a picture carries.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Sampling {
+    /// 4:2:0: U and V are `width / 2 * height / 2`.
+    Half,
+    /// 4:4:4: U and V are `width * height`, as Dual420 gives once recombined.
+    Full,
+}
+
+impl Sampling {
+    /// The width and height of the U and V planes of a `size` picture.
+    pub fn chroma_size(self, (width, height): (u32, u32)) -> (u32, u32) {
+        match self {
+            Self::Half => (width / 2, height / 2),
+            Self::Full => (width, height),
+        }
+    }
+}
+
+/// One decoded picture with tight planes (rows without padding): Y is
+/// `width * height` bytes, U and V are as [`Sampling::chroma_size`] says.
+/// Even size only.
 #[derive(Debug)]
 pub struct YuvFrame {
     width: u32,
     height: u32,
+    sampling: Sampling,
     y: PooledBuf,
     u: PooledBuf,
     v: PooledBuf,
@@ -137,8 +159,20 @@ pub struct YuvFrame {
 }
 
 impl YuvFrame {
-    /// Checks the size and the plane lengths.
+    /// A 4:2:0 picture. Checks the size and the plane lengths.
     pub fn new(
+        size: (u32, u32),
+        y: PooledBuf,
+        u: PooledBuf,
+        v: PooledBuf,
+        decoded_at: Instant,
+    ) -> Result<Self, FrameError> {
+        Self::sampled(Sampling::Half, size, y, u, v, decoded_at)
+    }
+
+    /// A picture of either sampling. Checks the size and the plane lengths.
+    pub fn sampled(
+        sampling: Sampling,
         (width, height): (u32, u32),
         y: PooledBuf,
         u: PooledBuf,
@@ -149,10 +183,12 @@ impl YuvFrame {
             return Err(FrameError::Size(width, height));
         }
         let luma = width as usize * height as usize;
+        let (cw, ch) = sampling.chroma_size((width, height));
+        let chroma = cw as usize * ch as usize;
         for (plane, got, want) in [
             ("y", y.len(), luma),
-            ("u", u.len(), luma / 4),
-            ("v", v.len(), luma / 4),
+            ("u", u.len(), chroma),
+            ("v", v.len(), chroma),
         ] {
             if got != want {
                 return Err(FrameError::Plane { plane, got, want });
@@ -161,6 +197,7 @@ impl YuvFrame {
         Ok(Self {
             width,
             height,
+            sampling,
             y,
             u,
             v,
@@ -192,6 +229,10 @@ impl YuvFrame {
         (self.width, self.height)
     }
 
+    pub fn sampling(&self) -> Sampling {
+        self.sampling
+    }
+
     pub fn y(&self) -> &[u8] {
         &self.y
     }
@@ -208,13 +249,23 @@ impl YuvFrame {
         self.decoded_at
     }
 
-    /// Upstream's CPU conversion (`gliff_sw::convert::i420_to_bgra`, BT.709
-    /// limited range, chroma repeated over each 2x2 block): the oracle for
-    /// the shader and the source of check PNGs.
+    /// Upstream's CPU conversion (BT.709 limited range): `i420_to_bgra`,
+    /// chroma repeated over each 2x2 block, or `yuv444_to_bgra`. The oracle
+    /// for the shader and the source of check PNGs.
     pub fn to_bgra(&self) -> BgraFrame {
         let (w, h) = (self.width as usize, self.height as usize);
-        let pixels =
-            gliff_sw::convert::i420_to_bgra(&self.y, &self.u, &self.v, (w, w / 2, w / 2), w, h);
+        let pixels = match self.sampling {
+            Sampling::Half => {
+                gliff_sw::convert::i420_to_bgra(&self.y, &self.u, &self.v, (w, w / 2, w / 2), w, h)
+            }
+            Sampling::Full => gliff_sw::convert::yuv444_to_bgra(&gliff_proto::chroma::Yuv444 {
+                width: w,
+                height: h,
+                y: self.y.to_vec(),
+                u: self.u.to_vec(),
+                v: self.v.to_vec(),
+            }),
+        };
         BgraFrame {
             width: self.width,
             height: self.height,
@@ -224,9 +275,11 @@ impl YuvFrame {
 }
 
 impl PartialEq for YuvFrame {
-    /// Same size and planes; `decoded_at` is not part of the picture.
+    /// Same size, sampling and planes; `decoded_at` is not part of the
+    /// picture.
     fn eq(&self, other: &Self) -> bool {
         self.size() == other.size()
+            && self.sampling == other.sampling
             && self.y() == other.y()
             && self.u() == other.u()
             && self.v() == other.v()
