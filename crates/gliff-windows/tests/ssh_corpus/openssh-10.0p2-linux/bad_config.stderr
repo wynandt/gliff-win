@@ -1,0 +1,2 @@
+/home/user/.ssh/badconfig: line 2: Bad configuration option: notanoption
+/home/user/.ssh/badconfig: terminating, 1 bad configuration options

@@ -1,0 +1,86 @@
+# Dependency scans (docs/development.md, "Security scans"): cargo-deny (advisories,
+# licences, bans, sources; see deny.toml), cargo-audit (RustSec against Cargo.lock)
+# and published advisories of the upstream repository the gliff crates come from.
+#
+# Runs on every push to main, on pull requests that change dependencies (a
+# Dependabot update always does), every Monday, and on demand. A failed scheduled
+# run emails whoever last edited the cron line below, so keep that line current.
+name: Security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - "Cargo.toml"
+      - "**/Cargo.toml"
+      - "Cargo.lock"
+      - "deny.toml"
+      - ".github/reviewed-upstream-advisories.txt"
+      - "scripts/check-upstream-advisories"
+      - ".github/workflows/security.yml"
+  schedule:
+    - cron: "17 6 * * 1"   # Mondays, 06:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_DENY_VERSION: "0.20.2"
+  CARGO_AUDIT_VERSION: "0.22.2"
+  # These jobs build tools and read Cargo.lock; they do not need the project's
+  # own pinned toolchain, so use the runner's stable Rust.
+  RUSTUP_TOOLCHAIN: stable
+
+jobs:
+  deny:
+    name: cargo deny
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install cargo-deny
+        run: |
+          rustup toolchain install stable --profile minimal
+          cargo install "cargo-deny@${CARGO_DENY_VERSION}" --locked
+
+      - name: cargo deny check
+        run: cargo deny --all-features check
+
+  audit:
+    name: cargo audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install cargo-audit
+        run: |
+          rustup toolchain install stable --profile minimal
+          cargo install "cargo-audit@${CARGO_AUDIT_VERSION}" --locked
+
+      # --deny warnings: unmaintained, unsound and yanked crates fail too.
+      - name: cargo audit
+        run: cargo audit --deny warnings
+
+  upstream:
+    name: upstream advisories
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: check-upstream-advisories
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          scripts/check-upstream-advisories --self-test
+          scripts/check-upstream-advisories

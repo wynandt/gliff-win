@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Build machine stand-in for wl-copy, for `gwin-verify clipboard`: keeps stdin
+# in a file ($GWIN_FAKE_CLIPBOARD, default one per user under /tmp), as the
+# selection, and the `--type` it was copied as beside it (text/plain when
+# none is given). The real one forks to serve it; this one just stores it.
+file="${GWIN_FAKE_CLIPBOARD:-/tmp/gwin-fake-clipboard-$(id -u)}"
+type=text/plain
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -t | --type) type="$2"; shift ;;
+  esac
+  shift
+done
+cat > "$file"
+printf '%s' "$type" > "$file.type"

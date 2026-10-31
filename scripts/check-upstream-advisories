@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+# cargo-deny and cargo-audit match advisories by crate name from the crates.io
+# index, so they cannot see a problem in the gliff-* crates, which come from git.
+# This covers them as far as it can: it fails when the upstream repository has
+# published a GitHub security advisory that is not listed in
+# .github/reviewed-upstream-advisories.txt (docs/development.md, "Security scans").
+#
+# The upstream repository is the git source of the gliff crates in Cargo.toml.
+# Needs gh with GH_TOKEN (or GITHUB_TOKEN) set, and the network.
+#
+# Usage: scripts/check-upstream-advisories
+#        scripts/check-upstream-advisories --self-test
+set -euo pipefail
+
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+reviewed="$root/.github/reviewed-upstream-advisories.txt"
+
+# upstream_repo: owner/name of the single GitHub repo the git dependencies use.
+upstream_repo() {
+  local repos
+  repos="$(sed -n 's|^[^#]*git = "https://github.com/\([^"/]*/[^"/]*\)".*|\1|p' "$root/Cargo.toml" | sed 's|\.git$||' | sort -u)"
+  if [[ "$(printf '%s\n' "$repos" | grep -c .)" != 1 ]]; then
+    echo "check-upstream-advisories: expected exactly one git repository in Cargo.toml, found: ${repos:-none}" >&2
+    return 1
+  fi
+  printf '%s\n' "$repos"
+}
+
+# unreviewed IDS_FILE REVIEWED_FILE: ids in the first not named in the second.
+unreviewed() {
+  local ids="$1" list="$2"
+  { grep -v '^[[:space:]]*$' "$ids" || true; } | while read -r id; do
+    if ! grep -qE "^[[:space:]]*${id}([[:space:]]|\$)" "$list"; then
+      echo "$id"
+    fi
+  done
+}
+
+self_test() {
+  local dir
+  dir="$(mktemp -d)"
+  trap 'rm -rf "$dir"' RETURN
+  printf 'GHSA-aaaa-bbbb-cccc\nGHSA-dddd-eeee-ffff\n' > "$dir/ids"
+  printf '# note\nGHSA-aaaa-bbbb-cccc fixed in the pinned rev\n' > "$dir/list"
+  if [[ "$(unreviewed "$dir/ids" "$dir/list")" != "GHSA-dddd-eeee-ffff" ]]; then
+    echo "check-upstream-advisories self-test: an unreviewed advisory was not reported" >&2
+    return 1
+  fi
+  : > "$dir/ids"
+  local none
+  none="$(unreviewed "$dir/ids" "$dir/list")"
+  if [[ -n "$none" ]]; then
+    echo "check-upstream-advisories self-test: no advisories was reported as a problem" >&2
+    return 1
+  fi
+  echo "check-upstream-advisories self-test: ok"
+}
+
+if [[ "${1:-}" == "--self-test" ]]; then
+  self_test
+  exit
+fi
+
+repo="$(upstream_repo)"
+ids="$(mktemp)"
+trap 'rm -f "$ids"' EXIT
+gh api --paginate "repos/$repo/security-advisories" --jq '.[].ghsa_id' > "$ids"
+
+bad="$(unreviewed "$ids" "$reviewed")"
+if [[ -n "$bad" ]]; then
+  echo "check-upstream-advisories: $repo has published advisories nobody has reviewed here:" >&2
+  while read -r id; do
+    echo "  https://github.com/$repo/security/advisories/$id" >&2
+  done <<< "$bad"
+  echo "Read each one. If the pinned rev is fixed or not affected, list its id in .github/reviewed-upstream-advisories.txt; otherwise bump the rev." >&2
+  exit 1
+fi
+echo "check-upstream-advisories: $repo has $(grep -c . "$ids" || true) published advisories, all reviewed"

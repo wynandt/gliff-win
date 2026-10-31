@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# Build machine stand-in for ssh in `gwin-verify ssh`: no network, no keys, no sshd.
+# Takes the two argument shapes gliff-windows builds:
+#   [ssh options...] -- <target> <server_path> --stdio [mode...]   (ssh::spawn)
+#   [ssh options...] -- <target> "<command>"                       (ssh::exec)
+# drops the options and the target, and runs the server locally on the same
+# stdin/stdout, or the one command with bash -c, as a remote shell would,
+# with scripts/fake-bin (a fake hyprctl) first on PATH and the Hyprland
+# environment a non-interactive ssh has (none; see below). A missing server is reported the way a
+# remote shell would, so the failure classifier sees realistic stderr.
+#
+# A connection failure on demand: with GWIN_FAKE_SSH_STDERR=<file> it prints
+# that file on stderr and exits with GWIN_FAKE_SSH_EXIT (default 255, ssh's own
+# failure code) before doing anything else, as ssh does when it cannot connect
+# or sign in. The files are real ssh output, crates/gliff-windows/tests/ssh_corpus.
+set -euo pipefail
+
+if [[ -n "${GWIN_FAKE_SSH_STDERR:-}" ]]; then
+  cat "$GWIN_FAKE_SSH_STDERR" >&2
+  exit "${GWIN_FAKE_SSH_EXIT:-255}"
+fi
+
+while [[ $# -gt 0 && "$1" != "--" ]]; do
+  shift
+done
+if [[ $# -lt 3 ]]; then
+  echo "fake-ssh: expected '-- <target> <server_path> ...' or '-- <target> <command>'" >&2
+  exit 255
+fi
+shift 2 # "--" and the target
+if [[ $# -eq 1 ]]; then
+  # A non-interactive ssh command gets no Hyprland session environment:
+  # HYPRLAND_INSTANCE_SIGNATURE is unset, as on the remote machine. The remote machine's
+  # Hyprland is always running, so its runtime dir holds a live instance
+  # (and an older dead one), unless GWIN_FAKE_HYPR_INSTANCE=none.
+  if [[ -n "${GWIN_FAKE_HYPR_DIR:-}" ]]; then
+    export XDG_RUNTIME_DIR="$GWIN_FAKE_HYPR_DIR/run"
+    if [[ "${GWIN_FAKE_HYPR_INSTANCE:-}" != "none" ]]; then
+      dead="$XDG_RUNTIME_DIR/hypr/0d1e_1761000000_100"
+      live="$XDG_RUNTIME_DIR/hypr/a1b2c3_1761250000_200"
+      mkdir -p "$dead" "$live"
+      touch "$dead/.socket.sock" "$dead/.dead" "$live/.socket.sock"
+      touch -d '2026-01-01 00:00' "$dead/.socket.sock"
+    fi
+  fi
+  PATH="$(cd "$(dirname "$0")" && pwd)/fake-bin:$PATH" \
+    exec env -u HYPRLAND_INSTANCE_SIGNATURE bash -c "$1"
+fi
+server="$1"
+shift
+if [[ ! -x "$server" ]]; then
+  echo "bash: line 1: $server: No such file or directory" >&2
+  exit 127
+fi
+exec "$server" "$@"

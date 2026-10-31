@@ -1,0 +1,205 @@
+{
+  "version": "0.1.0",
+  "complete": true,
+  "session": {
+    "frames": 3000,
+    "acks": 3000,
+    "decode_errors": 0,
+    "drain_errors": 0,
+    "keyframe_requests": 0,
+    "to_slot": 3000,
+    "slot_dropped": 12,
+    "configs": 3,
+    "resets": 0,
+    "resizes_sent": 3,
+    "decode_p50_ms": 9.0,
+    "decode_p95_ms": 14.0,
+    "decode_max_ms": 20.0
+  },
+  "present": {
+    "shown": 2988,
+    "occluded": 0,
+    "device_lost": 0,
+    "stages": [
+      {
+        "stage": "starting",
+        "start_ms": 0,
+        "end_ms": 25000,
+        "measured_ms": 0,
+        "presented_total": 1500,
+        "presented": 0,
+        "decoded": 0,
+        "slot_dropped": 0,
+        "presented_fps": 0.0,
+        "decoded_fps": 0.0,
+        "latency_p50_ms": 4.0,
+        "latency_p95_ms": 9.5,
+        "latency_max_ms": 15.0,
+        "max_gap_ms": 40,
+        "occluded": 0,
+        "device_lost": 0
+      },
+      {
+        "stage": "windowed",
+        "start_ms": 1200,
+        "end_ms": 26200,
+        "measured_ms": 0,
+        "presented_total": 1500,
+        "presented": 0,
+        "decoded": 0,
+        "slot_dropped": 0,
+        "presented_fps": 0.0,
+        "decoded_fps": 0.0,
+        "latency_p50_ms": 4.0,
+        "latency_p95_ms": 9.5,
+        "latency_max_ms": 15.0,
+        "max_gap_ms": 40,
+        "occluded": 0,
+        "device_lost": 0
+      },
+      {
+        "stage": "resizing",
+        "start_ms": 1500,
+        "end_ms": 26500,
+        "measured_ms": 0,
+        "presented_total": 1500,
+        "presented": 0,
+        "decoded": 0,
+        "slot_dropped": 0,
+        "presented_fps": 0.0,
+        "decoded_fps": 0.0,
+        "latency_p50_ms": 4.0,
+        "latency_p95_ms": 9.5,
+        "latency_max_ms": 15.0,
+        "max_gap_ms": 40,
+        "occluded": 0,
+        "device_lost": 0
+      },
+      {
+        "stage": "windowed",
+        "start_ms": 2100,
+        "end_ms": 27100,
+        "measured_ms": 20000,
+        "presented_total": 1500,
+        "presented": 1190,
+        "decoded": 1196,
+        "slot_dropped": 5,
+        "presented_fps": 59.5,
+        "decoded_fps": 59.8,
+        "latency_p50_ms": 4.0,
+        "latency_p95_ms": 9.5,
+        "latency_max_ms": 15.0,
+        "max_gap_ms": 40,
+        "occluded": 0,
+        "device_lost": 0
+      },
+      {
+        "stage": "resizing",
+        "start_ms": 27200,
+        "end_ms": 52200,
+        "measured_ms": 0,
+        "presented_total": 1500,
+        "presented": 0,
+        "decoded": 0,
+        "slot_dropped": 0,
+        "presented_fps": 0.0,
+        "decoded_fps": 0.0,
+        "latency_p50_ms": 4.0,
+        "latency_p95_ms": 9.5,
+        "latency_max_ms": 15.0,
+        "max_gap_ms": 40,
+        "occluded": 0,
+        "device_lost": 0
+      },
+      {
+        "stage": "fullscreen",
+        "start_ms": 27900,
+        "end_ms": 52900,
+        "measured_ms": 20000,
+        "presented_total": 1500,
+        "presented": 1178,
+        "decoded": 1192,
+        "slot_dropped": 14,
+        "presented_fps": 58.9,
+        "decoded_fps": 59.6,
+        "latency_p50_ms": 4.0,
+        "latency_p95_ms": 9.5,
+        "latency_max_ms": 15.0,
+        "max_gap_ms": 40,
+        "occluded": 0,
+        "device_lost": 0
+      }
+    ]
+  },
+  "adapter": {
+    "name": "Test GPU",
+    "vendor_id": 4660,
+    "device_id": 22136,
+    "choice": "monitor",
+    "drives_monitor": true
+  },
+  "monitor": {
+    "rect": [
+      0,
+      0,
+      3840,
+      2400
+    ],
+    "dpi": 192,
+    "refresh_hz": 240.0
+  },
+  "window": {
+    "client": [
+      3840,
+      2400
+    ],
+    "rect": [
+      0,
+      0,
+      3840,
+      2400
+    ],
+    "fullscreen": true,
+    "dpi": 192
+  },
+  "swap_chain": {
+    "size": [
+      3840,
+      2400
+    ],
+    "swap_effect": "flip_discard",
+    "buffers": 2,
+    "allow_tearing": false,
+    "sync_interval": 1,
+    "max_frame_latency": 1
+  },
+  "resizes": [
+    {
+      "width": 2560,
+      "height": 1600,
+      "scale": 2.0,
+      "sent_ms": 0,
+      "applied_ms": 900,
+      "first_picture_ms": 1150
+    },
+    {
+      "width": 2560,
+      "height": 1600,
+      "scale": 2.0,
+      "sent_ms": 1400,
+      "applied_ms": 1900,
+      "first_picture_ms": 2100
+    },
+    {
+      "width": 3840,
+      "height": 2400,
+      "scale": 2.0,
+      "sent_ms": 27400,
+      "applied_ms": 27700,
+      "first_picture_ms": 27900
+    }
+  ],
+  "fps_cap": 60,
+  "end": "bye",
+  "ssh_exit": 0
+}

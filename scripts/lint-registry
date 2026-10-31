@@ -1,0 +1,426 @@
+#!/usr/bin/env python3
+"""Fails when a source other than the two registry modules touches the Windows
+registry: no import of the registry API, no Reg* (or SHSetValue, SHReg*,
+NtSetValueKey) call, no `reg.exe`, regedit or PowerShell registry command.
+
+The registry is written by exactly two modules: lockreg.rs (the Super+L lock
+setting) and the future Start with Windows module, autostart_reg.rs. The
+settings, the config folder and the history have no Windows dependency at
+all; this check keeps every other file that way.
+
+It reads a Rust file in two views. The code view has comments and the text of
+strings and characters blanked, so a name in a comment or a message is not a
+use, and a comment inside a `use` statement does not hide one. The string view
+holds the text of the string literals only: a command a program runs
+(`Command::new("reg")`) or an API name loaded by name is a string. Names are
+matched without regard to case and anchored to whole words.
+
+Usage: scripts/lint-registry             scan the files git knows (tracked or new)
+       scripts/lint-registry --self-test
+"""
+
+import os
+import re
+import subprocess
+import sys
+import tempfile
+
+ALLOWED = re.compile(r"(^|/)(lockreg|autostart_reg)\.rs$")
+
+# The registry API by name. A verb alone is not enough (`RegSettings` is not
+# a call): the object must follow, so only the real functions match.
+API = (
+    r"Reg(?:Open|Create|Set|Delete|Query|Get|Enum|Close|Load|Save|Flush|Notify|Copy|"
+    r"Replace|Restore|Connect|Override|Unload|Disable)"
+    r"(?:Key|Value|Tree|Info|Registry|Current|User|Predef|App|MUI|Class)[A-Za-z]*"
+    r"|RegKey"
+    r"|SH(?:Set|Delete|Copy)(?:Value|Key)[AW]?"
+    r"|SHReg[A-Za-z]+"
+    r"|(?:Nt|Zw)(?:Set|Create|Delete|Open|Load|Restore|Replace|Save|Flush|Rename|"
+    r"Query|Enumerate|Notify)[A-Za-z]*Key"
+    r"|(?:Nt|Zw)DeleteValueKey|(?:Nt|Zw)SetValueKey|(?:Nt|Zw)QueryValueKey"
+    r"|(?:Nt|Zw)EnumerateValueKey"
+    r"|winreg"
+)
+CODE = re.compile(r"(?<![A-Za-z0-9_])(?:" + API + r")(?![A-Za-z0-9_])", re.I)
+
+# The same rule over a whole statement, which line patterns miss: a grouped
+# import split over lines, an alias of an enclosing module or a glob of it. It
+# reads the code view with its white space collapsed and `::` closed up.
+STATEMENT = re.compile(
+    r"(?:::|[{,])\s*(?-i:Win32)::[^;]*(?<![A-Za-z0-9_])Registry(?![A-Za-z0-9_])"
+    r"|(?:::|[{,])\s*(?-i:Win32)(?:::System)?\s*(?:;|,|}|as(?![A-Za-z0-9_]))"
+    r"|(?:::|[{,])\s*(?-i:Win32)::System::\*|(?:::|[{,])\s*(?-i:Win32)::\*"
+    r"|Win32_System_Registry",
+    re.I,
+)
+
+# What a string literal may be, as a whole or in part.
+STRING_WHOLE = re.compile(
+    r"\s*(?:" + API + r"|(?:[^\"]*[\\/])?(?:reg|reg\.exe|regedit|regedit\.exe|regini|regini\.exe))\s*",
+    re.I,
+)
+STRING_PART = re.compile(
+    r"(?<![A-Za-z0-9_])reg(?:\.exe)?\s+(?:add|delete|import|copy|save|restore|load|unload)\b"
+    r"|(?<![A-Za-z0-9_-])(?:set|new|remove|clear|rename|copy|move)-itemproperty\s+(?:-|hk)"
+    r"|(?<![A-Za-z0-9_])hk(?:cu|lm|cr|u|cc):"
+    r"|[\\/]reg\.exe(?![A-Za-z0-9_])"
+    r"|(?<![A-Za-z0-9_])(?:regedit|regini)(?:\.exe)?(?![A-Za-z0-9_])",
+    re.I,
+)
+
+# The crates that write the registry must not be dependencies, under any name
+# a Cargo.toml gives them. The Win32 `windows` crate's own feature is needed
+# by lockreg.rs and stays allowed.
+CRATE = re.compile(
+    r"^\s*(?:\[(?:dev-|build-)?dependencies\.)?\"?"
+    r"(?:winreg|windows[-_]registry|registry|winapi-registry|reg|regedit|windows-sys-registry)"
+    r"\"?\s*(?:=|\.|\]|$)"
+    r"|package\s*=\s*\"(?:winreg|windows-registry|registry)\""
+    r"|\"winreg\"",
+    re.I,
+)
+
+
+def is_ident(c):
+    return c.isalnum() or c == "_"
+
+
+def raw_string_at(text, i):
+    """(index of the `r`, number of `#`) when a raw string (`r"`, `br#"`, `cr"`)
+    starts at i."""
+    if i > 0 and is_ident(text[i - 1]):
+        return None
+    if text[i] == "r":
+        start = i
+    elif text[i] in "bc" and text[i + 1 : i + 2] == "r":
+        start = i + 1
+    else:
+        return None
+    j = start + 1
+    while j < len(text) and text[j] == "#":
+        j += 1
+    if text[j : j + 1] == '"':
+        return start, j - start - 1
+    return None
+
+
+def is_char_literal(text, i):
+    nxt = text[i + 1 : i + 2]
+    if nxt == "\\":
+        return "'" in text[i + 2 : i + 12]
+    return bool(nxt) and text[i + 2 : i + 3] == "'"
+
+
+def views(text):
+    """(code view, string view): comments, strings and characters blanked in
+    the first; the text of the string literals, one per line, in the second."""
+    code = []
+    strings = []
+
+    def blank(s):
+        return "".join(c if c == "\n" else " " for c in s)
+
+    i, n = 0, len(text)
+    while i < n:
+        c = text[i]
+        nxt = text[i + 1 : i + 2]
+        raw = raw_string_at(text, i)
+        if c == "/" and nxt == "/":
+            j = text.find("\n", i)
+            j = n if j < 0 else j
+            code.append(blank(text[i:j]))
+            i = j
+        elif c == "/" and nxt == "*":
+            depth, j = 0, i
+            while j < n:
+                if text.startswith("/*", j):
+                    depth += 1
+                    j += 2
+                elif text.startswith("*/", j):
+                    depth -= 1
+                    j += 2
+                    if depth == 0:
+                        break
+                else:
+                    j += 1
+            code.append(blank(text[i:j]))
+            i = j
+        elif raw:
+            start, hashes = raw
+            body = start + 2 + hashes
+            close = '"' + "#" * hashes
+            j = text.find(close, body)
+            end = n if j < 0 else j + len(close)
+            strings.append(text[body : n if j < 0 else j])
+            code.append(blank(text[i:end]))
+            i = end
+        elif c == '"':
+            j = i + 1
+            while j < n and text[j] != '"':
+                j += 2 if text[j] == "\\" else 1
+            strings.append(text[i + 1 : j])
+            code.append(blank(text[i : j + 1]))
+            i = j + 1
+        elif c == "'" and is_char_literal(text, i):
+            if nxt == "\\":
+                j = text.index("'", i + 2) + 1
+            else:
+                j = i + 3
+            code.append(blank(text[i:j]))
+            i = j
+        else:
+            code.append(c)
+            i += 1
+    return "".join(code), strings
+
+
+def flagged_lines(text):
+    """The reasons a Rust source touches the registry, as `line:text`."""
+    code, strings = views(text)
+    found = []
+    for number, line in enumerate(code.split("\n"), 1):
+        for m in CODE.finditer(line):
+            found.append(f"{number}:{m.group(0)}")
+    squeezed = re.sub(r"\s*::\s*", "::", re.sub(r"\s+", " ", code))
+    for m in STATEMENT.finditer(squeezed):
+        found.append(f"statement:{m.group(0)}")
+    for item in root_imports(code):
+        found.append(f"import:{item}")
+    for s in strings:
+        if STRING_WHOLE.fullmatch(s) or STRING_PART.search(s):
+            found.append(f"string:{s.strip()[:60]}")
+    return found
+
+
+ROOT_CRATE = re.compile(r"(?:::)?(?:windows|windows_sys)(?:\s+as\s+[A-Za-z0-9_]+)?")
+USE_STATEMENT = re.compile(r"(?<![A-Za-z0-9_])use\s+([^;]*);")
+
+
+def root_imports(code):
+    """The `use` statements that import the Windows crate itself (`use windows;`,
+    `use {windows};`, `use ::windows as w;`): whatever is reached through the
+    name afterwards is not a path any other rule reads."""
+    found = []
+    for m in USE_STATEMENT.finditer(code):
+        tree = re.sub(r"\s+", " ", m.group(1)).strip()
+        if tree.startswith("{") and tree.endswith("}"):
+            inner, items, depth, item = tree[1:-1], [], 0, ""
+            for c in inner:
+                if c == "," and depth == 0:
+                    items.append(item)
+                    item = ""
+                    continue
+                depth += (c == "{") - (c == "}")
+                item += c
+            items.append(item)
+        else:
+            items = [tree]
+        for item in items:
+            if ROOT_CRATE.fullmatch(item.strip()):
+                found.append(item.strip())
+    return found
+
+
+def strip_toml_comment(line):
+    quote = None
+    for i, c in enumerate(line):
+        if quote:
+            if c == quote:
+                quote = None
+        elif c in "\"'":
+            quote = c
+        elif c == "#":
+            return line[:i]
+    return line
+
+
+def manifest_hits(text):
+    return [
+        f"{n}:{line.strip()}"
+        for n, line in enumerate(text.split("\n"), 1)
+        if CRATE.search(strip_toml_comment(line))
+    ]
+
+
+def read(path):
+    with open(path, encoding="utf-8", errors="replace") as f:
+        return f.read()
+
+
+def scan(base, files):
+    out = []
+    for file in files:
+        if ALLOWED.search(file):
+            continue
+        out += [f"{file}:{hit}" for hit in flagged_lines(read(os.path.join(base, file)))]
+    return out
+
+
+def scan_manifests(base, files):
+    out = []
+    for file in files:
+        out += [f"{file}:{hit}" for hit in manifest_hits(read(os.path.join(base, file)))]
+    return out
+
+
+SELF_TEST_BAD = {
+    "bad_import": "use windows::Win32::System::Registry::HKEY;",
+    "bad_call": "let _ = unsafe { RegSetValueExW(key, name, None, kind, None) };",
+    "bad_lower": "let _ = unsafe { regsetvalueexw(key) };",
+    "bad_upper": "REGCREATEKEYEXW(a);",
+    "bad_command": 'Command::new("reg").args(["add", "x"]);',
+    "bad_command_exe": 'Command::new("reg.exe");',
+    "bad_command_upper": 'Command::new("REG.EXE");',
+    "bad_command_path": r'Command::new(r"C:\Windows\System32\reg.exe");',
+    "bad_command_line": 'Command::new("cmd").args(["/c", "reg add HKCU\\\\x"]);',
+    "bad_regedit": 'Command::new("regedit.exe");',
+    "bad_powershell": 'let s = "Set-ItemProperty -Path HKCU:\\\\Software -Name x";',
+    "bad_powershell_new": 'let s = "new-itemproperty -path x";',
+    "bad_by_name_raw": 'let f = GetProcAddress(m, br"RegSetValueExW");',
+    "bad_by_name": 'let f = GetProcAddress(m, "RegSetValueExW");',
+    "bad_shell": "SHSetValueW(a, b, c, d, e, f);",
+    "bad_shell_reg": "SHRegSetUSValueW(a);",
+    "bad_nt": "NtSetValueKey(a, b, c, d, e, f);",
+    "bad_zw": "ZwCreateKey(a);",
+    "bad_group": "use windows::Win32::{\n    System::{\n        Registry::HKEY,\n    },\n};\n",
+    "bad_group_comment": "use windows::Win32::{ // the registry\n    System::{ /* x */ Registry::HKEY },\n};\n",
+    "bad_comment_in_path": "use windows::Win32::System::/* hi */Registry::HKEY;",
+    "bad_spaced": "use windows :: Win32 :: System :: Registry :: HKEY;",
+    "bad_root": "use windows;",
+    "bad_root_braces": "use {windows};",
+    "bad_root_braces_more": "use {std::fmt, ::windows, std::io};",
+    "bad_root_alias": "use ::windows as w;",
+    "bad_root_sys": "use { windows_sys as sys };",
+    "bad_braced_win32": "use windows::{Win32::System::Registry::HKEY};",
+    "bad_braced_win32_second": "use windows::{core::Result, Win32::{System::Registry}};",
+    "bad_alias": "use windows::Win32::System as sys;",
+    "bad_path": "use ::windows as w; fn f() { let _: w::Win32::System::Registry::HKEY; }",
+    "bad_sys": "use windows_sys::Win32::System::Registry::*;",
+    "bad_winreg": "use winreg::RegKey;",
+    "bad_after_string": 'let a = "http://x"; RegDeleteKeyW(a);',
+    "bad_after_raw_byte": 'let a = br#"x"#; RegDeleteKeyW(a);',
+    "bad_after_raw_c": 'let a = cr"x"; RegDeleteKeyW(a);',
+    "bad_after_char": "let q = '\"'; RegDeleteKeyW(q);",
+}
+SELF_TEST_OK = {
+    "lockreg": "use windows::Win32::System::Registry::HKEY;",
+    "autostart_reg": "let _ = unsafe { RegSetValueExW(key, name, None, kind, None) };",
+    "fine": "pub struct WinRegistry; // mentions the Registry trait only",
+    "fine_two": "use windows::Win32::UI::WindowsAndMessaging::MSG; use crate::lock_policy::Registry;",
+    "fine_settings": "struct RegSettings; let regsettings = RegSettings;",
+    "fine_set_words": "let RegSetting = 1; let registry_set = 2; let regex = Regex::new(\"a\");",
+    "fine_comment": "// use windows::Win32::System::Registry::HKEY;\n/* RegSetValueExW(a) */\n/// reg add\n",
+    "fine_string": 'let m = "could not call RegSetValueExW, see reg.exe";',
+    "fine_message": 'println!("the Registry route is off; use Set-ItemProperty by hand");',
+    "fine_raw": 'let r = r#"RegSetValueExW "reg" Registry"#; let b = br"RegOpenKeyExW and more";',
+    "fine_nested": "/* a /* use windows::Win32::System::Registry; */ b */ let x = 1;",
+    "fine_ident": "let register = 1; let region = 2; let reg = 3; let regular = 4;",
+    "fine_command": 'Command::new("regex-tool"); Command::new("ssh.exe");',
+    "fine_win32_ui": "use windows::Win32::UI::Input::KeyboardAndMouse::SendInput;",
+    "fine_root_path": "use windows::core::Result; use {windows::core::PCWSTR};",
+    "fine_internal_windows": "use crate::windows; use self::windows::Foo; use {crate::windows};",
+    "fine_braces": "use windows::{core::Result, Win32::UI::WindowsAndMessaging::MSG};",
+    "fine_lifetime": "fn f<'a>(x: &'a str) -> &'a str { x }",
+}
+SELF_TEST_MANIFEST_BAD = {
+    "a": '[dependencies]\nwinreg = "0.52"\n',
+    "b": '[dependencies.winreg]\nversion = "1"\n',
+    "c": '[dependencies]\nreg2 = { package = "winreg", version = "1" }\n',
+    "d": '[dependencies]\nwindows-registry = "0.2"\n',
+    "e": '[target.\'cfg(windows)\'.dependencies]\nWinReg = "0.52"\n',
+}
+SELF_TEST_MANIFEST_OK = {
+    "ok": '[dependencies]\nwindows = { version = "0.62", features = ["Win32_System_Registry"] }\nclap = "4"\nregex = "1"\n',
+    "comment": '[dependencies]\n# winreg is not used\nclap = "4" # not winreg = "1"\n',
+}
+
+
+def self_test():
+    with tempfile.TemporaryDirectory() as tmp:
+        os.makedirs(os.path.join(tmp, "src"))
+        names = []
+        for name, text in {**SELF_TEST_BAD, **SELF_TEST_OK}.items():
+            with open(os.path.join(tmp, "src", name + ".rs"), "w") as f:
+                f.write(text + "\n")
+            names.append(f"src/{name}.rs")
+        found = "\n".join(scan(tmp, names))
+        failures = []
+        for name in SELF_TEST_BAD:
+            if f"src/{name}.rs:" not in found:
+                failures.append(f"{name}.rs was not flagged")
+        for name in SELF_TEST_OK:
+            if f"src/{name}.rs:" in found:
+                failures.append(f"{name}.rs was flagged: " + str(flagged_lines(SELF_TEST_OK[name])))
+        for name, text in SELF_TEST_MANIFEST_BAD.items():
+            if not manifest_hits(text):
+                failures.append(f"manifest {name} was not flagged")
+        for name, text in SELF_TEST_MANIFEST_OK.items():
+            if manifest_hits(text):
+                failures.append(f"manifest {name} was flagged: {manifest_hits(text)}")
+    failures += deleted_file_failures()
+    if failures:
+        for f in failures:
+            print(f"lint-registry self-test: {f}", file=sys.stderr)
+        return 1
+    print("lint-registry: self-test ok")
+    return 0
+
+
+def deleted_file_failures():
+    """A tracked file removed from the work tree must not stop the scan."""
+    here = os.getcwd()
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            os.chdir(tmp)
+            env = ["-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false"]
+            for args in (["init", "-q"], ["add", "-A"]):
+                if args == ["add", "-A"]:
+                    for name in ("kept.rs", "gone.rs"):
+                        with open(name, "w") as f:
+                            f.write("fn main() {}\n")
+                subprocess.run(["git", *args], check=True, capture_output=True)
+            subprocess.run(["git", *env, "commit", "-qm", "x"], check=True, capture_output=True)
+            os.remove("gone.rs")
+            files = git_files("*.rs")
+            if files != ["kept.rs"]:
+                return [f"a deleted tracked file was listed: {files}"]
+            return []
+    finally:
+        os.chdir(here)
+
+
+def git_files(*patterns):
+    out = subprocess.run(
+        ["git", "ls-files", "--cached", "--others", "--exclude-standard", *patterns],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    # A tracked file that was deleted in the work tree is not scanned.
+    return [line for line in out.split("\n") if line and os.path.exists(line)]
+
+
+def main():
+    if sys.argv[1:] == ["--self-test"]:
+        return self_test()
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    os.chdir(root)
+    manifests = scan_manifests(root, git_files("Cargo.toml", "*/Cargo.toml"))
+    if manifests:
+        print("lint-registry: a Cargo.toml depends on a registry crate:", file=sys.stderr)
+        print("\n".join(manifests), file=sys.stderr)
+        return 1
+    found = scan(root, git_files("*.rs"))
+    if found:
+        print(
+            "lint-registry: the registry is touched outside lockreg.rs and autostart_reg.rs:",
+            file=sys.stderr,
+        )
+        print("\n".join(found), file=sys.stderr)
+        return 1
+    print("lint-registry: ok")
+    return 0
+
+
+sys.exit(main())

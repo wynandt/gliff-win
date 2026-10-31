@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# Fails when the client's sources could weaken ssh or touch the person's keys
+# (design 11.7): no StrictHostKeyChecking, UserKnownHostsFile, PasswordAuthentication
+# or ForwardAgent option, no "-A", and no ssh-keygen, ssh-keyscan or ssh-add call.
+#
+# A backstop: ssh arguments are built only in connect/runner.rs and ssh.rs, and a
+# test (connect::runner::tests::no_call_the_client_makes_weakens_ssh) checks the
+# arguments themselves. This catches a string that never reaches that test.
+# Tests, fixtures and scripts are not scanned: they may spell these words out.
+#
+# Usage: scripts/lint-ssh             scan the sources git knows
+#        scripts/lint-ssh --self-test
+set -euo pipefail
+
+PATTERN='StrictHostKeyChecking|UserKnownHostsFile|PasswordAuthentication|ForwardAgent|"-A"|ssh-keygen|ssh-keyscan|ssh-add\b'
+
+# scan REPO: prints each offending line, fails when there is one.
+scan() {
+  local repo="$1"
+  if git -C "$repo" grep -n -I -i -E -e "$PATTERN" -- ':(glob)crates/*/src/**' \
+      ':(exclude)*/tests.rs' ':(exclude)*/tests/*'; then
+    echo "lint-ssh: a source names an ssh option or tool the client must not use" >&2
+    return 1
+  fi
+}
+
+self_test() {
+  local dir
+  dir="$(mktemp -d)"
+  trap 'rm -rf "$dir"' RETURN
+  git -C "$dir" init -q
+  mkdir -p "$dir/crates/x/src"
+  printf 'fn a() { let _ = "BatchMode=yes"; }\n' > "$dir/crates/x/src/lib.rs"
+  printf 'fn t() { let _ = "StrictHostKeyChecking=no"; }\n' > "$dir/crates/x/src/tests.rs"
+  git -C "$dir" add -A
+  scan "$dir" >/dev/null 2>&1 || { echo "lint-ssh self-test: a clean tree failed" >&2; return 1; }
+  for bad in 'StrictHostKeyChecking=accept-new' 'UserKnownHostsFile=/dev/null' '-A' 'ssh-keygen' 'ssh-add'; do
+    printf 'fn b() { let _ = "%s"; }\n' "$bad" > "$dir/crates/x/src/bad.rs"
+    git -C "$dir" add -A
+    if scan "$dir" >/dev/null 2>&1; then
+      echo "lint-ssh self-test: missed $bad" >&2
+      return 1
+    fi
+  done
+  echo "lint-ssh self-test: ok"
+}
+
+if [[ "${1:-}" == "--self-test" ]]; then
+  self_test
+else
+  scan "$(cd "$(dirname "$0")/.." && pwd)"
+fi

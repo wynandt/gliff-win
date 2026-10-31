@@ -1,0 +1,77 @@
+gliff-win is a Windows client for Gliff (https://github.com/omacom/gliff).
+It is MIT licensed. The changes and new code in this project are Copyright (c)
+2026 Wynand Theunissen; the parts taken from upstream Gliff are Copyright (c)
+2026 Kevin McConnell. Both notices are in LICENSE.
+
+Upstream Gliff
+--------------
+
+gliff-win depends on three upstream crates, pinned to commit
+58c742452ded3f10a2ce61f60eb4845f18205e29: gliff-proto, gliff-transport and
+gliff-sw. Upstream Gliff is MIT licensed, Copyright (c) 2026 Kevin
+McConnell; the license text is in LICENSE.
+
+The following files are ports of, or follow closely, upstream Gliff source
+(crates/gliff, crates/gliff-sw and crates/gliff-server at that commit), and
+carry the upstream copyright notice through LICENSE:
+
+  crates/gliff-windows/src/cursor.rs
+  crates/gliff-windows/src/cursor_image.rs
+  crates/gliff-windows/src/decode.rs
+  crates/gliff-windows/src/layout.rs
+  crates/gliff-windows/src/layout/tests.rs
+  crates/gliff-windows/src/link.rs
+  crates/gliff-windows/src/present.hlsl
+  crates/gliff-windows/src/present_math.rs
+  crates/gliff-windows/src/present_math/tests.rs
+  crates/gliff-windows/src/resize_gate.rs
+  crates/gliff-windows/src/resize_gate/tests.rs
+  crates/gliff-windows/src/session/driver.rs
+  crates/gliff-windows/src/session/machine.rs
+  crates/gliff-windows/src/session/machine/tests.rs
+  crates/gliff-windows/src/ssh.rs
+  crates/gliff-windows/src/yuv.rs
+  crates/gwin-verify/src/bin/gwin-fake-server/main.rs
+  crates/gwin-verify/src/bin/gwin-fake-server/model.rs
+
+keycodemapdb
+------------
+
+crates/gliff-windows/src/keymap.rs (its scan code to evdev table) and the test
+fixture crates/gliff-windows/tests/fixtures/set1-evdev.tsv are generated from
+the keycodemapdb key code data (https://gitlab.com/keycodemap/keycodemapdb),
+used under its BSD-3-Clause option. Its notice is kept in
+crates/gliff-windows/tests/fixtures/set1-evdev.NOTICE.
+
+OpenH264
+--------
+
+gliff-win includes OpenH264 (https://github.com/cisco/openh264), which is
+built from source and linked into the gliff-windows and gwin-verify
+binaries. The Rust crates that wrap it, openh264 and openh264-sys2 (by Ralf
+Biedert), are BSD-2-Clause licensed. OpenH264 is distributed under this
+license:
+
+Copyright (c) 2013, Cisco Systems
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without modification,
+are permitted provided that the following conditions are met:
+
+* Redistributions of source code must retain the above copyright notice, this
+ list of conditions and the following disclaimer.
+
+* Redistributions in binary form must reproduce the above copyright notice, this
+ list of conditions and the following disclaimer in the documentation and/or
+ other materials provided with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
+ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
+ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.

@@ -1,0 +1,2 @@
+Warning: Identity file /home/user/.ssh/nonexistent not accessible: No such file or directory.
+user@127.0.0.1: Permission denied (publickey).

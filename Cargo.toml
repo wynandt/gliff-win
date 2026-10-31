@@ -1,0 +1,73 @@
+[workspace]
+resolver = "3"
+members = ["crates/gliff-windows", "crates/gwin-verify"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/wynandt/gliff-win"
+publish = false
+rust-version = "1.89"
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[workspace.lints.clippy]
+# Google Rust style as applied here: no glob imports, and `expect` with a
+# reason instead of `unwrap`.
+wildcard_imports = "deny"
+enum_glob_use = "deny"
+unwrap_used = "deny"
+undocumented_unsafe_blocks = "deny"
+
+[workspace.dependencies]
+gliff-windows = { path = "crates/gliff-windows" }
+
+# Upstream gliff, pinned to one commit; bump the rev deliberately. These
+# three crates build for x86_64-pc-windows-msvc.
+gliff-proto = { git = "https://github.com/omacom/gliff", rev = "58c742452ded3f10a2ce61f60eb4845f18205e29" }
+gliff-transport = { git = "https://github.com/omacom/gliff", rev = "58c742452ded3f10a2ce61f60eb4845f18205e29" }
+gliff-sw = { git = "https://github.com/omacom/gliff", rev = "58c742452ded3f10a2ce61f60eb4845f18205e29" }
+
+anyhow = "1"
+bytes = "1"
+clap = { version = "4", features = ["derive"] }
+openh264 = { version = "0.9", features = ["source"] }
+png = "0.18"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+thiserror = "2"
+toml = { version = "1", default-features = false, features = ["std", "parse", "display", "serde"] }
+tokio = { version = "1", features = ["rt", "io-util", "process", "sync", "time", "macros", "fs"] }
+# The Win32 shell; only Windows targets pull it in.
+windows = { version = "0.62", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Graphics_Direct3D",
+    "Win32_Graphics_Direct3D11",
+    "Win32_Graphics_Direct3D_Fxc",
+    "Win32_Graphics_Dxgi",
+    "Win32_Graphics_Dxgi_Common",
+    "Win32_Graphics_Gdi",
+    "Win32_System_Console",
+    "Win32_System_DataExchange",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Memory",
+    "Win32_System_Ole",
+    "Win32_System_Registry",
+    "Win32_System_RemoteDesktop",
+    "Win32_System_StationsAndDesktops",
+    "Win32_System_Threading",
+    "Win32_UI_HiDpi",
+    "Win32_UI_Input_Ime",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
+# The fake server and the stream tests encode and decode real H.264 in
+# debug builds; OpenH264's C at -O0 is too slow for that.
+[profile.dev.package.openh264-sys2]
+opt-level = 3
+[profile.dev.package.gliff-sw]
+opt-level = 3

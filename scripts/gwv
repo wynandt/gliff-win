@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+# gwv: a helper for running gwin-verify on the Linux build machine. The Windows side
+# is gwin-verify.exe run by hand (see docs/development.md).
+#
+#   gwv build                 release-build gwin-verify + gwin-fake-server
+#   gwv doctor                read-only readiness check, one JSON line
+#   gwv clips [frames]        x264 High clips (incl. 3840x2400) into $GWV_CLIPS
+#   gwv run <name> -- <args>  run gwin-verify <args>; keep stdout/stderr/exit
+#                             under $GWV_EVIDENCE/<name>.{jsonl,stderr,exit,cmd}
+#   gwv cleanup               remove this run's scratch ($GWV_SCRATCH) only
+#
+# Env: GWV_RUN (run id, default: UTC timestamp), GWV_EVIDENCE (default
+# <repo>/verify-evidence/$GWV_RUN), GWV_SCRATCH (default /tmp/gwv-$GWV_RUN),
+# GWV_CLIPS (default <repo>/target/clips).
+set -euo pipefail
+
+repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+run_id="${GWV_RUN:-$(date -u +%Y%m%dT%H%M%SZ)}"
+evidence="${GWV_EVIDENCE:-$repo/verify-evidence/$run_id}"
+scratch="${GWV_SCRATCH:-/tmp/gwv-$run_id}"
+clips="${GWV_CLIPS:-$repo/target/clips}"
+bin="$repo/target/release"
+
+cmd="${1:-}"
+shift || true
+case "$cmd" in
+  build)
+    cargo build --manifest-path "$repo/Cargo.toml" --release --locked -p gwin-verify
+    ;;
+  doctor)
+    rev="$(git -C "$repo" rev-parse --short HEAD)"
+    dirty="$(git -C "$repo" status --porcelain -- crates Cargo.toml Cargo.lock | wc -l)"
+    have_bin=false; fresh=false; version=""
+    if [[ -x "$bin/gwin-verify" && -x "$bin/gwin-fake-server" ]]; then
+      have_bin=true
+      version="$("$bin/gwin-verify" --version)"
+      newest_src="$(find "$repo/crates" "$repo/Cargo.lock" -type f -newer "$bin/gwin-verify" -print -quit)"
+      [[ -z "$newest_src" ]] && fresh=true
+    fi
+    encoders="$(ffmpeg -hide_banner -encoders 2>/dev/null || true)"
+    x264=false; [[ "$encoders" == *libx264* ]] && x264=true
+    n_clips=0
+    [[ -d "$clips" ]] && n_clips="$(find "$clips" -name '*.gwclip' | wc -l)"
+    ok=false; $have_bin && $fresh && ok=true
+    printf '{"check":"doctor","ok":%s,"rev":"%s","dirty_files":%s,"binaries":%s,"fresh":%s,"version":"%s","ffmpeg_libx264":%s,"clips":%s,"clips_dir":"%s","evidence":"%s"}\n' \
+      "$ok" "$rev" "$dirty" "$have_bin" "$fresh" "$version" "$x264" "$n_clips" "$clips" "$evidence"
+    $ok
+    ;;
+  clips)
+    "$repo/scripts/make-clips" "$clips" "${1:-300}" 20M
+    ;;
+  run)
+    name="${1:?gwv run <name> -- <gwin-verify args>}"
+    shift
+    [[ "${1:-}" == "--" ]] && shift
+    mkdir -p "$evidence" "$scratch"
+    printf '%q ' "$bin/gwin-verify" "$@" >"$evidence/$name.cmd"
+    echo >>"$evidence/$name.cmd"
+    set +e
+    (cd "$scratch" && "$bin/gwin-verify" "$@") >"$evidence/$name.jsonl" 2>"$evidence/$name.stderr"
+    code=$?
+    set -e
+    echo "$code" >"$evidence/$name.exit"
+    cat "$evidence/$name.jsonl"
+    echo "gwv: exit $code; evidence in $evidence/$name.*" >&2
+    exit "$code"
+    ;;
+  cleanup)
+    # Scratch only: log dirs the checks wrote. Never the evidence, never by
+    # process name (every check exits on its own; ssh children are
+    # kill_on_drop).
+    rm -rf -- "$scratch"
+    echo "gwv: removed $scratch; evidence kept in $evidence" >&2
+    ;;
+  *)
+    sed -n '2,15p' "${BASH_SOURCE[0]}" >&2
+    exit 2
+    ;;
+esac

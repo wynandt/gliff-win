@@ -1,0 +1,179 @@
+#!/usr/bin/env bash
+# Fails when a tracked text file contains vocabulary or personal data that does
+# not belong in the repository.
+#
+# Patterns: scripts/lint-terms.patterns (vocabulary) and
+# scripts/lint-terms.personal.patterns (personal data), both committed. Private names are
+# kept out of the repository: put more patterns, one Perl regex per line, in the
+# file named by $GWIN_LINT_PRIVATE, or else in
+# ${XDG_CONFIG_HOME:-$HOME/.config}/gliff-win/lint-private.patterns. Without that
+# file only the generic patterns run, and a note says so.
+#
+# The three lint files spell vocabulary out, so the vocabulary patterns skip them. The
+# personal-data patterns and the private patterns still scan them, and the self-test
+# below builds its private-looking strings at run time so the files hold none.
+#
+# Usage: scripts/lint-terms             scan the tracked files
+#        scripts/lint-terms --text FILE scan one file (a PR title or body)
+#        scripts/lint-terms --self-test
+set -euo pipefail
+
+root="$(cd "$(dirname "$0")/.." && pwd)"
+lint_files=(scripts/lint-terms scripts/lint-terms.patterns scripts/lint-terms.personal.patterns)
+
+# Prints the pattern files in effect, one path per line.
+pattern_files() {
+  local private="${GWIN_LINT_PRIVATE:-${XDG_CONFIG_HOME:-$HOME/.config}/gliff-win/lint-private.patterns}"
+  echo "$root/scripts/lint-terms.patterns"
+  echo "$root/scripts/lint-terms.personal.patterns"
+  if [[ -f "$private" ]]; then
+    echo "$private"
+  else
+    echo "lint-terms: note: no private pattern file ($private); generic patterns only" >&2
+  fi
+}
+
+# Prints each live pattern of the files given as arguments.
+patterns_of() {
+  local file pattern
+  for file in "$@"; do
+    while IFS= read -r pattern || [[ -n "$pattern" ]]; do
+      [[ -z "$pattern" || "$pattern" == \#* ]] && continue
+      printf '%s\n' "$pattern"
+    done < "$file"
+  done
+}
+
+# lint REPO PATTERN_FILE...: the tracked files of REPO against the patterns. The lint
+# files are left out; lint_self scans them.
+lint() {
+  local repo="$1" status=0 pattern excludes=()
+  shift
+  for pattern in "${lint_files[@]}"; do excludes+=(":(exclude)$pattern"); done
+  while IFS= read -r pattern; do
+    if git -C "$repo" grep -n -I -P -e "$pattern" -- . "${excludes[@]}"; then
+      echo "lint-terms: matched /$pattern/" >&2
+      status=1
+    fi
+  done < <(patterns_of "$@")
+  return "$status"
+}
+
+# lint_self REPO PATTERN_FILE...: the lint files themselves against the personal-data
+# and private patterns (the vocabulary patterns would match the terms they define).
+lint_self() {
+  local repo="$1" status=0 pattern
+  shift
+  while IFS= read -r pattern; do
+    if git -C "$repo" grep -n -I -P -e "$pattern" -- "${lint_files[@]}"; then
+      echo "lint-terms: matched /$pattern/" >&2
+      status=1
+    fi
+  done < <(patterns_of "$@")
+  return "$status"
+}
+
+# Prints an address from its four numbers, so no address is spelled in this file.
+ip() { local IFS=.; echo "$*"; }
+
+# lint_text TEXT_FILE PATTERN_FILE...: one file against the patterns.
+lint_text() {
+  local text="$1" status=0 pattern
+  shift
+  while IFS= read -r pattern; do
+    if grep -n -I -P -e "$pattern" -- "$text"; then
+      echo "lint-terms: matched /$pattern/" >&2
+      status=1
+    fi
+  done < <(patterns_of "$@")
+  return "$status"
+}
+
+# Each line of bad must be caught and each line of good allowed, by the generic
+# patterns plus a private file with one synthetic term. Strings that look like personal
+# data are built from parts, so that lint_self finds nothing in this file.
+self_test() {
+  local dir bad good line private home=alice
+  dir="$(mktemp -d)"
+  trap 'rm -rf "$dir"' RETURN
+  private="$dir/private.patterns"
+  printf '%s\n' '(?i)\bzorbo\b' > "$private"
+  git -C "$dir" init -q
+  bad=(
+    "see docs/history/plan.md"
+    "see docs/evidence/run.txt"
+    "the mockup in docs/design/ux/tabs.png"
+    "logged in docs/decisions.md"
+    "/home/$home/.local/bin/gliff-server"
+    "C:\\Users\\alice\\AppData"
+    "ssh $home@$(ip 192 0 2 7)"
+    "host $(ip 192 168 0 1)"
+    "host $(ip 10 0 0 2)"
+    "host $(ip 172 16 3 4)"
+    "the Zorbo approved it"
+  )
+  good=(
+    "tested on the build machine"
+    "the maintainer approved it"
+    "ssh user@host"
+    "see docs/development.md"
+    "see docs/windows-quirks.md"
+    "/home/user/.local/bin/gliff-server"
+    "C:\\Users\\user\\AppData"
+    "documentation address 192.0.2.2"
+    "a zorbonaut"
+    "the remote machine's package"
+    "scripts/remote/gwin-keys"
+  )
+  for line in "${bad[@]}"; do
+    printf '%s\n' "$line" > "$dir/f.txt"
+    git -C "$dir" add f.txt
+    if lint "$dir" "$root/scripts/lint-terms.patterns" "$root/scripts/lint-terms.personal.patterns" "$private" >/dev/null 2>&1; then
+      echo "lint-terms self-test: not caught: $line" >&2
+      return 1
+    fi
+  done
+  for line in "${good[@]}"; do
+    printf '%s\n' "$line" > "$dir/f.txt"
+    git -C "$dir" add f.txt
+    if ! lint "$dir" "$root/scripts/lint-terms.patterns" "$root/scripts/lint-terms.personal.patterns" "$private" >/dev/null 2>&1; then
+      echo "lint-terms self-test: false positive: $line" >&2
+      return 1
+    fi
+  done
+  # The lint files are scanned too: a private address in one of them must be caught.
+  mkdir -p "$dir/scripts"
+  for line in "host $(ip 192 168 0 1)" "ssh $home@$(ip 10 0 0 2)" "/home/$home/x"; do
+    printf '%s\n' "$line" > "$dir/scripts/lint-terms"
+    git -C "$dir" add scripts/lint-terms
+    if lint_self "$dir" "$root/scripts/lint-terms.personal.patterns" "$private" >/dev/null 2>&1; then
+      echo "lint-terms self-test: not caught in a lint file: $line" >&2
+      return 1
+    fi
+  done
+  echo "lint-terms self-test: ${#bad[@]} caught, ${#good[@]} allowed, 3 caught in a lint file"
+}
+
+case "${1:-}" in
+  --self-test)
+    self_test
+    ;;
+  --text)
+    [[ -f "${2:-}" ]] || { echo "usage: scripts/lint-terms --text FILE" >&2; exit 2; }
+    mapfile -t files < <(pattern_files)
+    lint_text "$2" "${files[@]}"
+    echo "lint-terms: $2 clean"
+    ;;
+  "")
+    mapfile -t files < <(pattern_files)
+    status=0
+    lint "$root" "${files[@]}" || status=1
+    lint_self "$root" "${files[@]:1}" || status=1
+    [[ "$status" == 0 ]] || exit 1
+    echo "lint-terms: clean"
+    ;;
+  *)
+    echo "usage: scripts/lint-terms [--self-test | --text FILE]" >&2
+    exit 2
+    ;;
+esac

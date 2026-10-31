@@ -1,0 +1,5 @@
+# Captured ssh output is compared byte for byte. ssh ends its own messages with CRLF.
+crates/gliff-windows/tests/ssh_corpus/** -text
+# The golden is compared with a string in the source; a checkout that turns
+# its line ends into CRLF (Windows) would never match.
+crates/gliff-windows/src/failure_panel/panel.golden text eol=lf

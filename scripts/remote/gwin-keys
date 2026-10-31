@@ -1,0 +1,476 @@
+#!/usr/bin/env bash
+# gliff-win: the remote machine side of the keyboard and pointer gate.
+#
+# Runs on the remote machine (Hyprland 0.55+, lua config), started by the
+# maintainer. It must NOT be run on a machine where its own keyboard
+# is needed: while it is armed, the remote machine is in a test submap.
+#
+#   gwin-keys arm [--minutes 15]   # enter the test submap and start logging
+#   gwin-keys log [--since N]      # print the log (gwin-verify reads it over ssh)
+#   gwin-keys disarm               # leave the submap, print the log and delete it
+#   gwin-keys selftest             # build machine: checks the lua it would send
+#   gwin-keys focus [--tries N]    # give the wev window the focus; exit 1 when it will not stay
+#   gwin-keys check                # exit 1 unless Hyprland is in the submap this script armed
+#   gwin-keys diag                 # print what Hyprland knows about focus (for the failure log)
+#
+# The submap `gwin-test-<epoch>` has one logging bind per chord of
+# docs/phase4/super-chords.tsv plus the system chords, the probes, the AltGr
+# check, the mouse buttons and the wheel (docs/phase4/gwin-keys.md).
+# A bind runs `gwin-keys _log <what>`, which appends
+# `ts<TAB>n<TAB>what` to $GWIN_KEYS_LOG (default $XDG_RUNTIME_DIR/gwin-keys.log).
+# n counts the log's lines, so a reader asks for what is new by number.
+#
+# Two more streams go to the same log, neither of them a bind:
+#   key:down:<evdev> / key:up:<evdev>  every key event the compositor sees, from
+#       an `input.keyboard.key` subscription (there is no catch-all bind: it
+#       fires on the lone modifier press of every chord, and twice for a plain
+#       key, so it logged noise the judge could not tell from a leak);
+#   typed:<keysym>  what a focused client types, from `wev`, which reads the
+#       keymap the remote sent (a bind resolves keys by the configured layout,
+#       so only a client shows what the remote's layout produced).
+# Hyprland's lua binds are bound with `hyprctl eval 'hl.bind(...)'`. The bind
+# callbacks only exec (the wiki warns that a callback must not block).
+#
+# It disarms on SUPER+SHIFT+F12, on the timer, and with `disarm`. A fresh
+# submap name per arm means a second arm never doubles a bind.
+#
+# The log holds every key pressed on the remote machine while armed, so it is
+# private to the user (mode 0600) and `disarm` deletes it after printing it:
+# keep the printed copy. The timer deletes it too. SUPER+SHIFT+F12 only stops
+# the recording; the log stays until `disarm` prints and deletes it.
+#
+# GWIN_KEYS_CHORDS overrides the chord table path (default: the table next to
+# the repo's scripts, then ~/gwin-p4/super-chords.tsv).
+set -uo pipefail
+umask 077
+
+SELF=$(readlink -f "${BASH_SOURCE[0]}")
+RUN_DIR=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}
+# Over ssh there is no desktop environment: pick the newest Hyprland instance.
+if [ -z "${HYPRLAND_INSTANCE_SIGNATURE:-}" ] && [ -d "$RUN_DIR/hypr" ]; then
+  HYPRLAND_INSTANCE_SIGNATURE=$(ls -1t "$RUN_DIR/hypr" 2>/dev/null | head -1)
+  export HYPRLAND_INSTANCE_SIGNATURE
+fi
+LOG=${GWIN_KEYS_LOG:-$RUN_DIR/gwin-keys.log}
+STATE=${GWIN_KEYS_STATE:-$RUN_DIR/gwin-keys.state}
+MINUTES=15
+
+chord_table() {
+  local c
+  for c in "${GWIN_KEYS_CHORDS:-}" "$(dirname "$SELF")/../../docs/phase4/super-chords.tsv" "$HOME/gwin-p4/super-chords.tsv"; do
+    [ -n "$c" ] && [ -r "$c" ] && { printf '%s\n' "$c"; return 0; }
+  done
+  return 1
+}
+
+# The binds, one per line: "release|press<TAB>keys<TAB>what", where keys is
+# the lua key string and what is the name that goes in the log.
+bind_list() {
+  local table n chord keys rest
+  table=$(chord_table) || { echo "no super-chords.tsv (set GWIN_KEYS_CHORDS)" >&2; return 1; }
+  while IFS=$'\t' read -r n chord _; do
+    [ "$n" = "n" ] && continue
+    [ -z "$n" ] && continue
+    if [ "$chord" = "SUPER alone" ]; then
+      printf 'release\tSUPER + SUPER_L\tSUPER alone\n'
+    else
+      keys=${chord//+/ + }
+      printf 'press\t%s\t%s\n' "$keys" "$chord"
+    fi
+  done <"$table"
+  # The system chords Windows would act on.
+  printf 'press\tALT + Tab\tALT+Tab\n'
+  printf 'press\tALT + F4\tALT+F4\n'
+  printf 'press\tALT + space\tALT+Space\n'
+  printf 'press\tALT + Escape\tALT+Escape\n'
+  printf 'press\tCTRL + Escape\tCTRL+Escape\n'
+  printf 'press\tCTRL + SHIFT + Escape\tCTRL+SHIFT+Escape\n'
+  printf 'press\tPrint\tPrint\n'
+  # Five Shifts, by release. (A CTRL or ALT release bind cannot work in a chord:
+  # Hyprland shadows a release bind while another modifier is still held.)
+  printf 'release\tSHIFT + Shift_L\tSHIFT\n'
+  # The release chords' last keys must never reach the remote machine.
+  printf 'press\tHome\tHome\n'
+  printf 'press\tCTRL + ALT + Home\tCTRL+ALT+Home\n'
+  printf 'press\tescape\tEscape\n'
+  printf 'press\tSHIFT + escape\tSHIFT+Escape\n'
+  # AltGr, plain keys and the lock check.
+  printf 'press\tCTRL + Q\tCTRL+Q\n'
+  printf 'press\tSUPER + L\tSUPER+L\n'
+  printf 'press\tA\tA\n'
+  printf 'press\tB\tB\n'
+  # F10 probes: a stuck modifier names itself.
+  printf 'press\tF10\tprobe:none\n'
+  printf 'press\tSHIFT + F10\tprobe:shift\n'
+  printf 'press\tCTRL + F10\tprobe:ctrl\n'
+  printf 'press\tALT + F10\tprobe:alt\n'
+  printf 'press\tSUPER + F10\tprobe:super\n'
+  # Mouse: 272-274 left, right, middle; 275 and 276 are BTN_SIDE and BTN_EXTRA
+  # (--side-buttons linux-mouse); 277 and 278 are BTN_FORWARD and BTN_BACK
+  # (the default, as upstream).
+  local b
+  for b in 272 273 274 275 276 277 278; do
+    printf 'press\tmouse:%s\tmouse:%s\n' "$b" "$b"
+  done
+  printf 'press\tmouse_up\twheel:up\n'
+  printf 'press\tmouse_down\twheel:down\n'
+  printf 'press\tmouse_left\twheel:left\n'
+  printf 'press\tmouse_right\twheel:right\n'
+}
+
+# A lua string literal: a backslash and a double quote are escaped.
+lua_string() {
+  local text=${1//\\/\\\\}
+  printf '"%s"' "${text//\"/\\\"}"
+}
+
+# $1 as one word for sh (Hyprland runs an exec command through it): in single
+# quotes, with each single quote written as '\''.
+sh_quote() {
+  printf "'%s'" "${1//\'/\'\\\'\'}"
+}
+
+# One `hl.bind(...)` line for a bind-list entry.
+lua_bind() {
+  local kind=$1 keys=$2 what=$3 flags=""
+  [ "$kind" = release ] && flags=", { release = true }"
+  printf 'hl.bind(%s, hl.dsp.exec_cmd(%s)%s)\n' \
+    "$(lua_string "$keys")" "$(lua_string "$(sh_quote "$SELF") _log $(sh_quote "$what")")" "$flags"
+}
+
+# The lua chunk for submap $1 that arms everything. The disarm bind resets the
+# submap itself, then asks the script to clean up, so it works even when the
+# script cannot run.
+arm_lua() {
+  local sub=$1 kind keys what
+  printf 'hl.define_submap(%s, function()\n' "$(lua_string "$sub")"
+  while IFS=$'\t' read -r kind keys what; do
+    lua_bind "$kind" "$keys" "$what"
+  done < <(bind_list)
+  printf 'hl.bind("SUPER + SHIFT + F12", function()\n'
+  printf '  hl.dispatch(hl.dsp.submap("reset"))\n'
+  printf '  hl.dispatch(hl.dsp.exec_cmd(%s))\n' "$(lua_string "$(sh_quote "$SELF") _disarmed")"
+  printf 'end)\n'
+  printf 'end)\n'
+  tap_lua
+}
+
+# The raw key tap. A global handle lets the next chunk remove it again. A press
+# and a release are logged, a repeat is not. The code is evdev (the event's is
+# the xkb code, 8 more). `_key` does nothing when nothing is armed.
+tap_lua() {
+  printf 'if gwin_keys_tap then gwin_keys_tap:remove() end\n'
+  printf 'gwin_keys_tap = hl.on("input.keyboard.key", function(code, _, state)\n'
+  printf '  if state == 2 then return end\n'
+  printf '  hl.dispatch(hl.dsp.exec_cmd(%s .. (state == 1 and "down" or "up") .. " " .. (code - 8)))\n' \
+    "$(lua_string "$(sh_quote "$SELF") _key ")"
+  printf 'end)\n'
+}
+
+# The lua that takes the key tap off again. Run on its own: it must work even
+# when the unbinds fail.
+untap_lua() {
+  printf 'if gwin_keys_tap then gwin_keys_tap:remove() gwin_keys_tap = nil end\n'
+}
+
+# The lua that takes submap $1's binds out again (best effort: the binds are
+# inert once the submap is left, and a new arm uses a new submap name).
+unbind_lua() {
+  local sub=$1 kind keys what
+  printf 'hl.define_submap(%s, function()\n' "$(lua_string "$sub")"
+  while IFS=$'\t' read -r kind keys what; do
+    printf 'hl.unbind(%s)\n' "$(lua_string "$keys")"
+  done < <(bind_list)
+  printf 'hl.unbind("SUPER + SHIFT + F12")\nend)\n'
+}
+
+# Deletes the log and its lock file.
+delete_log() { rm -f "$LOG" "$LOG.lock"; }
+
+# Appends one log line under a lock; n is the line count after it.
+log_line() {
+  local what=$1 ts n
+  mkdir -p "$(dirname "$LOG")"
+  (
+    flock 9
+    n=$(($(wc -l <"$LOG" 2>/dev/null || echo 0) + 1))
+    ts=$(date +%H:%M:%S.%3N)
+    printf '%s\t%s\t%s\n' "$ts" "$n" "$what" >>"$LOG"
+  ) 9>>"$LOG.lock"
+}
+
+# `mouse:272` becomes `mouse:272 x,y`: the cursor relative to the gliff
+# output, in the output's logical pixels (what the remote's pointer is in).
+cursor_relative() {
+  local pos mon
+  pos=$(hyprctl -j cursorpos 2>/dev/null) || return 1
+  mon=$(hyprctl -j monitors all 2>/dev/null) || return 1
+  python3 -c '
+import json, sys
+c = json.loads(sys.argv[1]); monitors = json.loads(sys.argv[2])
+m = next((m for m in monitors if m["name"].startswith("gliff-")), None)
+if m is None:
+    sys.exit(1)
+print("%g,%g" % (c["x"] - m["x"], c["y"] - m["y"]))
+' "$pos" "$mon"
+}
+
+cmd_log_entry() {
+  local what=$1 rel
+  case "$what" in
+    mouse:*)
+      if rel=$(cursor_relative); then what="$what $rel"; else what="$what unknown"; fi ;;
+  esac
+  log_line "$what"
+}
+
+now_s() { date +%s; }
+
+cmd_arm() {
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --minutes) MINUTES=$2; shift 2 ;;
+      *) echo "arm: unknown argument $1" >&2; exit 2 ;;
+    esac
+  done
+  case "$MINUTES" in '' | *[!0-9]*) echo "arm: --minutes needs a whole number" >&2; exit 2 ;; esac
+  command -v hyprctl >/dev/null || { echo "missing hyprctl" >&2; exit 2; }
+  if [ -e "$STATE" ]; then
+    echo "already armed (state $STATE); run '$0 disarm' first" >&2
+    exit 1
+  fi
+  local sub out lua
+  sub="gwin-test-$(now_s)"
+  lua=$(arm_lua "$sub") || exit 1
+  : >"$LOG"
+  out=$(hyprctl eval "$lua" 2>&1)
+  if [ "$out" != ok ]; then
+    echo "arm FAILED: hyprctl eval said: $out" >&2
+    hyprctl eval "$(untap_lua)" >/dev/null 2>&1
+    exit 1
+  fi
+  printf 'submap=%s\nuntil=%s\n' "$sub" "$(($(now_s) + MINUTES * 60))" >"$STATE"
+  out=$(hyprctl dispatch "hl.dsp.submap(\"$sub\")" 2>&1)
+  if [ "$out" != ok ]; then
+    echo "arm FAILED: entering the submap said: $out" >&2
+    hyprctl eval "$(untap_lua)" >/dev/null 2>&1
+    rm -f "$STATE"
+    exit 1
+  fi
+  # The timer is a separate process; disarm kills it.
+  setsid nohup bash -c 'sleep "$1"; exec "$2" _timer' gwin-keys-timer "$((MINUTES * 60))" "$SELF" >/dev/null 2>&1 &
+  echo "timer=$!" >>"$STATE"
+  if command -v wev >/dev/null; then
+    setsid nohup "$SELF" _typed >/dev/null 2>&1 &
+    echo "typed=$!" >>"$STATE"
+  else
+    echo "no wev: the typed:<keysym> stream is off (layout cases will fail)" >&2
+  fi
+  echo "armed: submap $sub for $MINUTES min; SUPER+SHIFT+F12 or '$0 disarm' ends it; log $LOG"
+}
+
+state_get() { sed -n "s/^$1=//p" "$STATE" 2>/dev/null | head -1; }
+
+# Stops the typed stream (a process group of its own) and the key tap.
+stop_streams() {
+  local typed
+  typed=$(state_get typed)
+  if [ -n "$typed" ]; then
+    kill -- "-$typed" 2>/dev/null || kill "$typed" 2>/dev/null
+  fi
+  hyprctl eval "$(untap_lua)" 2>&1
+}
+
+cmd_disarm() {
+  local sub timer out
+  sub=$(state_get submap)
+  timer=$(state_get timer)
+  [ -n "$timer" ] && kill "$timer" 2>/dev/null
+  out=$(hyprctl dispatch 'hl.dsp.submap("reset")' 2>&1)
+  echo "leave submap: $out"
+  out=$(stop_streams)
+  echo "stop the key tap and the typed stream: $out"
+  if [ -n "$sub" ]; then
+    out=$(hyprctl eval "$(unbind_lua "$sub")" 2>&1)
+    echo "unbind (best effort, the binds are inert outside the submap): $out"
+  fi
+  rm -f "$STATE"
+  echo "disarmed; the log ($LOG) follows and is then deleted:"
+  cat "$LOG" 2>/dev/null
+  delete_log
+  return 0
+}
+
+cmd_log() {
+  local since=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --since) since=$2; shift 2 ;;
+      *) echo "log: unknown argument $1" >&2; exit 2 ;;
+    esac
+  done
+  [ -r "$LOG" ] || exit 0
+  awk -F'\t' -v s="$since" '$2 + 0 > s + 0' "$LOG"
+}
+
+# One key event from the tap: `_key down|up <evdev>`. Only while armed.
+cmd_key() {
+  [ -e "$STATE" ] || return 0
+  log_line "key:$1:$2"
+}
+
+# The typed stream: what a client on the remote machine is given when a key arrives,
+# one `typed:<keysym>` line per key press. wev opens a window that takes the
+# keys no bind consumed. Modifier keysyms are left out. Runs until killed.
+cmd_typed() {
+  command -v wev >/dev/null || exit 0
+  local down=0 line sym
+  # Plain bash, not awk: mawk reads its input in blocks and would hold a line back.
+  stdbuf -oL wev -f wl_keyboard:key 2>/dev/null |
+    while IFS= read -r line; do
+      case "$line" in
+        *"state: 1"*) down=1 ;;
+        *"state: 0"*) down=0 ;;
+        *"sym:"*)
+          [ "$down" = 1 ] || continue
+          sym=${line#*sym:}
+          sym=${sym#"${sym%%[![:space:]]*}"}
+          sym=${sym%%[[:space:]]*}
+          case "$sym" in
+            '' | Shift* | Control* | Alt* | Super* | Meta* | Hyper* | ISO_Level*_Shift | Caps_Lock | Num_Lock | Scroll_Lock | Mode_switch) ;;
+            *) log_line "typed:$sym" ;;
+          esac
+          ;;
+      esac
+    done
+}
+
+# The class of the window that has the focus; empty when there is none.
+active_class() {
+  hyprctl -j activewindow 2>/dev/null | python3 -c '
+import json, sys
+try:
+    w = json.load(sys.stdin)
+except ValueError:
+    w = {}
+print(w.get("class", "") if isinstance(w, dict) else "")'
+}
+
+# What Hyprland says about focus, for a log: the active window and workspace,
+# every workspace, monitor and window, and the scroll bind delay.
+cmd_diag() {
+  local what
+  date '+%F %T.%3N'
+  for what in activewindow activeworkspace workspaces "monitors all" clients; do
+    printf '== hyprctl -j %s\n' "$what"
+    # shellcheck disable=SC2086
+    hyprctl -j $what 2>&1
+    echo
+  done
+  printf '== hyprctl getoption binds:scroll_event_delay\n'
+  hyprctl getoption binds:scroll_event_delay 2>&1
+  printf '== state\n'
+  cat "$STATE" 2>/dev/null || echo "not armed"
+}
+
+# Gives wev the focus. Hyprland leaves a new headless output (and so the
+# gliff session) without an active window, and a pointer that moves onto it
+# does too; the layout cases type into wev, so the harness asks for the focus
+# right before the keys. Dispatches until `hyprctl -j activewindow` says wev,
+# prints what it saw, and on failure prints the diagnosis and exits 1.
+cmd_focus() {
+  local tries=10 i out cls=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --tries) tries=$2; shift 2 ;;
+      *) echo "focus: unknown argument $1" >&2; exit 2 ;;
+    esac
+  done
+  case "$tries" in '' | *[!0-9]* | 0) echo "focus: --tries needs a whole number above 0" >&2; exit 2 ;; esac
+  command -v hyprctl >/dev/null || { echo "missing hyprctl" >&2; exit 2; }
+  for ((i = 1; i <= tries; i++)); do
+    out=$(hyprctl dispatch 'hl.dsp.focus({ window = "class:wev" })' 2>&1)
+    sleep 0.2
+    cls=$(active_class)
+    if [ "$cls" = wev ]; then
+      echo "focus: wev is the active window (try $i)"
+      return 0
+    fi
+  done
+  echo "focus FAILED: after $tries tries the active window is '${cls:-none}'; the last dispatch said: $out"
+  cmd_diag
+  return 1
+}
+
+# Whether Hyprland is in the submap the last arm entered (`hyprctl submap`
+# names the current one, "default" when none). gwin-verify runs it before it
+# starts a client, so a step never runs against a remote machine whose binds are not
+# live. Prints what it saw; exit 1 when they differ or nothing is armed.
+cmd_check() {
+  local sub cur
+  command -v hyprctl >/dev/null || { echo "missing hyprctl" >&2; exit 2; }
+  sub=$(state_get submap)
+  if [ -z "$sub" ]; then
+    echo "check FAILED: not armed (no state file $STATE); run '$0 arm'"
+    return 1
+  fi
+  cur=$(hyprctl submap 2>&1 | head -1)
+  if [ "$cur" = "$sub" ]; then
+    echo "check: the submap $sub is active"
+    return 0
+  fi
+  echo "check FAILED: hyprctl submap says '${cur:-nothing}', the armed submap is '$sub'"
+  return 1
+}
+
+# Runs `disarm` against a stand-in hyprctl: the log must be private while it
+# exists, printed, and gone afterwards.
+selftest_log_deleted() {
+  local dir out mode ok=0
+  dir=$(mktemp -d) || return 1
+  printf '#!/bin/sh\necho ok\n' >"$dir/hyprctl"
+  chmod +x "$dir/hyprctl"
+  export GWIN_KEYS_LOG="$dir/keys.log" GWIN_KEYS_STATE="$dir/keys.state"
+  ( LOG=$GWIN_KEYS_LOG; : >"$LOG"; log_line "typed:secret" )
+  mode=$(stat -c %a "$GWIN_KEYS_LOG")
+  [ "$mode" = 600 ] || { echo "FAIL: the log has mode $mode, want 600"; ok=1; }
+  out=$(PATH="$dir:$PATH" "$SELF" disarm)
+  printf '%s\n' "$out" | grep -q 'typed:secret' || { echo "FAIL: disarm did not print the log"; ok=1; }
+  [ ! -e "$GWIN_KEYS_LOG" ] && [ ! -e "$GWIN_KEYS_LOG.lock" ] || { echo "FAIL: disarm left the log"; ok=1; }
+  unset GWIN_KEYS_LOG GWIN_KEYS_STATE
+  rm -rf "$dir"
+  return "$ok"
+}
+
+# Checks, without hyprctl, that the lua is well formed and complete.
+cmd_selftest() {
+  local lua binds want got bad=0
+  lua=$(arm_lua gwin-test-selftest) || exit 1
+  binds=$(printf '%s\n' "$lua" | grep -c '^hl.bind("[^"]*", hl.dsp.exec_cmd(')
+  want=$(bind_list | wc -l)
+  printf '%s\n' "$lua" | grep -q 'hl.on("input.keyboard.key"' || { echo "FAIL: no key tap"; bad=1; }
+  printf '%s\n' "$lua" | grep -q 'catchall' && { echo "FAIL: a catch-all bind"; bad=1; }
+  [ "$binds" -eq "$want" ] || { echo "FAIL: $binds exec binds, want $want"; bad=1; }
+  printf '%s\n' "$lua" | grep -q 'SUPER + SHIFT + F12' || { echo "FAIL: no disarm bind"; bad=1; }
+  got=$(unbind_lua gwin-test-selftest | grep -c '^hl.unbind(')
+  [ "$got" -eq $(($(bind_list | wc -l) + 1)) ] || { echo "FAIL: $got unbinds"; bad=1; }
+  selftest_log_deleted || bad=1
+  [ "$bad" -eq 0 ] && echo "selftest ok: $binds binds, each unbound again, the log deleted at disarm"
+  return "$bad"
+}
+
+case "${1:-}" in
+  arm) shift; cmd_arm "$@" ;;
+  log) shift; cmd_log "$@" ;;
+  disarm) cmd_disarm ;;
+  selftest) cmd_selftest ;;
+  focus) shift; cmd_focus "$@" ;;
+  diag) cmd_diag ;;
+  check) cmd_check ;;
+  _log) cmd_log_entry "$2" ;;
+  _key) cmd_key "$2" "$3" ;;
+  _typed) cmd_typed ;;
+  _disarmed) log_line "disarmed"; stop_streams >/dev/null; rm -f "$STATE" ;;
+  _timer) log_line "timer"; cmd_disarm >/dev/null ;;
+  *) echo "usage: gwin-keys arm [--minutes N] | log [--since N] | disarm | focus [--tries N] | check | diag | selftest" >&2; exit 2 ;;
+esac

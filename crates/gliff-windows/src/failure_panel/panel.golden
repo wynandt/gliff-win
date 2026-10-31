@@ -1,0 +1,11 @@
+rect 0,0,640,400 r0 #000000
+text 120,82,519,102 "lab-pc did not accept a key from this computer." 16px #ffffff bold
+text 64,108,575,125 "Gliff signs in with your own ssh and keys; it cannot type a password. The" 14px #a2a2a2
+text 68,125,572,142 "key may not be on the machine, may have a passphrase that ssh-agent does" 14px #a2a2a2
+text 145,142,495,159 "not hold, or the machine may allow passwords only." 14px #a2a2a2
+rect 219,177,322,209 r4 #3584e4
+text 239,177,302,209 "Try again" 14px #ffffff bold
+rect 332,177,421,209 r4 #3d3d3d
+text 352,177,401,209 "Details" 14px #ffffff
+text 258,223,381,239 "How to set up a key" 13px #78aeed
+line 258,238 381,238 w1 #78aeed

@@ -1,0 +1,25 @@
+# One grouped PR per ecosystem per month keeps this to a few minutes of review.
+# Security updates still arrive immediately and separately (they ignore the schedule).
+# The three upstream gliff crates are pinned by git `rev` in the workspace Cargo.toml
+# on purpose; bump that rev by hand when you want a newer protocol.
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: monthly
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 3
+    groups:
+      cargo-minor-and-patch:
+        update-types: [minor, patch]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns: ["*"]

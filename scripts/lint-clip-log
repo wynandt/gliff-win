@@ -1,0 +1,174 @@
+#!/usr/bin/env python3
+"""Fails when the clipboard log could carry clipboard contents.
+
+The log must never hold what was copied or any file name, path or folder name
+(docs/clipboard.md, "The log"). That is kept by construction: clip_log.rs is the
+one module that writes clipboard lines, and its types hold only numbers,
+durations and fixed words. This check keeps the construction from eroding:
+
+1. A clipboard module (clip_*.rs, clip_*/) other than clip_log writes nothing
+   to the log, the console or a trace by itself: no use of the `logging` module, `println!`,
+   `eprintln!`, `dbg!`, `print!`, `write!(stderr...)` or `tracing::` macro. Its
+   tests are exempt.
+2. In clip_log.rs (above its test code) no type or signature can hold clipboard
+   text: `String`, `&str`, `Path`, `PathBuf`, `OsString`, `OsStr`, `Cow`,
+   `Vec<u8>` and `Bytes` are named nowhere, and `.to_string()`, `.to_owned()`,
+   `.display()`, `to_string_lossy` and `String::` are not called. `&'static str`
+   is fine: it cannot hold run-time data.
+3. The exceptions are marked with a comment on the line before:
+   `// clip-log: mime-name` for a function that takes a `&str` or `&[String]`
+   and answers from the closed table of names, `// clip-log: table` for that
+   table, and `// clip-log: line` for the one `format!` that builds a line.
+   Any other `format!` in clip_log.rs is flagged.
+
+It reads text, not the compiled program, so it is a backstop for review and
+for the sentinel tests in clip_log/tests.rs and clip_engine/tests/logged.rs.
+
+Usage: scripts/lint-clip-log             scan the files git knows
+       scripts/lint-clip-log --self-test
+"""
+
+import os
+import re
+import subprocess
+import sys
+
+SRC = "crates/gliff-windows/src/"
+CLIP_MODULE = re.compile(r"^" + re.escape(SRC) + r"clip_[a-z0-9_]+(\.rs|/)")
+LOG_MODULE = re.compile(r"^" + re.escape(SRC) + r"clip_log(\.rs|/)")
+TEST_FILE = re.compile(r"(^|/)(tests\.rs|tests/)")
+
+SIDE_CHANNELS = re.compile(
+    r"(?<![A-Za-z0-9_])(?:logging(?![A-Za-z0-9_])|writeln?!\s*\(\s*(?:std\s*::\s*io\s*::\s*)?(?:stderr|stdout)|println!|eprintln!|print!|eprint!|dbg!"
+    r"|tracing(?![A-Za-z0-9_])"
+    r"|stderr(?![A-Za-z0-9_])|stdout(?![A-Za-z0-9_]))"
+)
+
+TEXT_TYPES = re.compile(
+    r"(?<![A-Za-z0-9_'])(?:String|OsString|OsStr|PathBuf|Path|Cow|Bytes)(?![A-Za-z0-9_])"
+    r"|&\s*(?:'(?!static(?![A-Za-z0-9_]))[A-Za-z_][A-Za-z0-9_]*\s+)?(?:mut\s+)?str(?![A-Za-z0-9_])"
+    r"|Vec\s*<\s*u8\s*>"
+    r"|\.to_string\(\)|\.to_owned\(\)|\.display\(\)|to_string_lossy|\bString\s*::"
+)
+FORMAT = re.compile(r"(?<![A-Za-z0-9_])format!")
+MARK = re.compile(r"//\s*clip-log:\s*([a-z-]+)")
+TEST_CODE = re.compile(r"^#\[cfg\(test\)\]\npub mod testing", re.M)
+
+STRING = re.compile(r'"(?:[^"\\]|\\.)*"')
+
+
+def code_of(line):
+    """The line without string contents and without a comment."""
+    line = STRING.sub('""', line)
+    return line.split("//", 1)[0]
+
+
+def problems(path, text):
+    found = []
+    if CLIP_MODULE.match(path) and not LOG_MODULE.match(path) and not TEST_FILE.search(path):
+        for number, line in enumerate(text.split("\n"), 1):
+            m = SIDE_CHANNELS.search(code_of(line))
+            if m:
+                found.append(f"{path}:{number}: writes by itself ({m.group(0).strip()}); use clip_log::emit")
+    if path == SRC + "clip_log.rs":
+        cut = TEST_CODE.search(text)
+        lines = (text[: cut.start()] if cut else text).split("\n")
+        previous = ""
+        for number, line in enumerate(lines, 1):
+            mark = MARK.search(previous)
+            mark = mark.group(1) if mark else ""
+            code = code_of(line)
+            if FORMAT.search(code) and mark != "line":
+                found.append(f"{path}:{number}: format! outside the marked line builder")
+            if TEXT_TYPES.search(code) and mark not in ("mime-name", "table"):
+                found.append(f"{path}:{number}: a type that can hold text: {code.strip()}")
+            if line.strip():
+                previous = line
+    return found
+
+
+def git_files():
+    out = subprocess.run(
+        ["git", "ls-files", "--cached", "--others", "--exclude-standard", "--", "*.rs"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    return [f for f in out.split("\n") if f and os.path.exists(f)]
+
+
+SELF_TEST_BAD = {
+    SRC + "clip_win.rs": 'fn f() { logging::line("clipboard: x"); }',
+    SRC + "clip_engine.rs": 'fn f() { println!("{}", 1); }',
+    SRC + "clip_hub/probe.rs": "fn f() { dbg!(1); }",
+    SRC + "clip_files.rs": "fn f() { tracing::info!(1); }",
+    SRC + "clip_files.rs#use": "use crate::logging::line;\nfn f() { line(\"x\"); }",
+    SRC + "clip_files.rs#alias": "use crate::logging as log;",
+    SRC + "clip_files.rs#aliased": "use std::io::stderr as e;",
+    SRC + "clip_files.rs#braced": "use tracing::{warn as w};",
+    SRC + "clip_log.rs#lifetime": "pub struct Event<'a> { name: &'a str }",
+    SRC + "clip_files.rs#write": "fn f() { writeln!(std::io::stderr(), \"{}\", 1); }",
+    SRC + "clip_log.rs": "pub enum Event { Name(String) }",
+    SRC + "clip_log.rs#str": "pub enum Event { Name(&str) }",
+    SRC + "clip_log.rs#path": "pub struct Event { path: PathBuf }",
+    SRC + "clip_log.rs#bytes": "pub struct Event { body: Vec<u8> }",
+    SRC + "clip_log.rs#format": 'fn f() { let s = format!("{}", 1); }',
+    SRC + "clip_log.rs#lossy": "fn f(p: X) { p.to_string_lossy(); }",
+    SRC + "clip_log.rs#unmarked": "fn of(mime: &str) -> Self { Self }",
+    SRC + "clip_log.rs#far": "// clip-log: mime-name\n\nfn a() {}\nfn of(mime: &str) -> Self { Self }",
+}
+
+SELF_TEST_OK = {
+    SRC + "clip_win.rs": 'use crate::clip_log::emit; fn f() { emit(1); } // logging::line',
+    SRC + "clip_win/tests.rs": 'fn f() { println!("x"); }',
+    SRC + "clip_engine/tests/logged.rs": 'fn f() { println!("x"); }',
+    SRC + "app.rs": 'fn f() { logging::line("clipboard: off"); }',
+    SRC + "clip_log.rs": (
+        "// A String in a comment is fine.\n"
+        "pub enum Event { Name(&'static str), N(u32) }\n"
+        'fn d() { f.write_str("String and &str in a literal"); }\n'
+        "// clip-log: mime-name\n"
+        "pub fn of(mime: &str) -> Self { Self }\n"
+        "// clip-log: table\n"
+        "const T: &[&str] = &[];\n"
+        "// clip-log: line\n"
+        'let line = format!("clipboard: {event}");\n'
+        "#[cfg(test)]\npub mod testing { fn r(l: &str) -> String { l.to_owned() } }\n"
+    ),
+}
+
+
+def self_test():
+    failures = []
+    for key, text in SELF_TEST_BAD.items():
+        if not problems(key.split("#")[0], text):
+            failures.append(f"{key} was not flagged")
+    for key, text in SELF_TEST_OK.items():
+        found = problems(key, text)
+        if found:
+            failures.append(f"{key} was flagged: {found}")
+    if failures:
+        for failure in failures:
+            print(f"lint-clip-log self-test: {failure}", file=sys.stderr)
+        return 1
+    print("lint-clip-log: self-test ok")
+    return 0
+
+
+def main():
+    if sys.argv[1:] == ["--self-test"]:
+        return self_test()
+    os.chdir(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    found = []
+    for path in git_files():
+        with open(path, encoding="utf-8") as f:
+            found += problems(path, f.read())
+    if found:
+        print("lint-clip-log: the clipboard log could carry contents:", file=sys.stderr)
+        print("\n".join(found), file=sys.stderr)
+        return 1
+    print("lint-clip-log: ok")
+    return 0
+
+
+sys.exit(main())

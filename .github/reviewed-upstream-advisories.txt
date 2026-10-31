@@ -1,0 +1,4 @@
+# GitHub security advisories of the upstream repository that have been read and
+# found not to affect the pinned revision. One id (GHSA-xxxx-xxxx-xxxx) per line,
+# followed by a comment saying what you checked. scripts/check-upstream-advisories
+# fails on any published upstream advisory that is not listed here.

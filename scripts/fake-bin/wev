@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Build machine stand-in for wev, for scripts/remote/gwin-keys. It prints what
+# `wev -f wl_keyboard:key` prints for a Shift press, a `z` press (and its release)
+# and an AltGr `at`, then waits like wev does until it is killed. It prints the
+# keys only when $GWIN_FAKE_HYPR_DIR/typed exists, so other tests see none.
+[ -e "${GWIN_FAKE_HYPR_DIR:-/nonexistent}/typed" ] || exec sleep 60
+printf '[14:     wl_keyboard] key: serial: 1; time: 100; key: 42; state: 1 (pressed)\n'
+printf '                     sym: Shift_L      (65505), utf8: ""\n'
+printf '[14:     wl_keyboard] key: serial: 2; time: 110; key: 44; state: 1 (pressed)\n'
+printf '                     sym: z            (122), utf8: '"'"'z'"'"'\n'
+printf '[14:     wl_keyboard] key: serial: 3; time: 120; key: 44; state: 0 (released)\n'
+printf '                     sym: z            (122), utf8: '"'"'z'"'"'\n'
+printf '[14:     wl_keyboard] key: serial: 4; time: 130; key: 16; state: 1 (pressed)\n'
+printf '                     sym: at           (64), utf8: '"'"'@'"'"'\n'
+exec sleep 60

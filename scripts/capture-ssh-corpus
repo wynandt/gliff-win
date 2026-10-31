@@ -1,0 +1,98 @@
+#!/usr/bin/env bash
+# Captures real OpenSSH stderr for the connect-diagnostics corpus
+# (crates/gliff-windows/tests/ssh_corpus/<version>/<case>.stderr).
+# The Windows half is scripts/capture-ssh-corpus-windows.ps1.
+#
+# It runs a throwaway sshd on loopback ports 2297 and 2299 as the current user,
+# with its own host keys and a temporary directory, and never reads or writes
+# anything under ~/.ssh. Every ssh call uses `-F /dev/null`. This is a capture
+# tool for test data: it passes options the client itself must never pass.
+#
+#   scripts/capture-ssh-corpus <ssh bindir> <sshd path> <sshd-session path> <sshd-auth path> <outdir>
+#
+# On a host where sshd cannot find its helper programs, set LD_LIBRARY_PATH.
+# The user name and the temporary directory are replaced, so the files hold
+# nothing of the machine they came from.
+set -uo pipefail
+bin=$1 sshd=$2 session=$3 auth=$4 out=$5
+export PATH="$bin:$PATH"
+lab=$(mktemp -d)
+trap 'kill $(cat "$lab"/sshd*.pid 2>/dev/null) 2>/dev/null; rm -rf "$lab"' EXIT
+mkdir -p "$out"
+me=$(id -un)
+
+for k in host host2 good bad bad2 bad3 loose; do
+  ssh-keygen -q -t ed25519 -N "" -f "$lab/$k"
+done
+cat "$lab/good.pub" "$lab/loose.pub" >"$lab/authorized_keys"
+chmod 644 "$lab/loose" # too open on purpose, for the key-file case
+conf() { # <port> <hostkey> <passwords> <max tries>
+  cat >"$lab/sshd$1.conf" <<CONF
+Port $1
+ListenAddress 127.0.0.1
+HostKey $lab/$2
+PidFile $lab/sshd$1.pid
+AuthorizedKeysFile $lab/authorized_keys
+PasswordAuthentication $3
+KbdInteractiveAuthentication no
+UsePAM no
+StrictModes no
+MaxAuthTries $4
+LogLevel ERROR
+SshdSessionPath $session
+SshdAuthPath $auth
+CONF
+  "$sshd" -f "$lab/sshd$1.conf" -E "$lab/sshd$1.log"
+}
+conf 2299 host no 6
+conf 2297 host2 yes 2
+sleep 1
+ssh-keyscan -p 2297 127.0.0.1 2>/dev/null | sed 's/^[^ ]* /[127.0.0.1]:2299 /' >"$lab/kh_other"
+: >"$lab/kh_empty"
+ssh-keyscan -p 2299 127.0.0.1 2>/dev/null | sed 's/^[^ ]* /[127.0.0.1]:2299 /' >"$lab/kh_ok"
+ssh-keyscan -p 2297 127.0.0.1 2>/dev/null | sed 's/^[^ ]* /[127.0.0.1]:2297 /' >"$lab/kh_2297"
+
+# A listener that accepts a connection and closes it at once.
+python3 - "$lab" <<'PY' &
+import socket, sys
+s = socket.socket(); s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+s.bind(("127.0.0.1", 2296)); s.listen(5)
+open(sys.argv[1] + "/closer.up", "w").close()
+while True:
+    c, _ = s.accept(); c.close()
+PY
+closer=$!
+trap 'kill $closer 2>/dev/null; kill $(cat "$lab"/sshd*.pid 2>/dev/null) 2>/dev/null; rm -rf "$lab"' EXIT
+while [[ ! -e "$lab/closer.up" ]]; do sleep 0.1; done
+
+base=(-F /dev/null -T -o BatchMode=yes -o IdentitiesOnly=yes)
+cap() { # <case> <ssh args...>
+  local name=$1
+  shift
+  ssh "${base[@]}" "$@" >/dev/null 2>"$out/$name.stderr"
+  echo "$name: exit $?"
+  sed -i -e "s#$lab#/home/user/.ssh#g" -e "s/\b$me\b/user/g" "$out/$name.stderr"
+}
+good=(-i "$lab/good" -o "UserKnownHostsFile=$lab/kh_ok" -p 2299 127.0.0.1)
+cap refused -i "$lab/good" -o "UserKnownHostsFile=$lab/kh_ok" -p 2298 127.0.0.1 true
+cap name_not_found_unknown -i "$lab/good" a..b true
+cap name_not_found_no_address -o AddressFamily=inet6 -i "$lab/good" nohost.invalid true
+cap timeout -i "$lab/good" -o ConnectTimeout=2 192.0.2.1 true
+cap unreachable -i "$lab/good" -o ConnectTimeout=2 2001:db8::1 true
+cap reset -i "$lab/good" -p 2296 127.0.0.1 true
+cap host_unknown -i "$lab/good" -o "UserKnownHostsFile=$lab/kh_empty" -p 2299 127.0.0.1 true
+cap host_changed -i "$lab/good" -o "UserKnownHostsFile=$lab/kh_other" -p 2299 127.0.0.1 true
+cap key_refused -i "$lab/bad" -o "UserKnownHostsFile=$lab/kh_ok" -p 2299 127.0.0.1 true
+cap key_refused_passwords_on -i "$lab/bad" -o "UserKnownHostsFile=$lab/kh_2297" -p 2297 127.0.0.1 true
+cap key_file_permissions -i "$lab/loose" -o "UserKnownHostsFile=$lab/kh_ok" -p 2299 127.0.0.1 true
+cap too_many_keys -i "$lab/bad" -i "$lab/bad2" -i "$lab/bad3" -o "UserKnownHostsFile=$lab/kh_2297" -p 2297 127.0.0.1 true
+cap missing_key_file_then_refused -i "$lab/nonexistent" -o "UserKnownHostsFile=$lab/kh_ok" -p 2299 127.0.0.1 true
+cap missing_key_file_then_unresolved -i "$lab/nonexistent" a..b true
+cap server_missing_path "${good[@]}" /nonexistent/gliff-server --stdio --headless
+cap server_missing_bare "${good[@]}" gliff-server-not-installed --stdio --headless
+cap server_missing_dash "${good[@]}" "sh -c 'exec /nonexistent/gliff-server --stdio'"
+printf 'Host x\n  NotAnOption yes\n' >"$lab/badconfig"
+ssh -F "$lab/badconfig" x true 2>"$out/bad_config.stderr"
+echo "bad_config: exit $?"
+sed -i -e "s#$lab#/home/user/.ssh#g" -e "s/\b$me\b/user/g" "$out/bad_config.stderr"
+ssh -V 2>"$out/version.txt"

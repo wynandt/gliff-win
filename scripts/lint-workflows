@@ -1,0 +1,112 @@
+#!/usr/bin/env bash
+# Lints .github/workflows with zizmor (security: unpinned actions, script
+# injection, over-broad tokens, cache poisoning) and actionlint (syntax and
+# types). Fails on any finding.
+#
+# Both tools are installed under target/lint-workflows on first use, at pinned
+# versions: zizmor from PyPI by wheel hash (scripts/lint-workflows-requirements.txt),
+# actionlint with `go install` at a fixed tag (Go verifies the module hashes).
+# Needs python3 (with venv), go and the network the first time.
+#
+# zizmor's online checks (a pinned hash must belong to the action's history)
+# run when GH_TOKEN or GITHUB_TOKEN is set; without one they are skipped.
+#
+# Usage: scripts/lint-workflows             lint .github/workflows
+#        scripts/lint-workflows --self-test show that a bad workflow fails the lint
+set -euo pipefail
+
+ACTIONLINT_VERSION=v1.7.12
+
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+tools="${LINT_WORKFLOWS_TOOLS:-$root/target/lint-workflows}"
+zizmor="$tools/venv/bin/zizmor"
+actionlint="$tools/bin/actionlint"
+requirements="$root/scripts/lint-workflows-requirements.txt"
+config="$root/.github/zizmor.yml"
+
+install_tools() {
+  if [[ ! -x "$zizmor" ]] || ! "$zizmor" --version | grep -q "^zizmor $(sed -n 's/^zizmor==\([0-9.]*\).*/\1/p' "$requirements")\$"; then
+    rm -rf "$tools/venv"
+    mkdir -p "$tools"
+    python3 -m venv "$tools/venv"
+    "$tools/venv/bin/python" -m pip install --quiet --disable-pip-version-check \
+      --require-hashes --only-binary :all: -r "$requirements"
+  fi
+  if [[ ! -x "$actionlint" ]] || ! "$actionlint" -version | head -1 | grep -qx "${ACTIONLINT_VERSION#v}"; then
+    mkdir -p "$tools/bin"
+    GOBIN="$tools/bin" go install "github.com/rhysd/actionlint/cmd/actionlint@$ACTIONLINT_VERSION"
+  fi
+}
+
+# lint DIR [offline]: lints DIR/.github/workflows. The online checks run only
+# when a token is set and the caller does not ask for "offline".
+lint() {
+  local dir="$1" flags=()
+  if [[ "${2:-}" == offline || -z "${GH_TOKEN:-}${GITHUB_TOKEN:-}" ]]; then
+    flags+=(--offline)
+  fi
+  local status=0
+  (cd "$dir" && "$actionlint" -color) || status=1
+  (cd "$dir" && "$zizmor" --config "$config" "${flags[@]}" .github/workflows) || status=1
+  return "$status"
+}
+
+self_test() {
+  local dir
+  dir="$(mktemp -d)"
+  trap 'rm -rf "$dir"' RETURN
+  git -C "$dir" init -q
+  mkdir -p "$dir/.github/workflows"
+  local wf="$dir/.github/workflows/t.yml"
+  local pinned=3d3c42e5aac5ba805825da76410c181273ba90b1
+
+  write_good() {
+    cat > "$wf" <<YAML
+name: t
+on: pull_request
+permissions: {}
+jobs:
+  j:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@$pinned # v7.0.1
+        with:
+          persist-credentials: false
+      - env:
+          TITLE: \${{ github.event.pull_request.title }}
+        run: echo "\$TITLE"
+YAML
+  }
+  write_good
+  lint "$dir" offline >/dev/null 2>&1 || {
+    echo "lint-workflows self-test: a clean workflow failed" >&2
+    lint "$dir" offline >&2 || true
+    return 1
+  }
+
+  # An action on a movable tag.
+  write_good
+  sed -i "s|actions/checkout@$pinned # v7.0.1|actions/checkout@v7|" "$wf"
+  if lint "$dir" offline >/dev/null 2>&1; then
+    echo "lint-workflows self-test: an unpinned action passed" >&2
+    return 1
+  fi
+
+  # An expression pasted into a script.
+  write_good
+  sed -i 's|echo "\$TITLE"|echo "${{ github.event.pull_request.title }}"|' "$wf"
+  if lint "$dir" offline >/dev/null 2>&1; then
+    echo "lint-workflows self-test: a template injection passed" >&2
+    return 1
+  fi
+  echo "lint-workflows self-test: ok"
+}
+
+install_tools
+if [[ "${1:-}" == "--self-test" ]]; then
+  self_test
+else
+  lint "$root"
+fi

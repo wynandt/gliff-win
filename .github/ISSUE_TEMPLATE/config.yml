@@ -1,0 +1,9 @@
+# No blank issues; questions go to Discussions.
+blank_issues_enabled: false
+contact_links:
+  - name: Questions, ideas and help
+    url: https://github.com/wynandt/gliff-win/discussions
+    about: Ask here first. Issues are for reproducible bugs only.
+  - name: Gliff itself (the Linux server and client)
+    url: https://github.com/omacom/gliff/issues
+    about: Problems with gliff-server or the Linux client belong upstream.

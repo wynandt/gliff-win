@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# Builds the decode-check clips with libx264 High profile, which (unlike the
+# OpenH264 encoder) reaches the 3840x2400 panel and is closer to the
+# server's Vulkan High-profile stream: one IDR, P frames only, no B frames,
+# one slice per picture, an access unit delimiter before each picture, and
+# level 5.2 (libx264 would pick 6.0 for the panel, which OpenH264 rejects).
+#
+#   scripts/make-clips [out_dir] [frames] [bitrate]
+#
+# Needs ffmpeg with libx264 (build machine only). Writes <out_dir>/<WxH>-x264high.gwclip
+# and prints gwin-verify's JSON line for each.
+set -euo pipefail
+
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+out="${1:-$root/target/clips}"
+frames="${2:-300}"
+bitrate="${3:-20M}"
+sizes=(1920x1080 2560x1440 3840x2400)
+
+command -v ffmpeg >/dev/null || { echo "make-clips: ffmpeg not found" >&2; exit 1; }
+encoders="$(ffmpeg -hide_banner -encoders 2>/dev/null)"
+[[ "$encoders" == *libx264* ]] || { echo "make-clips: ffmpeg lacks libx264" >&2; exit 1; }
+
+cargo build --manifest-path "$root/Cargo.toml" --release --locked -p gwin-verify >&2
+gv="$root/target/release/gwin-verify"
+mkdir -p "$out"
+
+for size in "${sizes[@]}"; do
+  h264="$out/$size-x264high.h264"
+  "$gv" render --size "$size" --frames "$frames" |
+    ffmpeg -hide_banner -loglevel error -y \
+      -f rawvideo -pix_fmt yuv420p -s "$size" -r 60 -i - \
+      -c:v libx264 -profile:v high -level:v 5.2 -preset veryfast -tune zerolatency \
+      -b:v "$bitrate" -maxrate "$bitrate" -bufsize "$bitrate" \
+      -g 1000000 -keyint_min 1000000 -sc_threshold 0 -bf 0 \
+      -x264-params "aud=1:sliced-threads=0:threads=1" \
+      -f h264 "$h264"
+  "$gv" make-clip --size "$size" --annexb "$h264" --out "$out/$size-x264high.gwclip"
+  rm -f "$h264"
+done

@@ -1,0 +1,6 @@
+# One exact stable Rust for local builds, scripts/check, CI and releases.
+# Bump it by hand: see "The Rust toolchain" in docs/development.md.
+[toolchain]
+channel = "1.99.1"
+profile = "minimal"
+components = ["rustfmt", "clippy"]

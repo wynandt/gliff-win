@@ -1,0 +1,21 @@
+n	chord	keys	windows_local_action	notes
+1	SUPER alone	LWin down, LWin up	Start menu opens on release	remote machine bind: bindr SUPER, Super_L (release bind)
+2	SUPER+Return	LWin+Enter	none (Narrator is Win+Ctrl+Enter)	default terminal
+3	SUPER+D	LWin+D	show desktop	
+4	SUPER+E	LWin+E	File Explorer	
+5	SUPER+R	LWin+R	Run dialog	
+6	SUPER+Tab	LWin+Tab	Task View	
+7	SUPER+A	LWin+A	Quick Settings	
+8	SUPER+S	LWin+S	Search	
+9	SUPER+P	LWin+P	Project (display mode)	
+10	SUPER+X	LWin+X	Quick Link menu	
+11	SUPER+V	LWin+V	clipboard history	
+12	SUPER+G	LWin+G	Game Bar	
+13	SUPER+Space	LWin+Space	input language switch	
+14	SUPER+SHIFT+S	LWin+LShift+S	Snipping Tool	
+15	SUPER+Left	LWin+Left	snap window left	extended key (E0 4B)
+16	SUPER+U	LWin+U	Accessibility settings	
+17	SUPER+1	LWin+1	open taskbar app 1	
+18	SUPER+period	LWin+Period	emoji panel	
+19	SUPER+equal	LWin+Equal	Magnifier	
+20	SUPER+CTRL+D	LWin+LCtrl+D	new virtual desktop	

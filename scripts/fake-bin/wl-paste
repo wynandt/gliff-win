@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Build machine stand-in for wl-paste, see wl-copy. Exits 1 like the real one
+# when nothing was copied, or nothing of the `--type` asked for: `text` stands
+# for any text/* type, as in the real one.
+file="${GWIN_FAKE_CLIPBOARD:-/tmp/gwin-fake-clipboard-$(id -u)}"
+want=
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -t | --type) want="$2"; shift ;;
+  esac
+  shift
+done
+[ -e "$file" ] || { echo "Nothing is copied" >&2; exit 1; }
+have="$(cat "$file.type" 2>/dev/null || echo text/plain)"
+case "$want" in
+  "" | "$have") ;;
+  text) [[ "$have" == text/* ]] || want=none ;;
+  *) want=none ;;
+esac
+if [[ "$want" == none ]]; then
+  echo "No suitable type of content copied" >&2
+  exit 1
+fi
+cat "$file"

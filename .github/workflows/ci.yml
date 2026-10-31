@@ -1,0 +1,145 @@
+# CI for gliff-win. It mirrors the local gate in scripts/check:
+#   host job : lint-terms, fmt, clippy -D warnings, tests (Linux, like `scripts/check --host-only`)
+#   msvc job : clippy -D warnings and a release build for x86_64-pc-windows-msvc
+#   windows-test job : the gliff-windows tests on Windows, where the Windows-only code compiles
+#   workflows job : scripts/lint-workflows (zizmor and actionlint) over .github/workflows
+# Every action is pinned to a commit hash (see docs/development.md, "CI and release").
+# Least-privilege token, --locked everywhere, and a PR run is cancelled when you push again.
+# `workflow_call` lets release.yml reuse the same checks.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  host:
+    name: lint, fmt, clippy, test (linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # [U] openh264 is built from source (feature "source") and needs nasm.
+      # Delete this step if the first run shows it is already installed.
+      - name: Install nasm
+        run: sudo apt-get update && sudo apt-get install -y nasm
+
+      # Installs the exact version in rust-toolchain.toml.
+      - name: Install Rust
+        run: rustup toolchain install
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+
+      - name: lint-terms
+        run: |
+          scripts/lint-terms --self-test
+          scripts/lint-terms
+
+      - name: fmt
+        run: cargo fmt --all --check
+
+      - name: clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+      # The default test threads, as scripts/check runs them. The tests that
+      # measure the decoded fps or the process's CPU time hold a lock that keeps
+      # them alone in their binary, and cargo runs one binary at a time
+      # (docs/development.md, "Tests that race").
+      - name: test
+        run: cargo test --workspace --locked
+
+  msvc:
+    name: clippy, build (windows)
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # OpenH264's C and asm sources need nasm; windows-latest does not ship it.
+      # The script installs a pinned version and checks its SHA-256.
+      - name: Install nasm
+        shell: pwsh
+        run: ./scripts/install-nasm-windows.ps1
+
+      # Installs the exact version in rust-toolchain.toml.
+      - name: Install Rust
+        run: rustup toolchain install
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+
+      - name: clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+      # The hidden test flags are compiled only with this feature.
+      - name: clippy (test hooks)
+        run: cargo clippy -p gliff-windows --all-targets --locked --features test-hooks -- -D warnings
+
+      - name: build (release)
+        run: cargo build --release --workspace --locked
+
+  windows-test:
+    name: test (windows)
+    runs-on: windows-latest
+    # The run takes about 5 minutes; a test that waits for a window must not
+    # hold the job for 40.
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # OpenH264's C and asm sources need nasm; windows-latest does not ship it.
+      # The script installs a pinned version and checks its SHA-256.
+      - name: Install nasm
+        shell: pwsh
+        run: ./scripts/install-nasm-windows.ps1
+
+      # Installs the exact version in rust-toolchain.toml.
+      - name: Install Rust
+        run: rustup toolchain install
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+
+      # Only gliff-windows: the gwin-verify tests drive Linux stand-ins (bash,
+      # a fake Hyprland) and run on the Linux job. This runs the Windows-only
+      # code that compiles on Windows alone, such as the registry code of
+      # lockreg.rs. It cannot test the hook, the window or the clipboard
+      # thread, which need a desktop session.
+      - name: test
+        run: cargo test -p gliff-windows --locked
+
+  workflows:
+    name: lint workflows
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # zizmor's online checks (does each pinned hash belong to its action's
+      # history?) need a token that can read public repositories.
+      - name: lint-workflows
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          scripts/lint-workflows --self-test
+          scripts/lint-workflows

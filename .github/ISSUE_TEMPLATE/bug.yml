@@ -1,0 +1,56 @@
+# A short, honest "this is a gift" notice,
+# then only the fields an agent or a human needs to reproduce.
+name: Bug report
+description: Something in gliff-win is broken and you can reproduce it.
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        gliff-win is a free, open source gift from one person. There is no support
+        contract and no guaranteed response time. Good reports with a clear
+        reproduction are the ones that get fixed. Not sure it is a bug? Use
+        [Discussions](https://github.com/wynandt/gliff-win/discussions) instead.
+        Reports written with a tool are welcome; please trim them to what matters.
+  - type: checkboxes
+    attributes:
+      label: Before you submit
+      options:
+        - label: I am on the latest release (or the newest commit of `main`, if there is no release yet) and the problem still happens.
+          required: true
+        - label: I searched existing issues.
+          required: true
+  - type: textarea
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Steps to reproduce
+      placeholder: "1. ...\n2. ...\n3. ..."
+    validations:
+      required: true
+  - type: input
+    attributes:
+      label: gliff-win version
+      placeholder: "e.g. 0.2.0"
+    validations:
+      required: true
+  - type: input
+    attributes:
+      label: Windows version
+      placeholder: "e.g. Windows 11 24H2"
+    validations:
+      required: true
+  - type: input
+    attributes:
+      label: gliff-server version on the Linux machine
+      placeholder: "e.g. 0.4.1"
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: GPU, driver and logs
+      description: Paste relevant log output. Remove hostnames, usernames and IP addresses first.
+      render: shell

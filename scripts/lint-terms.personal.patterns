@@ -1,0 +1,9 @@
+# Personal data that must not appear anywhere in the repository, not even in the lint
+# files that spell vocabulary out (scripts/lint-terms scans itself and the two pattern files
+# with this file and the private one). One Perl-compatible regex per line.
+# A home directory of a real user, a private address, a login at a host or address.
+/home/(?!user/)[A-Za-z0-9_-]+/
+(?i)\\Users\\(?!user\\|Public\\)[A-Za-z0-9_-]+\\
+\b(10\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}|192\.168\.[0-9]{1,3}\.[0-9]{1,3}|172\.(1[6-9]|2[0-9]|3[01])\.[0-9]{1,3}\.[0-9]{1,3})\b
+\b(?!user@)[a-z][a-z0-9_-]*@[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}
+

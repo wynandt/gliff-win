@@ -1,0 +1,152 @@
+#!/usr/bin/env bash
+# Build machine stand-in for hyprctl, reached through scripts/fake-ssh. Answers only
+# what `gwin-verify stream` asks (`-j monitors all`, `-j clients`) from the
+# JSON gwin-fake-server writes to $GWIN_FAKE_HYPR_DIR; without it, the home
+# monitor and no windows.
+#
+# It models how the real hyprctl finds Hyprland (hyprwm/Hyprland
+# hyprctl/src/main.cpp, getRuntimeDir and main): the instance comes from
+# HYPRLAND_INSTANCE_SIGNATURE, which a non-interactive ssh does not have;
+# without it hyprctl prints "HYPRLAND_INSTANCE_SIGNATURE not set! (is
+# hyprland running?)" on stdout (not stderr) and exits 1. With it, the
+# socket is ${XDG_RUNTIME_DIR:-/run/user/<uid>}/hypr/<sig>/.socket.sock;
+# no listener there is "Couldn't connect to <path>. (4)", exit 4. A
+# `.dead` file in the instance dir stands for a socket nobody listens on.
+#
+# Window world (for scripts/remote/gwin-pattern on the build machine): when
+# $GWIN_FAKE_HYPR_DIR/windows/ exists, `-j clients` is built from the
+# window files in it (one JSON object per window, written by
+# scripts/fake-bin/ffplay) instead of clients.json, and `dispatch` takes
+# the three calls the script makes. Geometry follows Hyprland: monitors
+# report the physical mode in width/height plus a scale, and windows live
+# in logical pixels, so a fullscreen window is the monitor's mode / scale
+# at the monitor's position (it follows a mode change by itself); a
+# window that is not fullscreen is 1280x720 at the monitor's position;
+# moving a window to another monitor drops fullscreen; a window whose
+# monitor is gone falls back to the first one. A `stuck` file in
+# $GWIN_FAKE_HYPR_DIR makes moves answer "ok" and do nothing.
+set -euo pipefail
+all="$*"
+dir="${GWIN_FAKE_HYPR_DIR:-}"
+if [[ -z "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]]; then
+  printf 'HYPRLAND_INSTANCE_SIGNATURE not set! (is hyprland running?)\n\n'
+  exit 1
+fi
+runtime="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/hypr"
+instance="$runtime/$HYPRLAND_INSTANCE_SIGNATURE"
+if [[ ! -S "$instance/.socket.sock" && ! -f "$instance/.socket.sock" ]] || [[ -e "$instance/.dead" ]]; then
+  printf "Couldn't connect to %s. (4)\n" "$instance/.socket.sock"
+  exit 4
+fi
+world="$dir/windows"
+if [[ -n "$dir" && -d "$world" ]]; then
+  case "$*" in
+    "-j clients" | "dispatch "*)
+      exec python3 - "$dir" "$*" <<'PY'
+import json, os, re, sys
+d, args = sys.argv[1], sys.argv[2]
+world = os.path.join(d, "windows")
+try:
+    with open(os.path.join(d, "monitors.json")) as f:
+        monitors = json.load(f)
+except FileNotFoundError:
+    monitors = [{"id": 0, "name": "eDP-1", "width": 2560, "height": 1600, "x": 0, "y": 0, "scale": 1.0}]
+def windows():
+    for name in sorted(os.listdir(world)):
+        path = os.path.join(world, name)
+        try:
+            with open(path) as f:
+                yield path, json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            pass
+def on(w):
+    return next((m for m in monitors if m["id"] == w["monitor"]), monitors[0])
+if args == "-j clients":
+    out = []
+    for _, w in windows():
+        m = on(w)
+        s = m.get("scale") or 1.0
+        size = [round(m["width"] / s), round(m["height"] / s)] if w["fullscreen"] else [1280, 720]
+        out.append({"title": w["title"], "monitor": m["id"], "at": [m["x"], m["y"]],
+                    "size": size, "fullscreen": w["fullscreen"]})
+    print(json.dumps(out))
+    sys.exit(0)
+call = args[len("dispatch "):]
+title = re.search(r'window = "title:([^"]*)"', call)
+def each(change):
+    for path, w in windows():
+        if title and w["title"] == title.group(1):
+            change(w)
+            with open(path + ".tmp", "w") as f:
+                json.dump(w, f)
+            os.replace(path + ".tmp", path)
+if call.startswith("hl.dsp.dpms("):
+    print("ok")
+elif call.startswith("hl.dsp.window.move("):
+    name = re.search(r'monitor = "([^"]*)"', call).group(1)
+    target = next((m for m in monitors if m["name"] == name), None)
+    if target is None:
+        print(f"monitor {name} not found")
+        sys.exit(0)
+    if not os.path.exists(os.path.join(d, "stuck")):
+        each(lambda w: w.update(monitor=target["id"], fullscreen=0))
+    print("ok")
+elif call.startswith("hl.dsp.window.fullscreen(") and 'action = "set"' in call:
+    each(lambda w: w.update(fullscreen=2))
+    print("ok")
+else:
+    print(f"fake hyprctl: unsupported dispatch: {call}", file=sys.stderr)
+    sys.exit(2)
+PY
+      ;;
+  esac
+fi
+case "$*" in
+  "-j monitors all" | "-j monitors")
+    if [[ -n "$dir" && -f "$dir/monitors.json" ]]; then cat "$dir/monitors.json"; else
+      echo '[{"id":0,"name":"eDP-1","width":2560,"height":1600,"x":0,"y":0,"scale":1.0}]'; fi ;;
+  "-j clients")
+    if [[ -n "$dir" && -f "$dir/clients.json" ]]; then cat "$dir/clients.json"; else echo '[]'; fi ;;
+  # For scripts/remote/gwin-keys: `eval` keeps each lua chunk in evals/ (the
+  # test replays the exec binds from it) and fails like Hyprland when a
+  # `$GWIN_FAKE_HYPR_DIR/eval-fails` file is there (only a chunk that defines
+  # a submap fails, so the chunk that takes the key tap off still runs); submap dispatches are
+  # logged; the cursor comes from cursor.json.
+  "eval "*)
+    if [[ -n "$dir" && -e "$dir/eval-fails" && "$all" == *define_submap* ]]; then echo "lua error: fake"; else
+      mkdir -p "$dir/evals"
+      printf '%s\n' "${all#eval }" >"$dir/evals/$(date +%s%N).lua"
+      echo ok
+    fi
+    exit 0 ;;
+  'dispatch hl.dsp.submap("'*)
+    printf '%s\n' "${all#dispatch }" >>"$dir/submaps.log"
+    echo ok
+    exit 0 ;;
+  # `gwin-keys focus`: a focus dispatch makes wev the active window unless
+  # `$GWIN_FAKE_HYPR_DIR/focus-fails` is there (a compositor that gave the focus
+  # to nothing).
+  'dispatch hl.dsp.focus('*)
+    if [[ -e "$dir/focus-fails" ]]; then echo ok; else
+      echo '{"class":"wev","title":"Wayland Event Viewer"}' >"$dir/activewindow.json"
+      echo ok
+    fi
+    exit 0 ;;
+  # `gwin-keys check`: the submap the last submap dispatch entered ("reset" is
+  # the default one); `$GWIN_FAKE_HYPR_DIR/submap-stuck` keeps it on default.
+  "submap")
+    last=""
+    if [[ -n "$dir" && -f "$dir/submaps.log" && ! -e "$dir/submap-stuck" ]]; then
+      last=$(tail -1 "$dir/submaps.log" | sed -E 's/.*submap\("([^"]*)"\).*/\1/')
+    fi
+    if [[ -z "$last" || "$last" == reset ]]; then echo default; else echo "$last"; fi ;;
+  "-j activewindow")
+    if [[ -n "$dir" && -f "$dir/activewindow.json" ]]; then cat "$dir/activewindow.json"; else echo '{}'; fi ;;
+  "-j activeworkspace") echo '{"id":1,"name":"1","windows":0}' ;;
+  "-j workspaces") echo '[{"id":1,"name":"1","windows":0}]' ;;
+  "getoption binds:scroll_event_delay") echo 'int: 300' ;;
+  "-j cursorpos")
+    if [[ -n "$dir" && -f "$dir/cursor.json" ]]; then cat "$dir/cursor.json"; else echo '{"x":0,"y":0}'; fi ;;
+  *) echo "fake hyprctl: unsupported: $*" >&2; exit 2 ;;
+esac
+echo

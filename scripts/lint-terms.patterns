@@ -1,0 +1,11 @@
+# Terms that must not appear in tracked files (scripts/lint-terms).
+# One Perl-compatible regex per line; blank lines and lines starting with # are ignored.
+# Keep each pattern narrow: plain English uses must stay legal.
+# These patterns are generic. Names that are private to a contributor live in
+# an optional file outside the repository (see the header of scripts/lint-terms).
+
+# Paths of documents that are not in this repository, so a link to one is dead.
+docs/(history|evidence|design)/|docs/decisions\.(md|tsv)\b
+
+# Personal data (a home directory, a private address, a login at an address): see
+# scripts/lint-terms.personal.patterns, which is also scanned inside the lint files.

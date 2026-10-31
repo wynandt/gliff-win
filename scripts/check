@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+# The gate: everything must pass before a commit lands.
+#   terms: scripts/lint-terms (self-test, then the tracked files)
+#   ssh:   scripts/lint-ssh (no weakened ssh option or key tool in the sources)
+#   registry: scripts/lint-registry (needs Python 3; only the registry modules may touch the registry)
+#   clip-log: scripts/lint-clip-log (the clipboard log can hold no clipboard contents)
+#   host:  cargo fmt --check, clippy -D warnings, tests
+#   workflows: scripts/lint-workflows (zizmor and actionlint; installs pinned copies under target/)
+#   msvc:  cargo xwin clippy -D warnings and build for x86_64-pc-windows-msvc
+# Usage: scripts/check [--host-only]
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+# clang-cl (for OpenH264's C sources under cargo-xwin) lives here on the build machine.
+if [[ -d /usr/lib/llvm-19/bin ]]; then
+  export PATH="/usr/lib/llvm-19/bin:$PATH"
+fi
+
+# scripts/lint-registry is a Python 3 program.
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "python3 not found: install Python 3 (see docs/development.md)" >&2
+  exit 1
+fi
+
+step() { printf '\n== %s\n' "$*"; }
+
+step "lint-terms"
+scripts/lint-terms --self-test
+scripts/lint-terms
+
+step "lint-ssh"
+scripts/lint-ssh --self-test
+scripts/lint-ssh
+
+step "lint-registry"
+scripts/lint-registry --self-test
+scripts/lint-registry
+
+step "lint-clip-log"
+scripts/lint-clip-log --self-test
+scripts/lint-clip-log
+
+step "fmt"
+cargo fmt --all -- --check
+
+step "clippy (host)"
+cargo clippy --workspace --all-targets --locked -- -D warnings
+
+step "test (host)"
+cargo test --workspace --locked
+
+step "lint-workflows"
+scripts/lint-workflows --self-test
+scripts/lint-workflows
+
+if [[ "${1:-}" == "--host-only" ]]; then
+  echo "skipped msvc steps (--host-only)"
+  exit 0
+fi
+
+for tool in cargo-xwin clang-cl nasm; do
+  command -v "$tool" >/dev/null || { echo "missing $tool for the msvc build" >&2; exit 1; }
+done
+
+step "clippy (x86_64-pc-windows-msvc)"
+cargo xwin clippy --workspace --all-targets --locked --target x86_64-pc-windows-msvc -- -D warnings
+
+step "clippy, test hooks (x86_64-pc-windows-msvc)"
+cargo xwin clippy -p gliff-windows --all-targets --locked --target x86_64-pc-windows-msvc --features test-hooks -- -D warnings
+
+step "build --release (x86_64-pc-windows-msvc)"
+cargo xwin build --workspace --release --locked --target x86_64-pc-windows-msvc
+
+echo
+echo "check: all green"

@@ -1,0 +1,8 @@
+C:\\Windows\\win.ini: line 1: Bad configuration option: ;
+C:\\Windows\\win.ini line 2: no argument after keyword "[fonts]"
+C:\\Windows\\win.ini line 3: no argument after keyword "[extensions]"
+C:\\Windows\\win.ini: line 4: Bad configuration option: [mci
+C:\\Windows\\win.ini line 5: no argument after keyword "[files]"
+C:\\Windows\\win.ini line 6: no argument after keyword "[mail]"
+C:\\Windows\\win.ini: line 7: Bad configuration option: mapi
+C:\\Windows\\win.ini: terminating, 7 bad configuration options

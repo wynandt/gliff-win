@@ -1,0 +1,7 @@
+# zizmor configuration (scripts/lint-workflows). Every action, including the
+# actions/* ones, must be pinned to a full commit hash.
+rules:
+  unpinned-uses:
+    config:
+      policies:
+        "*": hash-pin

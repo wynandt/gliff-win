@@ -1,0 +1,287 @@
+#!/usr/bin/env bash
+# gliff-win: put the known test pattern on the headless output that a
+# gliff-windows session creates, keep it there, and prove where it landed.
+#
+# Runs on the remote machine (Hyprland), started BEFORE the
+# Windows machine runs gwin-verify; it waits for the output to appear.
+#
+#   gwin-pattern follow [--output NAME]        # present gate: any size, follows Resizes
+#   gwin-pattern place [WxH] [--output NAME]   # stream gate: one mode, default 3840x2400
+#   gwin-pattern graph WxH                     # print the lavfi source (build machine checks)
+#   gwin-pattern cleanup                       # stop any pattern window it left
+#
+# The pattern is pattern.rs in gwin-verify: the top 4/5 is an 8x4 grid of
+# the 32 PALETTE colours, the bottom 1/5 a black strip with a white square
+# that moves every frame at 60 fps, so the damage-driven server has a new
+# frame for every 60 fps capture (a static desktop gives it almost none:
+# seen in a real run). It is drawn 960 px wide
+# at the output's logical aspect and scaled up fullscreen (ffplay
+# letterboxes any other aspect, which would move every cell); the check
+# compares only the inner 70% of each cell, as fractions of the picture.
+#
+# Sizes: upstream makes the output's mode the client's requested size and
+# applies the scale on top (gliff-server session.rs:625-650, hypr-ipc
+# lib.rs:179-209), so `hyprctl monitors` reports width/height = that mode
+# and scale = the client's; windows on it are mode / scale in logical px.
+# A Resize of 3840x2400 at 2.0 is a 3840x2400 mode, a 1920x1200 window.
+# The first mode is clamped (at most 1920x1080 at 1.0, session.rs:1579-1600)
+# until the client's first Resize. `place WxH` waits for the mode WxH;
+# `follow` takes the first gliff-* output at any mode and re-places on
+# every change. Real runs showed that ffplay opens on the
+# home monitor even when the headless output is focused, so the window is
+# moved to the output and fullscreened there explicitly, then verified with
+# `hyprctl clients -j` (it must cover the output's logical size). Every 5 s
+# while the output exists it re-verifies, re-placing the window if it
+# drifted. It prints PLACEMENT OK or PLACEMENT FAILED each time and exits
+# (closing ffplay) when the output goes away at the end of the run: 0 only
+# if every check was OK. `place` also fails on a mode change; `follow`
+# re-places for it.
+#
+# GWIN_PATTERN_TITLE (default gwin-pattern) is the window title, which is also
+# what `cleanup` stops: it kills every process on the machine whose command
+# line holds that title.
+# GWIN_PATTERN_WAIT_S (default 120) bounds the wait for the output;
+# GWIN_PATTERN_SETTLE_S (default 1.5) is the pause after placing.
+set -uo pipefail
+
+PALETTE=(000000 000080 0000ff 008000 008080 0080ff 00ff00 00ff80 00ffff 800000 800080 8000ff 808000 808080 8080ff 80ff00 80ff80 80ffff ff0000 ff0080 ff00ff ff8000 ff8080 ff80ff ffff00 ffff80 ffffff 404040 c0c0c0 ffc000 0040c0 c00040)
+# GWIN_PATTERN_TITLE only lets tests that run several copies at once keep
+# to their own window; a real run leaves it unset.
+TITLE=${GWIN_PATTERN_TITLE:-gwin-pattern}
+LOG_DIR="$HOME/gwin-p2"
+WAIT_S=${GWIN_PATTERN_WAIT_S:-120}
+SETTLE_S=${GWIN_PATTERN_SETTLE_S:-1.5}
+# Source width; the height follows the output's aspect.
+SOURCE_W=960
+
+# The lavfi graph for a WxH source (no side effects; the build machine checks it with
+# ffmpeg). Same integer maths as pattern::cell_rect.
+pattern_graph() {
+  local w=$1 h=$2 grid=$(($2 * 4 / 5)) g c r i=0 x0 x1 y0 y1
+  g="color=c=black:s=${w}x${h}:r=60,format=rgb24"
+  for r in 0 1 2 3; do
+    for c in 0 1 2 3 4 5 6 7; do
+      x0=$((c * w / 8)); x1=$(((c + 1) * w / 8))
+      y0=$((r * grid / 4)); y1=$(((r + 1) * grid / 4))
+      g+=",drawbox=x=$x0:y=$y0:w=$((x1 - x0)):h=$((y1 - y0)):color=0x${PALETTE[$i]}:t=fill"
+      i=$((i + 1))
+    done
+  done
+  local strip=$((h - grid)) side span step
+  side=$((strip * 3 / 5)); [ "$side" -lt 2 ] && side=2
+  span=$((w - side)); [ "$span" -lt 1 ] && span=1
+  step=$((w / 120)); [ "$step" -lt 1 ] && step=1
+  g+="[bg];color=c=white:s=${side}x${side}:r=60[sq];"
+  g+="[bg][sq]overlay=x='mod(n*${step}\\,${span})':y=$((grid + (strip - side) / 2)):eof_action=repeat[out0]"
+  printf '%s\n' "$g"
+}
+
+hypr_json() { hyprctl -j "$@"; }
+
+# The first output named NAME, or the first gliff-* one, optionally only
+# at mode WxH (hyprctl width x height, physical):
+# "name id lw lh x y mode scale", lw x lh being the logical size.
+find_output() {
+  hypr_json monitors all | python3 -c '
+import json, sys
+want, w, h = sys.argv[1], sys.argv[2], sys.argv[3]
+for m in json.load(sys.stdin):
+    if (want and m["name"] == want) or (not want and m["name"].startswith("gliff-")):
+        s = m.get("scale", 1.0) or 1.0
+        lw, lh = round(m["width"] / s), round(m["height"] / s)
+        if w and (m["width"], m["height"]) != (int(w), int(h)):
+            continue
+        print(m["name"], m["id"], lw, lh, m["x"], m["y"], "%dx%d" % (m["width"], m["height"]), s)
+        break
+' "$1" "${2:-}" "${3:-}"
+}
+
+# Move the pattern window onto output NAME and fullscreen it there.
+place_window() {
+  local name=$1
+  echo "move: $(hyprctl dispatch "hl.dsp.window.move({ monitor = \"$name\", follow = false, window = \"title:$TITLE\" })")"
+  echo "fullscreen: $(hyprctl dispatch "hl.dsp.window.fullscreen({ mode = \"fullscreen\", action = \"set\", window = \"title:$TITLE\" })")"
+  sleep "$SETTLE_S"
+}
+
+# "monitor at_x at_y w h fullscreen" for each window titled TITLE.
+window_state() {
+  hypr_json clients | python3 -c '
+import json, sys
+for c in json.load(sys.stdin):
+    if c.get("title") == sys.argv[1]:
+        print(c["monitor"], c["at"][0], c["at"][1], c["size"][0], c["size"][1], c.get("fullscreen"))
+' "$TITLE"
+}
+
+# Judges the window against the output as last read ($out, $name). Returns
+# 0 for PLACEMENT OK, 1 for PLACEMENT FAILED, and 2 when the output changed
+# while the window was read: the window follows the output by itself (and the
+# fake one instantly), so a window read after a Resize does not match the
+# size the caller expected, and that is the Resize, not a misplacement. Return
+# 2 prints no verdict; the run loop sees the change next and re-places.
+verify() {
+  local id=$1 lw=$2 lh=$3 x=$4 y=$5 state now
+  state=$(window_state)
+  # Read the output after the window, so a change at any point up to here
+  # shows. An output that is gone is a change too (the run is over).
+  now=$(find_output "$name")
+  if [ "$now" != "$out" ]; then
+    echo "(the output changed under that check; not judged)"; return 2
+  fi
+  if [ "$(printf '%s\n' "$state" | grep -c .)" -ne 1 ]; then
+    echo "PLACEMENT FAILED: want one $TITLE window, got: ${state:-none}"; return 1
+  fi
+  read -r m ax ay sw sh fs <<<"$state"
+  if [ "$m" = "$id" ] && [ "$ax" = "$x" ] && [ "$ay" = "$y" ] \
+    && [ $((sw - lw)) -ge -1 ] && [ $((sw - lw)) -le 1 ] \
+    && [ $((sh - lh)) -ge -1 ] && [ $((sh - lh)) -le 1 ]; then
+    echo "PLACEMENT OK: monitor $m at $ax,$ay size ${sw}x${sh} fullscreen=$fs"
+  else
+    echo "PLACEMENT FAILED: window monitor $m at $ax,$ay size ${sw}x${sh} fullscreen=$fs; want monitor $id at $x,$y size ${lw}x${lh}"
+    return 1
+  fi
+}
+
+# verify for the current output; a miss counts as a failure, a change under
+# the check does not.
+check_placement() {
+  verify "$id" "$lw" "$lh" "$x" "$y"
+  [ $? -ne 1 ] || failed=1
+}
+
+cleanup() {
+  # The title is followed by a space on ffplay's command line, so another
+  # title that merely starts with this one is not matched.
+  pkill -f -- "-window_title $TITLE " 2>/dev/null && echo "stopped $TITLE" || echo "no $TITLE running"
+}
+
+# The source size for a logical lw x lh output: SOURCE_W wide, the same
+# aspect, both even.
+source_size() {
+  local lw=$1 lh=$2
+  echo "$SOURCE_W $((SOURCE_W * lh / lw / 2 * 2))"
+}
+
+# (Re)start ffplay with a source for the current output; sets ffplay_pid
+# and source.
+start_source() {
+  local sw sh
+  if [ -n "${ffplay_pid:-}" ]; then kill "$ffplay_pid" 2>/dev/null; wait "$ffplay_pid" 2>/dev/null; fi
+  read -r sw sh <<<"$(source_size "$lw" "$lh")"
+  source="${sw}x${sh}"
+  echo "source ${source} at 60 fps for logical ${lw}x${lh}"
+  SDL_VIDEODRIVER=wayland ffplay -hide_banner -loglevel error -nostats -an -fs \
+    -window_title "$TITLE" -f lavfi -i "$(pattern_graph "$sw" "$sh")" \
+    >>"$LOG_DIR/ffplay.log" 2>&1 &
+  ffplay_pid=$!
+  for _ in $(seq 1 40); do [ -n "$(window_state)" ] && break; sleep 0.25; done
+  echo "before move: $(window_state || true)"
+}
+
+# Takes output line $1 as the current output: name id lw lh x y mode scale.
+take_output() {
+  out=$1
+  read -r name id lw lh x y mode scale <<<"$out"
+  echo "$(date +%T) output $name id $id mode $mode scale $scale logical ${lw}x${lh} at $x,$y"
+  hyprctl dispatch "hl.dsp.dpms({ action = \"on\", monitor = \"$name\" })" >/dev/null
+}
+
+# A mode change of the current output to line $1: `follow` re-sizes the
+# source if the aspect changed and re-places; `place` counts it a failure.
+changed() {
+  local was=$out
+  if [ "$kind" = place ]; then
+    echo "$(date +%T) PLACEMENT FAILED: output changed to: $1 (was: $was)"
+    failed=1
+  fi
+  take_output "$1"
+  if [ "$(source_size "$lw" "$lh" | tr ' ' x)" != "$source" ]; then start_source; fi
+  place_window "$name"
+  check_placement
+}
+
+# The shared run: wait for the output, show the pattern on it, keep it
+# there until the output goes. $kind is follow or place.
+run() {
+  local want=$1 w=$2 h=$3 now polls=0 tries
+  for tool in hyprctl ffplay python3; do
+    command -v "$tool" >/dev/null || { echo "missing $tool" >&2; exit 2; }
+  done
+  mkdir -p "$LOG_DIR"
+  : >"$LOG_DIR/ffplay.log"
+  cleanup >/dev/null
+  echo "waiting up to ${WAIT_S} s for ${want:-a gliff-*} output${w:+ at mode ${w}x${h}} (start gwin-verify on the Windows machine now)"
+  tries=$(awk -v s="$WAIT_S" 'BEGIN { print int(s * 4) }')
+  for _ in $(seq 1 "$tries"); do out=$(find_output "$want" "$w" "$h"); [ -n "$out" ] && break; sleep 0.25; done
+  if [ -z "$out" ]; then
+    echo "PLACEMENT FAILED: no ${want:-gliff-*} output${w:+ at mode ${w}x${h}} appeared; outputs now: $(find_output "$want" || true)"
+    exit 1
+  fi
+  take_output "$out"
+  start_source
+  place_window "$name"
+  check_placement
+  while kill -0 "$ffplay_pid" 2>/dev/null; do
+    sleep 0.5
+    now=$(find_output "$name")
+    if [ -z "$now" ]; then echo "$(date +%T) output $name gone: run over"; break; fi
+    if [ "$now" != "$out" ]; then changed "$now"; polls=0; continue; fi
+    polls=$((polls + 1))
+    [ "$polls" -lt 10 ] && continue
+    polls=0
+    # A miss is drift (re-place it); a change under the check is not.
+    verify "$id" "$lw" "$lh" "$x" "$y"
+    if [ $? -eq 1 ]; then
+      failed=1
+      place_window "$name"
+    fi
+  done
+  if kill -0 "$ffplay_pid" 2>/dev/null; then
+    kill "$ffplay_pid" 2>/dev/null; wait "$ffplay_pid" 2>/dev/null
+  else
+    echo "PLACEMENT FAILED: ffplay exited while the output was up (see $LOG_DIR/ffplay.log)"
+    failed=1
+  fi
+  echo "done; ffplay log: $LOG_DIR/ffplay.log"
+  if [ "$failed" -ne 0 ]; then echo "RESULT: PLACEMENT FAILED at least once (see above)"; exit 1; fi
+  echo "RESULT: PLACEMENT OK throughout"
+}
+
+USAGE="usage: gwin-pattern follow [--output NAME] | place [WxH] [--output NAME] | graph WxH | cleanup"
+kind="" failed=0 ffplay_pid="" source="" out=""
+
+follow() {
+  local want=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --output) want=$2; shift 2 ;;
+      *) echo "$USAGE" >&2; exit 2 ;;
+    esac
+  done
+  kind=follow
+  run "$want" "" ""
+}
+
+place() {
+  local size=3840x2400 want=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --output) want=$2; shift 2 ;;
+      *x*) size=$1; shift ;;
+      *) echo "$USAGE" >&2; exit 2 ;;
+    esac
+  done
+  kind=place
+  run "$want" "${size%x*}" "${size#*x}"
+}
+
+case "${1:-}" in
+  follow) shift; follow "$@" ;;
+  place) shift; place "$@" ;;
+  graph)
+    if [ $# -ne 2 ] || [[ $2 != *x* ]]; then echo "$USAGE" >&2; exit 2; fi
+    pattern_graph "${2%x*}" "${2#*x}" ;;
+  cleanup) cleanup ;;
+  *) echo "$USAGE" >&2; exit 2 ;;
+esac

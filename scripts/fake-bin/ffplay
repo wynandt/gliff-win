@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Build machine stand-in for ffplay under scripts/remote/gwin-pattern: opens no
+# window, but registers one in the fake hyprctl window world
+# ($GWIN_FAKE_HYPR_DIR/windows/<pid>.json) where real ffplay opens on the
+# Wayland session (the home monitor, fullscreen with -fs),
+# logs each start's source to $GWIN_FAKE_HYPR_DIR/ffplay.log as
+# "start <pid> <WxH> r=<fps> <graph>", and removes the window when killed.
+set -euo pipefail
+dir="${GWIN_FAKE_HYPR_DIR:?fake ffplay needs GWIN_FAKE_HYPR_DIR}"
+title=ffplay fullscreen=0 graph=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -window_title) title=$2; shift 2 ;;
+    -fs) fullscreen=2; shift ;;
+    -i) graph=$2; shift 2 ;;
+    *) shift ;;
+  esac
+done
+size=$(sed -E 's/^color=c=black:s=([0-9]+x[0-9]+):r=([0-9]+).*/\1 r=\2/' <<<"$graph")
+echo "start $$ $size $graph" >>"$dir/ffplay.log"
+mkdir -p "$dir/windows"
+window="$dir/windows/$$.json"
+printf '{"title": "%s", "monitor": 0, "fullscreen": %d}\n' "$title" "$fullscreen" >"$window.tmp"
+mv "$window.tmp" "$window"
+trap 'rm -f "$window"; echo "stop $$" >>"$dir/ffplay.log"; exit 0' TERM INT
+while :; do sleep 0.1; done
