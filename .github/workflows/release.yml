@@ -149,6 +149,8 @@ jobs:
           cp target/release/gliff-windows.exe target/release/gwin-verify.exe \
             LICENSE NOTICE README.md CHANGELOG.md "$name/"
           7z a "dist/$name.zip" "$name" > /dev/null
+          # The programs' own hashes, to compare with a copy unzipped later.
+          (cd "$name" && sha256sum ./*.exe)
           cd dist
           sha256sum "$name.zip" > SHA256SUMS
           cat SHA256SUMS
