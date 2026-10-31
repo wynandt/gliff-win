@@ -319,7 +319,8 @@ enum Active {
 /// The session's decoder: the CPU decoder, or with GPU decode on the GPU
 /// decoder until it fails, then the CPU decoder for the rest of the
 /// session. It has the `CpuDecoder` API and collects one log line per
-/// change of decoder for the driver to write ([`VideoDecoder::take_notes`]).
+/// change of decoder, and the GPU decoder's note on held pictures, for the
+/// driver to write ([`VideoDecoder::take_notes`]).
 pub struct VideoDecoder {
     active: Active,
     chroma: ChromaMode,
@@ -390,30 +391,32 @@ impl VideoDecoder {
             #[cfg(windows)]
             Active::Gpu(d) => {
                 let result = d.decode(main, aux);
+                self.notes.extend(d.take_held_note());
                 result.map_err(|e| self.fall_back(e))
             }
         }
     }
 
-    /// As [`CpuDecoder::has_pending`].
+    /// As [`CpuDecoder::has_pending`]. Never true for the GPU decoder: a
+    /// drain stops the Windows decoder until the next IDR, which the server
+    /// sends only when asked, so the picture would freeze. A picture it
+    /// holds comes out with a later unit instead.
     pub fn has_pending(&self) -> bool {
         match &self.active {
             Active::Cpu(d) => d.has_pending(),
             #[cfg(windows)]
-            Active::Gpu(d) => d.has_pending(),
+            Active::Gpu(_) => false,
         }
     }
 
-    /// As [`CpuDecoder::flush`].
+    /// As [`CpuDecoder::flush`]; nothing for the GPU decoder, which is
+    /// never drained (see [`VideoDecoder::has_pending`]).
     #[must_use = "a drained picture must be presented or dropped on purpose"]
     pub fn flush(&mut self) -> Result<Option<YuvFrame>, DecodeError> {
         match &mut self.active {
             Active::Cpu(d) => d.flush(),
             #[cfg(windows)]
-            Active::Gpu(d) => {
-                let result = d.flush();
-                result.map_err(|e| self.fall_back(e))
-            }
+            Active::Gpu(_) => Ok(None),
         }
     }
 

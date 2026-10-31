@@ -62,9 +62,7 @@ use windows::Win32::Media::MediaFoundation::MFCreateMemoryBuffer;
 use windows::Win32::Media::MediaFoundation::MFCreateSample;
 use windows::Win32::Media::MediaFoundation::MFMediaType_Video;
 use windows::Win32::Media::MediaFoundation::MFSTARTUP_LITE;
-use windows::Win32::Media::MediaFoundation::MFSampleExtension_Discontinuity;
 use windows::Win32::Media::MediaFoundation::MFStartup;
-use windows::Win32::Media::MediaFoundation::MFT_MESSAGE_COMMAND_DRAIN;
 use windows::Win32::Media::MediaFoundation::MFT_MESSAGE_NOTIFY_BEGIN_STREAMING;
 use windows::Win32::Media::MediaFoundation::MFT_MESSAGE_NOTIFY_START_OF_STREAM;
 use windows::Win32::Media::MediaFoundation::MFT_MESSAGE_SET_D3D_MANAGER;
@@ -205,8 +203,17 @@ pub struct GpuDecoder {
     aux: Option<Stream>,
     gpu: Gpu,
     pool: YuvPool,
+    /// Pictures fed but not yet handed out.
     held: u32,
+    /// Units in a row after which a picture was still held.
+    held_units: u32,
+    /// The held-pictures note was written; it is written once.
+    held_noted: bool,
 }
+
+/// Units in a row (one second at 60 fps) with a picture held before the
+/// decoder notes it: the pictures then show that many units late.
+const HELD_NOTE_UNITS: u32 = 60;
 
 impl GpuDecoder {
     /// A Single420 decoder on the default adapter, or why there is none.
@@ -220,6 +227,8 @@ impl GpuDecoder {
             gpu,
             pool: YuvPool::new(POOL_KEEP),
             held: 0,
+            held_units: 0,
+            held_noted: false,
         })
     }
 
@@ -241,28 +250,26 @@ impl GpuDecoder {
         // Low latency gives one picture per unit; should one call release
         // two, only the newest is shown, but none stays counted as held.
         self.held = (self.held + 1).saturating_sub(self.main.take_released());
-        Ok(frame)
-    }
-
-    /// As `CpuDecoder::has_pending`.
-    pub fn has_pending(&self) -> bool {
-        self.held > 0
-    }
-
-    /// As `CpuDecoder::flush`: drains what the decoders hold.
-    pub fn flush(&mut self) -> Result<Option<YuvFrame>, GpuError> {
-        let frame = match &mut self.aux {
-            None => self.main.drain(&self.gpu, &self.pool)?,
-            Some(second) => {
-                let m = self.main.drain(&self.gpu, &self.pool)?;
-                let a = second.drain(&self.gpu, &self.pool)?;
-                pair(&self.pool, m, a)?
-            }
+        self.held_units = if self.held > 0 {
+            self.held_units + 1
+        } else {
+            0
         };
-        // Drained: nothing is held any more.
-        self.main.take_released();
-        self.held = 0;
         Ok(frame)
+    }
+
+    /// Once per decoder, a note when pictures have stayed held for
+    /// [`HELD_NOTE_UNITS`] units in a row. They are never drained (see
+    /// `VideoDecoder::has_pending`), so they show late rather than not at all.
+    pub fn take_held_note(&mut self) -> Option<String> {
+        if self.held_noted || self.held_units < HELD_NOTE_UNITS {
+            return None;
+        }
+        self.held_noted = true;
+        Some(format!(
+            "decoder: gpu holds {} pictures after {} units in a row; they show that many units late",
+            self.held, self.held_units
+        ))
     }
 
     /// As `CpuDecoder::reset`: new decoders on the same device.
@@ -273,6 +280,7 @@ impl GpuDecoder {
             _ => None,
         };
         self.held = 0;
+        self.held_units = 0;
         Ok(())
     }
 }
@@ -384,9 +392,6 @@ struct Stream {
     time: i64,
     /// Pictures the decoder handed out since the last `take_released`.
     released: u32,
-    /// The next unit is the first after a drain, which Media Foundation
-    /// wants marked as a discontinuity.
-    after_drain: bool,
 }
 
 impl Stream {
@@ -414,7 +419,6 @@ impl Stream {
             staging: None,
             time: 0,
             released: 0,
-            after_drain: false,
         })
     }
 
@@ -498,16 +502,6 @@ impl Stream {
         Ok(self.outputs(gpu, pool)?.or(frame))
     }
 
-    fn drain(&mut self, gpu: &Gpu, pool: &YuvPool) -> Result<Option<YuvFrame>, GpuError> {
-        if !self.streaming {
-            return Ok(None);
-        }
-        // SAFETY: plain call on a live interface.
-        unsafe { self.mft.ProcessMessage(MFT_MESSAGE_COMMAND_DRAIN, 0) }.at("drain")?;
-        self.after_drain = true;
-        self.outputs(gpu, pool)
-    }
-
     fn take_released(&mut self) -> u32 {
         std::mem::take(&mut self.released)
     }
@@ -529,11 +523,6 @@ impl Stream {
             sample.SetSampleTime(self.time).at("sample time")?;
             sample.SetSampleDuration(166_667).at("sample time")?;
             self.time += 166_667;
-            if std::mem::take(&mut self.after_drain) {
-                sample
-                    .SetUINT32(&MFSampleExtension_Discontinuity, 1)
-                    .at("sample discontinuity")?;
-            }
             Ok(sample)
         }
     }

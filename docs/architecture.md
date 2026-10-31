@@ -216,7 +216,8 @@ perform, in order: `Send`, `Decode`, `ResetDecoder`, `Present` and `Ui`.
   paired with the picture the decoder releases for it, so a picture is always
   shown with the geometry it was encoded under. The CPU decoder holds one
   picture back; the idle drain (150 ms with nothing to feed) flushes it, and a
-  drained picture is never acked again.
+  drained picture is never acked again. The GPU decoder is never drained (see
+  GPU decode below).
 - `UiCmd` is `Resize` (the same request twice sends one message), `Bye`, or the
   input commands (`Key`, pointer motion, buttons, wheel, a keymap change and
   `ReleaseInput`, which lets go of every held key and button).
@@ -284,14 +285,15 @@ keeps its own instrumented copy of this loop.
   and a picture buffer of the SPS's reference count. The gliff encoders write
   no VUI, and without one a POC type 0 stream may reorder, so the Windows
   decoder held a picture buffer's worth of pictures (eleven at 1440p, level
-  5.2) before showing any. Those held pictures then set off the idle drain,
-  and after a drain this decoder decodes nothing until the next IDR, which the
-  endless GOP never sends unprompted. An SPS that has a VUI is left alone.
+  5.2) before showing any. An SPS that has a VUI is left alone. The GPU
+  decoder is never drained: after a drain this decoder decodes nothing until
+  the next IDR, which the endless GOP never sends unprompted, so the picture
+  froze. A picture it still holds comes out with a later unit; when pictures
+  stay held for 60 units in a row the decoder logs it once.
   Any GPU error ends GPU decode for the rest of the session: the
   `VideoDecoder` logs why, starts a `CpuDecoder` with the current chroma, and
   returns the error, so the core acks the frame and asks for a keyframe as for
-  any decode error. A GPU error while draining the last picture at idle falls
-  back the same way and also asks for a keyframe. A failure while starting
+  any decode error. A failure while starting
   falls back before the first frame. See [GPU decode](#gpu-decode) for why this design.
 - **Frame slot.** `FrameSlot` holds one picture. A new picture replaces an
   untaken one, which counts as a drop: it was decoded and acked, never shown.
@@ -890,6 +892,13 @@ one Windows machine with a hardware H.264 decoder; see
   shader, the frame slot and the hidden-session rules stay as they are and
   GPU and CPU pictures can be compared byte for byte. Drawing the NV12
   texture directly is left for later.
+- **No idle drain on the GPU.** A drain makes the Windows decoder drop
+  everything until the next IDR. Asking the server for a keyframe after each
+  drain would bring it back, but costs a keyframe each time the screen goes
+  still and leaves the picture stopped until it arrives. With the bitstream
+  restriction the decoder holds nothing, so there is nothing to drain; a
+  stream that still makes it hold pictures shows them late, and the log says
+  so once.
 - **Fallback for the rest of the session.** A GPU that failed once is not tried
   again until the next connect, so a broken driver cannot make the picture
   flicker between decoders.

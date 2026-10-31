@@ -77,7 +77,9 @@ gwin-verify decode --clip F [--clip F ...] | --sizes 1920x1080,2560x1440 [--fram
 - `--idle-drain` drains the decoder after every unit that leaves a picture
   held, as the session does when the screen goes still, and reports the count
   as `drains` (`cpu_drains` and `gpu_drains` with `both`). A decoder that shows
-  each picture as it decodes it holds none, so it never drains.
+  each picture as it decodes it holds none, so it never drains. The GPU
+  decoder is never drained, as in a session, so pictures it still holds at
+  the end of the clip are not counted.
 
 - `--clip` decodes `.gwclip` files; `--sizes` encodes the synthetic desktop in
   process with OpenH264 Baseline (3840x2160 at most) and decodes it.
