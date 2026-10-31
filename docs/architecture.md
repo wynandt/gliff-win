@@ -273,15 +273,18 @@ keeps its own instrumented copy of this loop.
   device through an `IMFDXGIDeviceManager` so it decodes with D3D11 video
   (DXVA). Each output sample must be a D3D11 texture (`IMFDXGIBuffer`); a
   decoder that hands back system memory is running in software and is
-  refused. The NV12 texture is copied into a staging texture, mapped, cropped
-  to the SPS display size and split into the same tight I420 `YuvFrame` the
+  refused. The NV12 texture is copied into a staging texture; the client
+  waits on a D3D11 fence for the copy (so the CPU sleeps rather than spinning
+  in `Map`, which some drivers do), then maps it, crops it to the SPS display
+  size and split into the same tight I420 `YuvFrame` the
   CPU path makes, so the frame slot, presenter and shader do not change.
   Dual420 runs two decoders on the same device and the same recombine as the
   CPU path. Any GPU error ends GPU decode for the rest of the session: the
   `VideoDecoder` logs why, starts a `CpuDecoder` with the current chroma, and
   returns the error, so the core acks the frame and asks for a keyframe as for
-  any decode error. A failure while starting falls back before the first
-  frame. See [GPU decode](#gpu-decode) for why this design.
+  any decode error. A GPU error while draining the last picture at idle falls
+  back the same way and also asks for a keyframe. A failure while starting
+  falls back before the first frame. See [GPU decode](#gpu-decode) for why this design.
 - **Frame slot.** `FrameSlot` holds one picture. A new picture replaces an
   untaken one, which counts as a drop: it was decoded and acked, never shown.
 - **Present.** `present::Presenter` uploads the three planes as `R8_UNORM`
@@ -874,7 +877,8 @@ one Windows machine with a hardware H.264 decoder; see
   (not with the N editions without the Media Feature Pack), which is one of
   the reasons it can be missing and the session falls back.
 - **Copy back, then the CPU path's I420.** The decoder's NV12 texture is copied
-  to a staging texture and split into I420 on the CPU, so the presenter, the
+  to a staging texture, the client sleeps on a fence until the copy is done,
+  and the picture is split into I420 on the CPU, so the presenter, the
   shader, the frame slot and the hidden-session rules stay as they are and
   GPU and CPU pictures can be compared byte for byte. Drawing the NV12
   texture directly is left for later.

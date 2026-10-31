@@ -44,7 +44,6 @@ use windows::Win32::Graphics::Dxgi::Common::DXGI_SAMPLE_DESC;
 use windows::Win32::Graphics::Dxgi::IDXGIDevice;
 use windows::Win32::Media::MediaFoundation::CLSID_MSH264DecoderMFT;
 use windows::Win32::Media::MediaFoundation::CODECAPI_AVLowLatencyMode;
-use windows::Win32::Media::MediaFoundation::IMF2DBuffer;
 use windows::Win32::Media::MediaFoundation::IMFDXGIBuffer;
 use windows::Win32::Media::MediaFoundation::IMFDXGIDeviceManager;
 use windows::Win32::Media::MediaFoundation::IMFSample;
@@ -605,38 +604,11 @@ impl Stream {
             let (dw, dh) = self.display.unwrap_or((desc.Width, desc.Height));
             let w = dw.min(desc.Width) as usize & !1;
             let h = dh.min(desc.Height) as usize & !1;
-            // PROTOTYPE: readback variants, chosen by GWIN_GPU_READBACK.
-            match proto_readback() {
-                "none" => {
-                    let y = pool.get(w * h);
-                    let u = pool.get(w * h / 4);
-                    let v = pool.get(w * h / 4);
-                    return YuvFrame::new((w as u32, h as u32), y, u, v, Instant::now())
-                        .map_err(|e| GpuError::new("decoded picture", e));
-                }
-                "lock2d" => {
-                    let two_d: IMF2DBuffer = buffer.cast().at("2D buffer")?;
-                    let mut scan0 = std::ptr::null_mut();
-                    let mut pitch = 0i32;
-                    two_d.Lock2D(&mut scan0, &mut pitch).at("lock 2D")?;
-                    let pitch = pitch as usize;
-                    let rows = desc.Height as usize;
-                    let base = scan0 as *const u8;
-                    let luma = std::slice::from_raw_parts(base, pitch * rows);
-                    let chroma =
-                        std::slice::from_raw_parts(base.add(pitch * rows), pitch * rows / 2);
-                    let frame = nv12_to_i420(pool, luma, chroma, pitch, w, h);
-                    two_d.Unlock2D().at("unlock 2D")?;
-                    return frame;
-                }
-                _ => {}
-            }
             let staging = self.staging(gpu, desc.Width, desc.Height)?;
             gpu.context
                 .CopySubresourceRegion(&staging, 0, 0, 0, 0, &texture, index, None);
-            if proto_readback() == "fence"
-                && let Some(fence) = &gpu.fence
-            {
+            // Sleep until the copy is done, so `Map` does not spin.
+            if let Some(fence) = &gpu.fence {
                 fence.wait()?;
             }
             let mut mapped = D3D11_MAPPED_SUBRESOURCE::default();
@@ -683,17 +655,6 @@ impl Stream {
         self.staging = Some((texture.clone(), width, height));
         Ok(texture)
     }
-}
-
-/// PROTOTYPE: which readback the measurement runs.
-fn proto_readback() -> &'static str {
-    static WHICH: OnceLock<&'static str> = OnceLock::new();
-    WHICH.get_or_init(|| match std::env::var("GWIN_GPU_READBACK").as_deref() {
-        Ok("none") => "none",
-        Ok("lock2d") => "lock2d",
-        Ok("fence") => "fence",
-        _ => "staging",
-    })
 }
 
 /// Tight I420 at `w` x `h` from an NV12 picture whose rows are `pitch`
