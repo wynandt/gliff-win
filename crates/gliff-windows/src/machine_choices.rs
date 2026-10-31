@@ -3,14 +3,14 @@
 //!
 //! Pure: no Win32, no files. [`crate::config`] reads and writes the file.
 //!
-//! Three settings can be chosen per machine, from the tab's menu: `screen`
-//! (Show as), `share_clipboard` and `sharp_colour`. A choice is kept in `config.toml` as
+//! Four settings can be chosen per machine, from the tab's menu: `screen`
+//! (Show as), `share_clipboard`, `sharp_colour` and `gpu_decode`. A choice is kept in `config.toml` as
 //! `[overrides."user@host"]`, the name the design for the settings window
 //! uses, so the file does not change when that window comes. The order for a
 //! machine is: a flag, the machine's choice, the `[settings]` table, the
 //! default. A flag applies to every machine, so it locks the choice: the
-//! menu shows it greyed and says why. `sharp_colour` has no flag and no
-//! `[settings]` key: it is the machine's choice or off.
+//! menu shows it greyed and says why. `sharp_colour` and `gpu_decode` have
+//! no flag and no `[settings]` key: each is the machine's choice or off.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -32,6 +32,7 @@ pub struct Choice {
     pub screen: Option<Screen>,
     pub share_clipboard: Option<bool>,
     pub sharp_colour: Option<bool>,
+    pub gpu_decode: Option<bool>,
 }
 
 /// The `[overrides]` table: one [`Choice`] for each machine that has one,
@@ -90,7 +91,10 @@ impl Choices {
                     ("sharp_colour", toml::Value::Boolean(sharp)) => {
                         machine.choice.sharp_colour = Some(*sharp);
                     }
-                    ("screen" | "share_clipboard" | "sharp_colour", _) => {
+                    ("gpu_decode", toml::Value::Boolean(gpu)) => {
+                        machine.choice.gpu_decode = Some(*gpu);
+                    }
+                    ("screen" | "share_clipboard" | "sharp_colour" | "gpu_decode", _) => {
                         notes.push(format!(
                             "{key} in overrides.\"{name}\" is ignored: expected {}",
                             if key == "screen" {
@@ -131,6 +135,10 @@ impl Choices {
         self.machine(machine).choice.sharp_colour = Some(sharp);
     }
 
+    pub fn set_gpu_decode(&mut self, machine: &HostTarget, gpu: bool) {
+        self.machine(machine).choice.gpu_decode = Some(gpu);
+    }
+
     /// The machines that have a choice, in file order.
     pub fn machines(&self) -> Vec<(&HostTarget, Choice)> {
         self.machines
@@ -157,6 +165,9 @@ impl Choices {
             }
             if let Some(sharp) = machine.choice.sharp_colour {
                 own.insert("sharp_colour".to_owned(), sharp.into());
+            }
+            if let Some(gpu) = machine.choice.gpu_decode {
+                own.insert("gpu_decode".to_owned(), gpu.into());
             }
             if !own.is_empty() {
                 table.insert(machine.target.as_str().to_owned(), own.into());
@@ -278,6 +289,7 @@ pub struct Running {
     pub screen: Screen,
     pub share_clipboard: bool,
     pub sharp_colour: bool,
+    pub gpu_decode: bool,
 }
 
 /// What one machine runs with, and what the menu shows for it.
@@ -292,6 +304,9 @@ pub struct Connection {
     /// Off unless the machine's choice turns it on; nothing locks it.
     pub sharp_colour: bool,
     pub sharp_origin: Origin,
+    /// Off unless the machine's choice turns it on; nothing locks it.
+    pub gpu_decode: bool,
+    pub gpu_origin: Origin,
 }
 
 impl Connection {
@@ -326,6 +341,10 @@ impl Connection {
             Some(sharp) => (sharp, Origin::Machine),
             None => (false, Origin::Default),
         };
+        let (gpu_decode, gpu_origin) = match choice.gpu_decode {
+            Some(gpu) => (gpu, Origin::Machine),
+            None => (false, Origin::Default),
+        };
         Self {
             screen,
             screen_origin,
@@ -335,6 +354,8 @@ impl Connection {
             share_lock,
             sharp_colour,
             sharp_origin,
+            gpu_decode,
+            gpu_origin,
         }
     }
 
@@ -344,6 +365,7 @@ impl Connection {
             screen: self.screen,
             share_clipboard: self.share_clipboard,
             sharp_colour: self.sharp_colour,
+            gpu_decode: self.gpu_decode,
         }
     }
 
@@ -359,7 +381,8 @@ impl Connection {
         let screen = self.screen_lock.is_none() && self.screen != live.screen;
         let share = self.share_lock.is_none() && self.share_clipboard != live.share_clipboard;
         let sharp = self.sharp_colour != live.sharp_colour;
-        screen || share || sharp
+        let gpu = self.gpu_decode != live.gpu_decode;
+        screen || share || sharp || gpu
     }
 
     /// The `--print-settings` form: each choice with its value, where it
@@ -379,6 +402,11 @@ impl Connection {
             "sharp_colour": {
                 "value": self.sharp_colour,
                 "source": self.sharp_origin.name(),
+                "locked": false,
+            },
+            "gpu_decode": {
+                "value": self.gpu_decode,
+                "source": self.gpu_origin.name(),
                 "locked": false,
             },
         })

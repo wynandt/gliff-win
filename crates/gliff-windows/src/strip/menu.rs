@@ -35,6 +35,9 @@ pub enum Command {
     /// Choose whether the machine's session asks for full-resolution colour
     /// (Dual420). The value is the new choice.
     SharpColour(bool),
+    /// Choose whether the machine's session tries the GPU decoder first.
+    /// The value is the new choice.
+    GpuDecode(bool),
 }
 
 /// How a row of a choice is drawn.
@@ -162,6 +165,13 @@ fn connection_rows(connection: &Connection, pending: bool) -> Vec<Entry> {
         selected: connection.sharp_colour,
         enabled: true,
     });
+    rows.push(Entry::Choice {
+        command: Command::GpuDecode(!connection.gpu_decode),
+        label: "GPU decode",
+        mark: Mark::Check,
+        selected: connection.gpu_decode,
+        enabled: true,
+    });
     rows.push(Entry::Separator);
     rows.push(if pending {
         item(Command::Reconnect, "Reconnect now to apply")
@@ -183,7 +193,8 @@ pub fn dot_command(status: &Status) -> Command {
 }
 
 /// Runs a command on the tabs; the effects are for the caller to carry out.
-/// `CopyAddress`, `ShowAs`, `ShareClipboard` and `SharpColour` have none:
+/// `CopyAddress`, `ShowAs`, `ShareClipboard`, `SharpColour` and `GpuDecode`
+/// have none:
 /// the caller reads the address or saves the choice.
 pub fn run(command: Command, id: TabId, tabs: &mut Tabs) -> Vec<crate::tabs::Effect> {
     match command {
@@ -193,7 +204,8 @@ pub fn run(command: Command, id: TabId, tabs: &mut Tabs) -> Vec<crate::tabs::Eff
         Command::CopyAddress
         | Command::ShowAs(_)
         | Command::ShareClipboard(_)
-        | Command::SharpColour(_) => Vec::new(),
+        | Command::SharpColour(_)
+        | Command::GpuDecode(_) => Vec::new(),
     }
 }
 

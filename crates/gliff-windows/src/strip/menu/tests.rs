@@ -38,6 +38,8 @@ fn plain() -> Connection {
         share_lock: None,
         sharp_colour: false,
         sharp_origin: Origin::Default,
+        gpu_decode: false,
+        gpu_origin: Origin::Default,
     }
 }
 
@@ -343,6 +345,7 @@ fn the_submenu_shows_the_machines_choices_and_when_they_apply() {
             "-",
             "[x] Share clipboard",
             "[ ] Sharp colour",
+            "[ ] GPU decode",
             "-",
             "# Applies the next time this tab connects",
         ]
@@ -354,6 +357,8 @@ fn the_submenu_shows_the_machines_choices_and_when_they_apply() {
         share_origin: Origin::Machine,
         sharp_colour: true,
         sharp_origin: Origin::Machine,
+        gpu_decode: true,
+        gpu_origin: Origin::Machine,
         ..plain()
     };
     let rows = connection_rows(&own);
@@ -361,6 +366,7 @@ fn the_submenu_shows_the_machines_choices_and_when_they_apply() {
     assert_eq!(rows[2], "(o) Own screen");
     assert_eq!(rows[4], "[ ] Share clipboard");
     assert_eq!(rows[5], "[x] Sharp colour");
+    assert_eq!(rows[6], "[x] GPU decode");
 }
 
 #[test]
@@ -372,6 +378,7 @@ fn a_row_asks_for_the_other_value_than_the_one_it_shows() {
             Command::ShowAs(Screen::Own),
             Command::ShareClipboard(false),
             Command::SharpColour(true),
+            Command::GpuDecode(true),
         ]
     );
     let off = Connection {
@@ -392,6 +399,8 @@ fn a_locked_row_is_greyed_and_gives_its_reason() {
         share_lock: Some("Locked: this window was started with --no-clipboard, which turns the clipboard off for every machine.".to_owned()),
         sharp_colour: false,
         sharp_origin: Origin::Default,
+        gpu_decode: false,
+        gpu_origin: Origin::Default,
     };
     assert_eq!(
         connection_rows(&locked),
@@ -404,6 +413,7 @@ fn a_locked_row_is_greyed_and_gives_its_reason() {
             "~[ ] Share clipboard",
             "# Locked: this window was started with --no-clipboard, which turns the clipboard off for every machine.",
             "[ ] Sharp colour",
+            "[ ] GPU decode",
             "-",
             "# Applies the next time this tab connects",
         ]

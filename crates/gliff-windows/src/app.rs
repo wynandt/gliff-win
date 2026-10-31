@@ -315,6 +315,7 @@ fn starter(
             initial,
             colour: connection.colour(),
             input: settings.input_options(keymap.text),
+            gpu_decode: connection.gpu_decode,
         };
         let handle = start_with_clipboard(opts, Arc::clone(&waker) as Arc<dyn Waker>, launch.clip)?;
         launched.borrow_mut().insert(

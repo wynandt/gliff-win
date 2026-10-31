@@ -43,7 +43,7 @@ use crate::clip_link::Port;
 use crate::connect::SshFailure;
 use crate::connect::from_spawn_error;
 use crate::connect::log_line;
-use crate::decode::CpuDecoder;
+use crate::decode::VideoDecoder;
 use crate::frame_slot::FrameSlot;
 use crate::input::InputOptions;
 use crate::keymap::Press;
@@ -94,6 +94,8 @@ pub struct Options {
     pub colour: Colour,
     /// Keys: the layout, the chords and the policy.
     pub input: InputOptions,
+    /// Try the GPU decoder first (the machine's GPU decode choice).
+    pub gpu_decode: bool,
 }
 
 /// How the session ended, from [`SessionHandle::join`].
@@ -300,10 +302,14 @@ async fn run(
     out: Out,
     clipboard: Option<Port>,
 ) -> SessionEnd {
-    let decoder = match CpuDecoder::new() {
+    let mut decoder = match VideoDecoder::new(opts.gpu_decode) {
         Ok(d) => d,
         Err(e) => return out.fail(format!("decoder: {e}")),
     };
+    let tag = opts.spec.log_tag;
+    for note in decoder.take_notes() {
+        crate::logging::line(&format!("{}: {note}", session_name(tag)));
+    }
     let link = match spawn(&opts.spec) {
         Ok(link) => link,
         Err(e) => {
@@ -355,6 +361,7 @@ async fn run(
         key_clock: None,
         watch: Watch::default(),
         colour_since: Instant::now(),
+        decode_window: opts.gpu_decode.then(Vec::new),
     };
     session.send(
         hello(
@@ -452,7 +459,7 @@ async fn read_loop(
 
 struct Session {
     core: Core,
-    decoder: CpuDecoder,
+    decoder: VideoDecoder,
     tx: Option<mpsc::UnboundedSender<(ClientMsg, Bytes)>>,
     /// The clipboard engine, when the clipboard is on.
     engine: Option<EngineThread>,
@@ -471,6 +478,9 @@ struct Session {
     watch: Watch,
     /// Start of the colour counts' current window.
     colour_since: Instant,
+    /// With GPU decode on, the decode times of the current report window,
+    /// for the `decode` line; `None` with it off, so nothing is logged.
+    decode_window: Option<Vec<f32>>,
 }
 
 /// The hook time of a key and when it arrived here.
@@ -542,6 +552,7 @@ impl Session {
                 }
                 () = tokio::time::sleep_until((last_frame + IDLE_DRAIN).into()), if idle => {
                     let result = self.decoder.flush();
+                    self.log_decoder_notes();
                     let actions = self.core.drained(result);
                     self.perform(actions);
                     last_frame = Instant::now();
@@ -549,10 +560,33 @@ impl Session {
             }
             self.out.publish(self.core.stats());
             if self.colour_since.elapsed() >= COLOUR_REPORT {
+                let secs = self.colour_since.elapsed().as_secs_f64();
                 self.report_colour();
+                self.report_decode(secs);
             }
         }
+        let secs = self.colour_since.elapsed().as_secs_f64();
         self.report_colour();
+        self.report_decode(secs);
+    }
+
+    /// With GPU decode on, logs the decoder in use and its decode times
+    /// over the last `secs` seconds, if it decoded anything.
+    fn report_decode(&mut self, secs: f64) {
+        let kind = self.decoder.kind();
+        if let Some(window) = &mut self.decode_window
+            && !window.is_empty()
+        {
+            crate::logging::line(&decode_line(self.spec.log_tag, secs, kind.name(), window));
+            window.clear();
+        }
+    }
+
+    /// Writes the decoder's notes (a fallback) to the log.
+    fn log_decoder_notes(&mut self) {
+        for note in self.decoder.take_notes() {
+            crate::logging::line(&format!("{}: {note}", session_name(self.spec.log_tag)));
+        }
     }
 
     /// Logs the colour counts since the last report, for a Sharp colour
@@ -690,6 +724,10 @@ impl Session {
                     let t = Instant::now();
                     let result = self.decoder.decode(&main, &aux);
                     let ms = t.elapsed().as_secs_f64() * 1000.0;
+                    self.log_decoder_notes();
+                    if let Some(window) = &mut self.decode_window {
+                        window.push(ms as f32);
+                    }
                     queue.extend(self.core.decoded(Decoded {
                         frame_id,
                         result,
@@ -701,6 +739,7 @@ impl Session {
                     if let Err(e) = self.decoder.reset(chroma) {
                         self.errors.push(format!("decoder reset: {e}"));
                     }
+                    self.log_decoder_notes();
                 }
                 Action::Present(picture) => {
                     let _ = self.out.slot.put(picture);
@@ -772,6 +811,25 @@ fn colour_line(
         c.out_of_step,
         c.size_mismatch,
         c.other_errors,
+    )
+}
+
+/// "session N", or "session" for an untagged one.
+fn session_name(tag: Option<u32>) -> String {
+    tag.map_or_else(|| "session".to_owned(), |n| format!("session {n}"))
+}
+
+/// One decode report: the decoder in use and the decode time per picture
+/// (median and 95th percentile) over the last `secs` seconds.
+fn decode_line(tag: Option<u32>, secs: f64, decoder: &str, times: &mut [f32]) -> String {
+    times.sort_by(f32::total_cmp);
+    let at = |q: f64| times[((times.len() - 1) as f64 * q).round() as usize];
+    format!(
+        "{}: decode, last {secs:.1} s: decoder {decoder}, pictures {}, ms p50 {:.2} p95 {:.2}",
+        session_name(tag),
+        times.len(),
+        at(0.5),
+        at(0.95),
     )
 }
 
