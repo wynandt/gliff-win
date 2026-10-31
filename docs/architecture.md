@@ -317,19 +317,20 @@ keeps its own instrumented copy of this loop.
 a thread-local `RefCell`. Of the messages that arrive while it is borrowed, only
 `WM_SIZE`, `WM_DESTROY` and an ending `WM_ENDSESSION` are queued and handled right
 after; any other goes to `DefWindowProc` and is dropped. `AppState` is `Connecting`, `Streaming`, `Closing` or
-`Ended` for the shown session (see [the window with several sessions](#the-window-with-several-sessions)). Timers: settle, size-move (16 ms), menu (16 ms), close (3 s) and stats (1 s).
+`Ended` for the shown session (see [the window with several sessions](#the-window-with-several-sessions)). Timers: settle, modal (16 ms), close (3 s) and stats (1 s).
 
 - **Modal loops.** The main loop presents when the swap chain's waitable is
-  signalled. A window drag or an open menu runs Windows' own message loop
-  instead, so the main loop stops and the picture would freeze. While either
-  is open, a 16 ms timer polls the waitable and presents. `WM_ENTERMENULOOP`
-  starts the menu timer and `WM_EXITMENULOOP` stops it. The strip and the
-  address field own their popup menus, so they forward both messages to the
-  top-level window. While a menu is open, each new picture also polls the
-  waitable and presents at once, so the menu does not cap the rate at the
-  timer's (Windows rounds a 16 ms timer up to its clock tick). When the menu
-  closes, the log gets one line with the number of pictures shown while it
-  was open.
+  signalled. A window drag or resize, or an open menu, runs Windows' own
+  message loop instead, so the main loop stops and the picture would freeze.
+  One modal state covers both: `WM_ENTERSIZEMOVE` and `WM_ENTERMENULOOP` start
+  it, `WM_EXITSIZEMOVE` and `WM_EXITMENULOOP` end it. While it runs, each new
+  picture polls the waitable itself and presents at once, so the rate is the
+  stream's, and a 16 ms timer polls and presents as a fallback (Windows rounds
+  a 16 ms timer up to its clock tick, so the timer alone would cap the rate).
+  The strip and the address field own their popup menus, so they forward the
+  menu messages to the top-level window. When the loop ends, the log gets one
+  line with the number of pictures shown while it ran (`menu: ...` or
+  `move: ...`).
 
 - **Resize.** `ResizeGate` waits until the client size has held for 200 ms,
   sends at once when a drag ends (`WM_EXITSIZEMOVE`), and sends after
