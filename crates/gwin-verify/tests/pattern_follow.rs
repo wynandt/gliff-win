@@ -138,6 +138,7 @@ fn session(dir: &Path, hypr: &Path) -> SessionHandle {
         initial: WINDOWED,
         colour: Colour::Standard,
         input: InputOptions::default(),
+        gpu_decode: false,
     };
     start(opts, Arc::new(Quiet)).expect("start the session thread")
 }

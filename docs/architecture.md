@@ -83,7 +83,7 @@ arguments and exits 2.
 | Startup | `app` **W**, `cli`, `startup`, `logging`, `main` | Arguments, the config folder and settings at start, the log (one file per UTC day), the window and session, the two helper modes of the exe. |
 | Settings | `settings`, `config`, `history` | Described under [Settings](#settings). |
 | Session | `session` (`machine`, `driver`, `input_side`), `link`, `ssh` | The protocol state machine with no I/O, the task that owns the I/O, and the ssh child. |
-| Video | `decode`, `h264`, `yuv`, `frame_slot`, `present` **W**, `present.hlsl`, `present_math`, `layout` | CPU decode to I420, the latest-wins hand-off, the D3D11 conversion and present, and where the picture goes in the window. |
+| Video | `decode`, `gpu_decode` **W**, `h264`, `yuv`, `frame_slot`, `present` **W**, `present.hlsl`, `present_math`, `layout` | CPU or GPU decode to I420, the latest-wins hand-off, the D3D11 conversion and present, and where the picture goes in the window. |
 | Window | `window` **W**, `window_input` **W**, `fullscreen` **W**, `cursor` **W**, `cursor_image`, `waker` **W**, `resize_gate`, `stages`, `present_log`, `stats_out` | The window procedure, resize rules, fullscreen, the remote cursor, and the `--stats-out` record. |
 | Keyboard | `hook` **W**, `grab` **W**, `grab_state`, `chord_watch`, `keymap`, `xkb`, `altgr`, `input`, `local_chords`, `key_ledger`, `pass_log`, `modifiers`, `bounded_wait` | Described under [Input](#input). |
 | Lock setting | `lockreg` **W**, `lock_policy`, `super_l` | The per-user `DisableLockWorkstation` value and every way back from it. |
@@ -111,10 +111,10 @@ Each choice names the alternative that was rejected.
 - **The protocol is not changed.** The stock `gliff-server` is the server. A
   feature the stock server cannot do, such as streaming virtual files, waits for
   upstream or for a client-side design that needs no wire change.
-- **CPU decode, GPU conversion.** OpenH264 decodes the 4:2:0 stream the
+- **CPU decode by default, GPU conversion.** OpenH264 decodes the 4:2:0 stream the
   client asks for (two of them for Dual420); a D3D11 shader converts the planes
-  to RGB. Rejected for now:
-  hardware decode (more drivers to test; it is on the not-built list) and converting to BGRA on the CPU the way `gliff_sw::Decoder`
+  to RGB. GPU decode is a choice per machine, off by default (see
+  [GPU decode](#gpu-decode)). Rejected: converting to BGRA on the CPU the way `gliff_sw::Decoder`
   does. `to_bgra` is kept, and its output is checked byte for byte against
   upstream's, as the oracle for the shader.
 - **Raw D3D11 through the `windows` crate, not wgpu.** A prototype of both was
@@ -216,7 +216,8 @@ perform, in order: `Send`, `Decode`, `ResetDecoder`, `Present` and `Ui`.
   paired with the picture the decoder releases for it, so a picture is always
   shown with the geometry it was encoded under. The CPU decoder holds one
   picture back; the idle drain (150 ms with nothing to feed) flushes it, and a
-  drained picture is never acked again.
+  drained picture is never acked again. The GPU decoder is never drained (see
+  GPU decode below).
 - `UiCmd` is `Resize` (the same request twice sends one message), `Bye`, or the
   input commands (`Key`, pointer motion, buttons, wheel, a keymap change and
   `ReleaseInput`, which lets go of every held key and button).
@@ -266,6 +267,34 @@ keeps its own instrumented copy of this loop.
   shader and for check images. OpenH264 accepts H.264 levels up to 5.2
   (`h264::OPENH264_MAX_LEVEL_IDC`); above that every unit fails, and
   `gwin-verify` reads the SPS to report it.
+- **GPU decode.** `decode::VideoDecoder` is what the session holds. With the
+  machine's *GPU decode* choice off it is only the `CpuDecoder`. With it on it
+  first tries `gpu_decode::GpuDecoder`, one Media Foundation H.264 decoder
+  (`CLSID_MSH264DecoderMFT`, low-latency mode) per stream, given a D3D11
+  device through an `IMFDXGIDeviceManager` so it decodes with D3D11 video
+  (DXVA). Each output sample must be a D3D11 texture (`IMFDXGIBuffer`); a
+  decoder that hands back system memory is running in software and is
+  refused. The NV12 texture is copied into a staging texture; the client
+  waits on a D3D11 fence for the copy (so the CPU sleeps rather than spinning
+  in `Map`, which some drivers do), then maps it, crops it to the SPS display
+  size and split into the same tight I420 `YuvFrame` the
+  CPU path makes, so the frame slot, presenter and shader do not change.
+  Dual420 runs two decoders on the same device and the same recombine as the
+  CPU path. Before a unit reaches the decoder, `h264::without_reorder_delay`
+  gives every SPS that has no VUI a bitstream restriction with no reordering
+  and a picture buffer of the SPS's reference count. The gliff encoders write
+  no VUI, and without one a POC type 0 stream may reorder, so the Windows
+  decoder held a picture buffer's worth of pictures (eleven at 1440p, level
+  5.2) before showing any. An SPS that has a VUI is left alone. The GPU
+  decoder is never drained: after a drain this decoder decodes nothing until
+  the next IDR, which the endless GOP never sends unprompted, so the picture
+  froze. A picture it still holds comes out with a later unit; when pictures
+  stay held for 60 units in a row the decoder logs it once.
+  Any GPU error ends GPU decode for the rest of the session: the
+  `VideoDecoder` logs why, starts a `CpuDecoder` with the current chroma, and
+  returns the error, so the core acks the frame and asks for a keyframe as for
+  any decode error. A failure while starting
+  falls back before the first frame. See [GPU decode](#gpu-decode) for why this design.
 - **Frame slot.** `FrameSlot` holds one picture. A new picture replaces an
   untaken one, which counts as a drop: it was decoded and acked, never shown.
 - **Present.** `present::Presenter` uploads the three planes as `R8_UNORM`
@@ -758,7 +787,9 @@ client for Windows that uses the server and the protocol as they are.
   and resize rules as logic. The ported files are listed in [NOTICE](../NOTICE).
 - It starts ssh itself, with a checked server path, `BatchMode=yes`, no console
   window and stderr to a log file.
-- Video is CPU decode (OpenH264) and a D3D11 present. It asks for Single420
+- Video is CPU decode (OpenH264) and a D3D11 present, or GPU decode (Media
+  Foundation with D3D11 video) when the machine's *GPU decode* choice is on;
+  upstream chooses with `--video cpu|gpu` and defaults to the GPU. It asks for Single420
   unless the machine's *Sharp colour* choice is on; upstream asks for Dual420
   by default.
 - The keyboard follows focus by default (upstream: hover). The release chord is
@@ -842,6 +873,72 @@ with no error, its first picture after the switch coming from the new keyframe.
 OpenH264 cannot encode 3840x2400, so the CPU server's 4:4:4 tops out at its
 3840x2160 limit.
 
+### GPU decode
+
+Why the design is what it is (the numbers come from `gwin-verify decode` on
+one Windows machine with a hardware H.264 decoder; see
+[gwin-verify.md](gwin-verify.md#decode)):
+
+- **Media Foundation's H.264 decoder, not `ID3D11VideoDecoder` directly.**
+  The D3D11 video decoder takes parsed slices and reference lists, so the
+  client would need its own H.264 slice parser and reference picture
+  management. The Media Foundation decoder does that and uses the same D3D11
+  video hardware when it is given a device manager. It ships with Windows
+  (not with the N editions without the Media Feature Pack), which is one of
+  the reasons it can be missing and the session falls back.
+- **Copy back, then the CPU path's I420.** The decoder's NV12 texture is copied
+  to a staging texture, the client sleeps on a fence until the copy is done,
+  and the picture is split into I420 on the CPU, so the presenter, the
+  shader, the frame slot and the hidden-session rules stay as they are and
+  GPU and CPU pictures can be compared byte for byte. Drawing the NV12
+  texture directly is left for later.
+- **No idle drain on the GPU.** A drain makes the Windows decoder drop
+  everything until the next IDR. Asking the server for a keyframe after each
+  drain would bring it back, but costs a keyframe each time the screen goes
+  still and leaves the picture stopped until it arrives. With the bitstream
+  restriction the decoder holds nothing, so there is nothing to drain; a
+  stream that still makes it hold pictures shows them late, and the log says
+  so once.
+- **Fallback for the rest of the session.** A GPU that failed once is not tried
+  again until the next connect, so a broken driver cannot make the picture
+  flicker between decoders.
+
+`gwin-verify decode` on 2560x1440 clips recorded from a server (300 frames
+each: a still desktop of text, and the same text scrolling), release build.
+Each row is the median of 5 runs, the sides interleaved, with the range
+after it. `paced` feeds the clip at 60 fps, as a session does; `free` feeds it
+as fast as the decoder goes. Decode time runs from handing the unit to the
+decoder to holding the I420 picture, copy-back included. CPU is the process's
+CPU time over the run (100% is one logical processor), and per frame. Every
+run decoded all 300 pictures with no errors.
+
+| Decoder, paced 60 fps | still p50 / p95 ms | scrolling p50 / p95 ms | CPU % still / scrolling | CPU ms per frame |
+|---|---|---|---|---|
+| CPU (OpenH264) | 9.91 [9.71-9.98] / 22.27 | 12.66 [12.58-13.92] / 22.13 | 73 / 82 | 12.2 / 13.6 |
+| GPU, fence copy-back (shipped) | 5.03 [4.71-5.07] / 6.51 | 4.77 [4.68-5.25] / 6.77 | 11 / 11 | 1.8 / 1.9 |
+| GPU, staging `Map` without the fence | 4.99 [4.92-5.09] / 6.51 | 4.66 [4.62-5.30] / 6.54 | 33 / 31 | 5.5 / 5.1 |
+| GPU, `IMF2DBuffer::Lock2D` | 9.76 [9.29-9.96] / 12.62 | 9.91 [9.64-62.60] / 11.89 | 17 / 16 | 2.8 / 2.6 |
+| GPU, no copy-back (floor, not a picture) | 0.36 / 0.63 | 0.40 / 0.68 | 4 / 3 | - |
+| Dual420 CPU (cannot keep 60) | 21.90 / 55.76 at 38 fps | 31.72 / 48.55 at 29 fps | 99 / 99 | 26.0 / 33.5 |
+| Dual420 GPU, fence | 10.56 [7.38-10.96] / 13.88 | 10.03 [8.72-12.00] / 14.16 | 32 / 35 | 5.4 / 5.8 |
+| Dual420 GPU, staging `Map` | 10.48 [8.31-11.04] / 13.62 | 10.16 [7.41-10.94] / 13.54 | 65 / 64 | 10.8 / 10.7 |
+
+Free-running, the GPU decodes 252 fps still and 244 fps scrolling (fence,
+p50 3.66 and 3.82 ms) against 85 and 75 fps on the CPU (p50 9.61 and
+12.26 ms); Dual420 106 fps against 39 and 30.
+
+- **Same pictures.** `--decoder both` compared every GPU picture with the
+  CPU's: 0 of 300 differ, single and Dual420, still and scrolling, and the GPU
+  gives each picture back on the unit that carried it.
+- **What limits it.** With no copy-back the decode costs 0.4 ms, so about
+  4.5 ms of the 5 ms is waiting for the copy into the staging texture and
+  splitting NV12 into I420 on the CPU. The fence takes the busy wait out:
+  same latency, a third of the CPU. `Lock2D` sleeps too, but Media
+  Foundation's own copy doubles the time. Drawing the NV12 texture directly
+  would remove the copy ("Not built yet").
+- **Noise.** Other programs ran on the machine; the interleaving gives both
+  sides the same share. The two `Lock2D` runs near 62 ms are such stalls.
+
 What has no number: the time from a server frame to the pixel on screen (the
 `present` check measures only decoded-to-`Present` returned), the CPU and GPU load
 of a session, memory use, the clipboard's transfer time or throughput, and
@@ -856,8 +953,9 @@ In rough priority order:
    running and monitors with different DPI.
 3. **More hardware.** Long sessions have run on one set of hardware; a
    recorded session on other machines is still wanted.
-4. **Hardware decode.** OpenH264 decodes on the CPU, and *Sharp colour*
-   (Dual420) at least doubles that work.
+4. **Zero-copy GPU decode.** *GPU decode* copies each picture back to the
+   CPU and uploads it again to draw; drawing the decoder's NV12 texture
+   directly would skip both copies (see [GPU decode](#gpu-decode)).
 5. **Virtual files on the clipboard, and streaming a big file without a spool**
    (an OLE `IDataObject`). The spool covers parity until then.
    HTML and RTF are written and unit-tested, but `gwin-verify clipboard` has no

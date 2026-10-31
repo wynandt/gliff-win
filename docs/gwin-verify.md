@@ -60,7 +60,26 @@ gwin-verify config [--client PATH] [--log-dir DIR]
 ```
 gwin-verify decode --clip F [--clip F ...] | --sizes 1920x1080,2560x1440 [--frames 300]
                    [--max-p95-ms 33.3] [--min-fps 30] [--kill-rule]
+                   [--decoder cpu|gpu|both] [--aux-clip F] [--pace-fps N]
+                   [--idle-drain]
 ```
+
+- `--decoder` picks the decoder (`cpu` by default). `gpu` is the client's
+  GPU decoder and fails if it cannot start. `both` runs the CPU and the GPU
+  decoder on the same clip, reports each, and fails if any GPU picture differs
+  from the CPU one in any byte (H.264 decoding is exact).
+- `--aux-clip` gives the aux half of a Dual420 stream, unit for unit with the
+  single `--clip`, and decodes the pair as Dual420 (4:4:4).
+- `--pace-fps` feeds the units at that rate instead of back to back, as a
+  live stream arrives, so the line's `cpu_pct` (process CPU time over wall time,
+  as a share of one core) is the cost at that frame rate. Every line also has
+  `cpu_ms_per_frame`.
+- `--idle-drain` drains the decoder after every unit that leaves a picture
+  held, as the session does when the screen goes still, and reports the count
+  as `drains` (`cpu_drains` and `gpu_drains` with `both`). A decoder that shows
+  each picture as it decodes it holds none, so it never drains. The GPU
+  decoder is never drained, as in a session, so pictures it still holds at
+  the end of the clip are not counted.
 
 - `--clip` decodes `.gwclip` files; `--sizes` encodes the synthetic desktop in
   process with OpenH264 Baseline (3840x2160 at most) and decodes it.

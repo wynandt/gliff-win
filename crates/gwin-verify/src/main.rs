@@ -53,6 +53,14 @@ struct Cli {
     check: Check,
 }
 
+/// `gwin-verify decode --decoder`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
+pub enum DecoderChoice {
+    Cpu,
+    Gpu,
+    Both,
+}
+
 #[derive(Debug, Subcommand)]
 enum Check {
     /// CPU decode p50/p95 and fps per size (Single420).
@@ -79,6 +87,21 @@ enum Check {
         /// limits (the real-machine gate run).
         #[arg(long)]
         kill_rule: bool,
+        /// The decoder: `cpu`, `gpu` (fails if the GPU decoder does not
+        /// run to the end), or `both` (each timed, then every picture
+        /// compared byte for byte).
+        #[arg(long, value_enum, default_value_t = DecoderChoice::Cpu)]
+        decoder: DecoderChoice,
+        /// The aux stream of a Dual420 pair, one per `--clip`, in order.
+        #[arg(long)]
+        aux_clip: Vec<PathBuf>,
+        /// Feed units at this rate (0: as fast as they decode).
+        #[arg(long, default_value_t = 0.0)]
+        pace_fps: f64,
+        /// After every unit, drain a held picture as the session does when
+        /// the screen goes still.
+        #[arg(long)]
+        idle_drain: bool,
     },
     /// Start the server over ssh as the client does (BatchMode, no
     /// console), handshake, Bye; prints the remote path it launched.
@@ -633,7 +656,16 @@ fn run(check: Check, report: &mut Report) -> anyhow::Result<()> {
             max_p95_ms,
             min_fps,
             kill_rule,
+            decoder,
+            aux_clip,
+            pace_fps,
+            idle_drain,
         } => {
+            anyhow::ensure!(
+                aux_clip.is_empty() || aux_clip.len() == clip.len(),
+                "--aux-clip: one per --clip"
+            );
+            let mut aux_clips = aux_clip.into_iter();
             let limits = Limits {
                 max_p95_ms,
                 min_fps,
@@ -649,14 +681,17 @@ fn run(check: Check, report: &mut Report) -> anyhow::Result<()> {
             };
             let mut judged = false;
             for clip in clips {
-                let line = match clip.and_then(|c| {
-                    decode_check::measure(&c).map(|m| decode_check::judge(&c, &m, limits))
-                }) {
-                    Ok(line) => line,
-                    Err(e) => Line::new("decode", false).with("error", format!("{e:#}")),
+                let aux = aux_clips.next().map(|p| Clip::load(&p)).transpose();
+                let lines = match clip.and_then(|c| aux.map(|a| (c, a))) {
+                    Ok((c, a)) => {
+                        decode_check::lines(&c, a.as_ref(), decoder, pace_fps, idle_drain, limits)
+                    }
+                    Err(e) => vec![Line::new("decode", false).with("error", format!("{e:#}"))],
                 };
-                judged |= line.metrics.get("kill_rule") == Some(&serde_json::Value::Bool(true));
-                report.emit(line);
+                for line in lines {
+                    judged |= line.metrics.get("kill_rule") == Some(&serde_json::Value::Bool(true));
+                    report.emit(line);
+                }
             }
             if kill_rule && !judged {
                 report.emit(

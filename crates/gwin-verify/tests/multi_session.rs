@@ -199,6 +199,7 @@ fn window_with(
             initial: SIZE,
             colour: Colour::Standard,
             input: InputOptions::default(),
+            gpu_decode: false,
         };
         start(opts, Arc::new(Quiet))
     });

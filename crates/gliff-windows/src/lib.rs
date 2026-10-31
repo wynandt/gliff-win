@@ -31,6 +31,8 @@ pub mod frame_slot;
 #[cfg(windows)]
 pub mod fullscreen;
 #[cfg(windows)]
+pub mod gpu_decode;
+#[cfg(windows)]
 pub mod grab;
 pub mod grab_state;
 pub mod h264;

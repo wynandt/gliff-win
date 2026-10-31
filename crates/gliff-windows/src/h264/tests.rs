@@ -9,6 +9,7 @@ use super::find_sps;
 use super::nal_units;
 use super::parse_sps;
 use super::set_level_idc;
+use super::without_reorder_delay;
 
 fn openh264_keyframe(width: u32, height: u32) -> Vec<u8> {
     let mut encoder = Encoder::new(
@@ -123,4 +124,31 @@ fn truncated_sps_is_an_error_not_a_panic() {
         let nal = &[0x67, 0x64, 0x00, 0x34, 0xac, 0xd9, 0x40][..len];
         assert!(parse_sps(nal).is_err(), "length {len} must fail cleanly");
     }
+}
+
+/// The server's SPS (High 5.2, POC type 0, one reference, no VUI) gains
+/// bitstream restrictions that rule out reordering, so a decoder may show
+/// each picture as it decodes it; the size it signals is unchanged, and
+/// units with no SPS, or an SPS that has a VUI, are left alone.
+#[test]
+fn sps_without_vui_gains_no_reorder_restriction() {
+    let server_sps = [
+        0x67, 0x64, 0x00, 0x34, 0xac, 0x1b, 0x1a, 0x80, 0x28, 0x00, 0xb5, 0x90, 0x00,
+    ];
+    // The same SPS with vui_parameters_present_flag set, then
+    // bitstream_restriction_flag, max_num_reorder_frames 0 and
+    // max_dec_frame_buffering 1 (checked against FFmpeg's trace_headers).
+    let restricted = [
+        0x67, 0x64, 0x00, 0x34, 0xac, 0x1b, 0x1a, 0x80, 0x28, 0x00, 0xb5, 0xa0, 0x1b, 0x41, 0x10,
+        0x8d, 0x40,
+    ];
+    let slice = [0x65, 0x88, 0x84];
+    let au: Vec<u8> = [&[0, 0, 0, 1][..], &server_sps, &[0, 0, 1], &slice].concat();
+    let out = without_reorder_delay(&au).expect("the SPS needs restrictions");
+    assert_eq!(nal_units(&out), [&restricted[..], &slice[..]]);
+    assert_eq!(parse_sps(&restricted), parse_sps(&server_sps));
+    assert_eq!(parse_sps(&restricted).expect("parses").width, 2560);
+    assert_eq!(without_reorder_delay(&[0, 0, 1, 0x65, 0x88, 0x84]), None);
+    let with_vui = [&[0, 0, 1][..], &restricted].concat();
+    assert_eq!(without_reorder_delay(&with_vui), None);
 }

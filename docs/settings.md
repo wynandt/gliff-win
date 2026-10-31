@@ -107,13 +107,14 @@ shown = "user@two"
 
 ## Connection choices for one machine
 
-Right-click a tab and open **Connection settings**. It holds three choices for that machine only:
+Right-click a tab and open **Connection settings**. It holds four choices for that machine only:
 
 - **Show as:** *Mirror the remote screen* or *Own screen*. This is the `screen` setting.
 - **Share clipboard:** ticked or not. This is the `share_clipboard` setting.
 - **Sharp colour:** ticked or not, off by default. This is the `sharp_colour` key, which exists only in a machine's table ([below](#sharp-colour)).
+- **GPU decode:** ticked or not, off by default. This is the `gpu_decode` key, which exists only in a machine's table ([below](#gpu-decode)).
 
-A choice is saved at once. **Share clipboard** applies at once to the tab's session: turned off, nothing is copied or pasted either way, and if what that machine copied is still on the Windows clipboard it is taken off (anything copied on Windows since is left alone); turned back on, sharing resumes in the same session. A session that started without sharing has no clipboard to resume, so ticking it reconnects that tab. **Show as** and **Sharp colour** are Reconnect-class: they apply the next time the tab connects, and the menu says so under the choices. If the tab has a session and a saved Show as or Sharp colour choice differs from what that session started with, the line is replaced by **Reconnect now to apply**, which does what **Reconnect** does: it ends the session and starts a new one with the saved choices. A row that a flag or the file has locked never counts as a change. If you change a choice and then change it back, the line stays as it was. A tab with no session (stopped, waiting to retry, or given up) keeps the line, because its next connect applies the choice anyway. There is no settings window and no OK button.
+A choice is saved at once. **Share clipboard** applies at once to the tab's session: turned off, nothing is copied or pasted either way, and if what that machine copied is still on the Windows clipboard it is taken off (anything copied on Windows since is left alone); turned back on, sharing resumes in the same session. A session that started without sharing has no clipboard to resume, so ticking it reconnects that tab. **Show as**, **Sharp colour** and **GPU decode** are Reconnect-class: they apply the next time the tab connects, and the menu says so under the choices. If the tab has a session and a saved Show as, Sharp colour or GPU decode choice differs from what that session started with, the line is replaced by **Reconnect now to apply**, which does what **Reconnect** does: it ends the session and starts a new one with the saved choices. A row that a flag or the file has locked never counts as a change. If you change a choice and then change it back, the line stays as it was. A tab with no session (stopped, waiting to retry, or given up) keeps the line, because its next connect applies the choice anyway. There is no settings window and no OK button.
 
 **Where it is saved.** In `config.toml`, in one table per machine, named by the target as it is written in `machines`:
 
@@ -122,6 +123,7 @@ A choice is saved at once. **Share clipboard** applies at once to the tab's sess
 screen = "own"
 share_clipboard = false
 sharp_colour = true
+gpu_decode = true
 ```
 
 A table holds only what the user changed for that machine, so a machine that was never changed has no table. The table is a layer between the flag and `[settings]`:
@@ -169,6 +171,19 @@ H.264 video normally carries colour at half the resolution in each direction (4:
 - **Whether it reaches the screen.** While Sharp colour is on, each session logs a `sharp colour` line about every 5 seconds while pictures arrive. It counts the frames received, how many carried their second (aux) half, the pictures shown at 4:4:4 and at 4:2:0, and decode errors by kind: `out of step` (one half gave a picture and the other did not), `size mismatch`, or `other`. On a working Dual420 stream, `shown 4:4:4` follows `with aux` and every other count stays at zero.
 - **No flag and no `[settings]` key.** The choice is per machine only, and nothing locks it.
 
+## GPU decode
+
+With **GPU decode** on, the client decodes the H.264 video on the GPU instead of on the processor. It uses the Windows H.264 decoder (Media Foundation) with Direct3D 11 video acceleration, on the default graphics adapter. Each decoded picture is copied back from the GPU and drawn exactly as before, so the picture is the same pixel for pixel: H.264 decoding is exact, and the check in [gwin-verify](gwin-verify.md#decode) compares every picture with the processor's. Off, the client decodes on the processor (OpenH264), exactly as without the choice.
+
+- **Applies at the next connect.** Like Sharp colour, the choice is read when the tab connects, and **Reconnect now to apply** applies it at once.
+- **Nothing changes on the server.** The client offers the server the same things either way. The server cannot tell which decoder the client uses.
+- **Falls back to the processor on its own.** If the GPU has no H.264 decoder, the Windows decoder is missing (some N editions of Windows ship without it), or it decodes in software only, the session decodes on the processor from the start. If the GPU fails during a session (for example a driver update or a removed device), the session switches to the processor for the rest of that session and asks the server for a full frame, so the picture holds still for a moment and then goes on. Either way the log says why in one line.
+- **Sharp colour works with it.** With Sharp colour on and a 4:4:4 stream, the client runs two GPU decoders, one for each half of the stream. If either fails, both halves go back to the processor together.
+- **Which decoder runs.** When GPU decode is on, each session logs one `decoder` line when it starts, such as `decoder: gpu (Media Foundation, D3D11 video)`, or `decoder: cpu, GPU decode unavailable: <reason>`. While pictures arrive it logs a `decode` line about every 5 seconds with the decoder, the pictures decoded and the decode time per picture (median and 95th percentile). A switch during a session logs `decoder: switched to cpu, GPU decode failed: <reason>`. With GPU decode off none of these lines appear.
+- **To report a bug** in the picture, untick GPU decode and reconnect; if the bug goes away, say so in the report.
+- **Cost.** Decoding on the GPU takes the decode work off the processor, but each picture is still copied back to the processor and uploaded again to draw. [architecture.md](architecture.md#measurements) has the numbers.
+- **No flag and no `[settings]` key.** The choice is per machine only, and nothing locks it.
+
 ## Chords that overlap
 
 A change that would let two chords fire on the same key press is an error at start, not a silent pick. The check covers the release chord, the Super+L chord (unless `super_l` is `off`), the three switch chords and the local chords.
@@ -180,7 +195,7 @@ The message names both chords, where each value came from (a flag, the file or t
 
 ## `--print-settings`
 
-`gliff-windows --print-settings` prints the settings as JSON and exits. It starts no session, so it takes no target, and it changes nothing on disk or in Windows. The JSON holds the config folder (and whether it is the default one), each setting with its value, where the value came from (`flag`, `file` or `default`) and its class, the machine lists (`machines`, `open`, `shown`), the saved connection choices, the recent hosts, and the notes from loading. Its keys are `config_dir`, `config_dir_is_default`, `settings` (each key holding `value`, `source` and `class`), `machines`, `open`, `shown`, `connection`, `recent_hosts` and `notes`. `connection` has one entry for each machine that is listed or has a saved choice, named by its target. Each entry has `screen`, `share_clipboard` and `sharp_colour`, each with the `value` that machine runs with, its `source` (`flag`, `machine`, `file` or `default`) and `locked` (`true` when a flag, or `share_clipboard = false` in the file, decides it for every machine); a saved choice shows as source `machine`. Chords print in lowercase, such as `ctrl+alt+pagedown`. The client is a Windows program without a console: redirect the output to a file or a pipe to read it.
+`gliff-windows --print-settings` prints the settings as JSON and exits. It starts no session, so it takes no target, and it changes nothing on disk or in Windows. The JSON holds the config folder (and whether it is the default one), each setting with its value, where the value came from (`flag`, `file` or `default`) and its class, the machine lists (`machines`, `open`, `shown`), the saved connection choices, the recent hosts, and the notes from loading. Its keys are `config_dir`, `config_dir_is_default`, `settings` (each key holding `value`, `source` and `class`), `machines`, `open`, `shown`, `connection`, `recent_hosts` and `notes`. `connection` has one entry for each machine that is listed or has a saved choice, named by its target. Each entry has `screen`, `share_clipboard`, `sharp_colour` and `gpu_decode`, each with the `value` that machine runs with, its `source` (`flag`, `machine`, `file` or `default`) and `locked` (`true` when a flag, or `share_clipboard = false` in the file, decides it for every machine); a saved choice shows as source `machine`. Chords print in lowercase, such as `ctrl+alt+pagedown`. The client is a Windows program without a console: redirect the output to a file or a pipe to read it.
 
 ## Recent hosts
 

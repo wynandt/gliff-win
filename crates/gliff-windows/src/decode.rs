@@ -44,13 +44,16 @@ pub enum DecodeError {
         main: (usize, usize),
         aux: (usize, usize),
     },
+    /// The GPU decoder failed; the session goes on with the CPU decoder.
+    #[error("GPU decode: {0}")]
+    Gpu(String),
 }
 
 /// Idle plane buffers kept per decoder: three planes for each of the
 /// picture in the slot, the one being uploaded and the one being decoded.
 const POOL_KEEP: usize = 9;
 
-/// The client's only decoder until hardware decode is built.
+/// The CPU decoder, and the fallback of the GPU one.
 pub struct CpuDecoder {
     inner: Decoder,
     /// The second decoder of a Dual420 stream, fed the aux payloads.
@@ -86,7 +89,11 @@ impl CpuDecoder {
                 None => None,
             },
             Some(second) => match (self.inner.decode(main)?, second.decode(aux)?) {
-                (Some(m), Some(a)) => Some(recombine(&self.pool, &m, &a)?),
+                (Some(m), Some(a)) => Some(recombine(
+                    &self.pool,
+                    &Planes::decoded(&m),
+                    &Planes::decoded(&a),
+                )?),
                 (None, None) => None,
                 _ => return Err(DecodeError::OutOfStep),
             },
@@ -119,7 +126,9 @@ impl CpuDecoder {
                 let main = self.inner.flush_remaining()?;
                 let aux = second.flush_remaining()?;
                 match (main.first(), aux.first()) {
-                    (Some(m), Some(a)) => Some(recombine(&pool, m, a)?),
+                    (Some(m), Some(a)) => {
+                        Some(recombine(&pool, &Planes::decoded(m), &Planes::decoded(a))?)
+                    }
                     _ => None,
                 }
             }
@@ -178,30 +187,66 @@ fn copy_planes(pool: &YuvPool, picture: &DecodedYUV<'_>) -> Result<YuvFrame, Dec
     Ok(YuvFrame::new(size, y, u, v, Instant::now())?)
 }
 
+/// A decoded picture's planes, wherever they live: OpenH264's buffers or
+/// a tight `YuvFrame` (the GPU path).
+pub(crate) struct Planes<'a> {
+    /// Width and height, before the even crop.
+    size: (usize, usize),
+    y: &'a [u8],
+    u: &'a [u8],
+    v: &'a [u8],
+    strides: (usize, usize, usize),
+}
+
+impl<'a> Planes<'a> {
+    fn decoded(picture: &'a DecodedYUV<'_>) -> Self {
+        Self {
+            size: picture.dimensions(),
+            y: picture.y(),
+            u: picture.u(),
+            v: picture.v(),
+            strides: picture.strides(),
+        }
+    }
+
+    /// A tight 4:2:0 frame's planes.
+    #[cfg_attr(not(windows), allow(dead_code))]
+    pub(crate) fn of(frame: &'a YuvFrame) -> Self {
+        let w = frame.width() as usize;
+        Self {
+            size: (w, frame.height() as usize),
+            y: frame.y(),
+            u: frame.u(),
+            v: frame.v(),
+            strides: (w, w / 2, w / 2),
+        }
+    }
+}
+
 /// Puts a Dual420 pair back together as tight 4:4:4, the inverse of
 /// upstream's `split_yuv444`: Y is main's luma; on even rows, U and V take
 /// main's chroma at even columns and aux's chroma at odd columns; odd rows
 /// of U are the top half of aux's luma, odd rows of V the bottom half.
-fn recombine(
+pub(crate) fn recombine(
     pool: &YuvPool,
-    main: &DecodedYUV<'_>,
-    aux: &DecodedYUV<'_>,
+    main: &Planes<'_>,
+    aux: &Planes<'_>,
 ) -> Result<YuvFrame, DecodeError> {
     let even = |(w, h): (usize, usize)| (w & !1, h & !1);
-    let (w, h) = even(main.dimensions());
-    if even(aux.dimensions()) != (w, h) {
+    let (w, h) = even(main.size);
+    if even(aux.size) != (w, h) {
         return Err(DecodeError::AuxSize {
             main: (w, h),
-            aux: even(aux.dimensions()),
+            aux: even(aux.size),
         });
     }
-    let (my, mu, mv) = main.strides();
-    let (ay, au, av) = aux.strides();
+    let (my, mu, mv) = main.strides;
+    let (ay, au, av) = aux.strides;
     let half = h / 2;
     let mut y = pool.get(w * h);
     let mut u = pool.get(w * h);
     let mut v = pool.get(w * h);
-    copy_rows(main.y(), my, y.as_mut_slice(), w, h);
+    copy_rows(main.y, my, y.as_mut_slice(), w, h);
     let rows = u
         .as_mut_slice()
         .chunks_exact_mut(w)
@@ -209,11 +254,11 @@ fn recombine(
     for (row, (u_row, v_row)) in rows.enumerate() {
         let by = row / 2;
         if row % 2 == 0 {
-            interleave(&main.u()[by * mu..], &aux.u()[by * au..], u_row);
-            interleave(&main.v()[by * mv..], &aux.v()[by * av..], v_row);
+            interleave(&main.u[by * mu..], &aux.u[by * au..], u_row);
+            interleave(&main.v[by * mv..], &aux.v[by * av..], v_row);
         } else {
-            u_row.copy_from_slice(&aux.y()[by * ay..by * ay + w]);
-            v_row.copy_from_slice(&aux.y()[(half + by) * ay..(half + by) * ay + w]);
+            u_row.copy_from_slice(&aux.y[by * ay..by * ay + w]);
+            v_row.copy_from_slice(&aux.y[(half + by) * ay..(half + by) * ay + w]);
         }
     }
     let size = (
@@ -246,6 +291,163 @@ fn copy_rows(src: &[u8], stride: usize, dst: &mut [u8], width: usize, rows: usiz
     for (row, out) in dst.chunks_exact_mut(width).take(rows).enumerate() {
         let start = row * stride;
         out.copy_from_slice(&src[start..start + width]);
+    }
+}
+
+/// Which decoder a session runs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DecoderKind {
+    Cpu,
+    Gpu,
+}
+
+impl DecoderKind {
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Cpu => "cpu",
+            Self::Gpu => "gpu",
+        }
+    }
+}
+
+enum Active {
+    Cpu(CpuDecoder),
+    #[cfg(windows)]
+    Gpu(crate::gpu_decode::GpuDecoder),
+}
+
+/// The session's decoder: the CPU decoder, or with GPU decode on the GPU
+/// decoder until it fails, then the CPU decoder for the rest of the
+/// session. It has the `CpuDecoder` API and collects one log line per
+/// change of decoder, and the GPU decoder's note on held pictures, for the
+/// driver to write ([`VideoDecoder::take_notes`]).
+pub struct VideoDecoder {
+    active: Active,
+    chroma: ChromaMode,
+    notes: Vec<String>,
+}
+
+impl VideoDecoder {
+    /// The CPU decoder, or with `gpu` the GPU decoder when it starts. A
+    /// GPU decoder that does not start leaves a note and the CPU decoder.
+    pub fn new(gpu: bool) -> Result<Self, DecodeError> {
+        let mut notes = Vec::new();
+        let active = if gpu {
+            Self::start_gpu(&mut notes)?
+        } else {
+            Active::Cpu(CpuDecoder::new()?)
+        };
+        Ok(Self {
+            active,
+            chroma: ChromaMode::Single420,
+            notes,
+        })
+    }
+
+    #[cfg(windows)]
+    fn start_gpu(notes: &mut Vec<String>) -> Result<Active, DecodeError> {
+        match crate::gpu_decode::GpuDecoder::new() {
+            Ok(d) => {
+                notes.push(format!(
+                    "decoder: gpu (Media Foundation, D3D11 video on {})",
+                    d.adapter()
+                ));
+                Ok(Active::Gpu(d))
+            }
+            Err(e) => {
+                notes.push(format!("decoder: cpu, GPU decode unavailable: {e}"));
+                Ok(Active::Cpu(CpuDecoder::new()?))
+            }
+        }
+    }
+
+    #[cfg(not(windows))]
+    fn start_gpu(notes: &mut Vec<String>) -> Result<Active, DecodeError> {
+        notes.push("decoder: cpu, GPU decode unavailable: not a Windows build".to_owned());
+        Ok(Active::Cpu(CpuDecoder::new()?))
+    }
+
+    /// The decoder in use now.
+    pub fn kind(&self) -> DecoderKind {
+        match self.active {
+            Active::Cpu(_) => DecoderKind::Cpu,
+            #[cfg(windows)]
+            Active::Gpu(_) => DecoderKind::Gpu,
+        }
+    }
+
+    /// The log lines since the last call: a decoder that started, or one
+    /// that took over.
+    pub fn take_notes(&mut self) -> Vec<String> {
+        std::mem::take(&mut self.notes)
+    }
+
+    /// As [`CpuDecoder::decode`]. A GPU error switches to the CPU decoder
+    /// and is returned, so the core asks for a keyframe.
+    #[must_use = "a released picture must be presented or dropped on purpose"]
+    pub fn decode(&mut self, main: &[u8], aux: &[u8]) -> Result<Option<YuvFrame>, DecodeError> {
+        match &mut self.active {
+            Active::Cpu(d) => d.decode(main, aux),
+            #[cfg(windows)]
+            Active::Gpu(d) => {
+                let result = d.decode(main, aux);
+                self.notes.extend(d.take_held_note());
+                result.map_err(|e| self.fall_back(e))
+            }
+        }
+    }
+
+    /// As [`CpuDecoder::has_pending`]. Never true for the GPU decoder: a
+    /// drain stops the Windows decoder until the next IDR, which the server
+    /// sends only when asked, so the picture would freeze. A picture it
+    /// holds comes out with a later unit instead.
+    pub fn has_pending(&self) -> bool {
+        match &self.active {
+            Active::Cpu(d) => d.has_pending(),
+            #[cfg(windows)]
+            Active::Gpu(_) => false,
+        }
+    }
+
+    /// As [`CpuDecoder::flush`]; nothing for the GPU decoder, which is
+    /// never drained (see [`VideoDecoder::has_pending`]).
+    #[must_use = "a drained picture must be presented or dropped on purpose"]
+    pub fn flush(&mut self) -> Result<Option<YuvFrame>, DecodeError> {
+        match &mut self.active {
+            Active::Cpu(d) => d.flush(),
+            #[cfg(windows)]
+            Active::Gpu(_) => Ok(None),
+        }
+    }
+
+    /// As [`CpuDecoder::reset`].
+    pub fn reset(&mut self, chroma: ChromaMode) -> Result<(), DecodeError> {
+        self.chroma = chroma;
+        match &mut self.active {
+            Active::Cpu(d) => d.reset(chroma),
+            #[cfg(windows)]
+            Active::Gpu(d) => {
+                let result = d.reset(chroma);
+                result.or_else(|e| {
+                    let _ = self.fall_back(e);
+                    Ok(())
+                })
+            }
+        }
+    }
+
+    /// Replaces the GPU decoder with a CPU decoder for the current chroma
+    /// and returns the error for the core.
+    #[cfg(windows)]
+    fn fall_back(&mut self, e: crate::gpu_decode::GpuError) -> DecodeError {
+        self.notes
+            .push(format!("decoder: switched to cpu, GPU decode failed: {e}"));
+        let cpu = CpuDecoder::new().and_then(|mut d| d.reset(self.chroma).map(|()| d));
+        match cpu {
+            Ok(d) => self.active = Active::Cpu(d),
+            Err(cpu_error) => return cpu_error,
+        }
+        DecodeError::Gpu(e.to_string())
     }
 }
 

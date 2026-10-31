@@ -93,6 +93,7 @@ fn session_with(name: &str, env: &str, server_path: &str) -> (SessionHandle, Arc
         initial: SIZE,
         colour: Colour::Standard,
         input: InputOptions::default(),
+        gpu_decode: false,
     };
     let waker = Arc::new(Counting::default());
     let handle = start(opts, waker.clone()).expect("start the session thread");

@@ -172,7 +172,7 @@ fn the_report_shows_each_repair_of_the_machine_list() {
 }
 
 const TWO_MACHINES: &str = "machines = [\"me@a\", \"me@b\"]\n\
-    [overrides.\"me@a\"]\nscreen = \"own\"\nshare_clipboard = false\nsharp_colour = true\n\
+    [overrides.\"me@a\"]\nscreen = \"own\"\nshare_clipboard = false\nsharp_colour = true\ngpu_decode = true\n\
     [overrides.\"me@c\"]\nscreen = \"mirror\"\n";
 
 #[test]
@@ -187,6 +187,7 @@ fn the_report_shows_each_machines_saved_choice_and_where_it_came_from() {
             "screen": {"value": "own", "source": "machine", "locked": false},
             "share_clipboard": {"value": false, "source": "machine", "locked": false},
             "sharp_colour": {"value": true, "source": "machine", "locked": false},
+            "gpu_decode": {"value": true, "source": "machine", "locked": false},
         })
     );
     assert_eq!(
@@ -195,6 +196,7 @@ fn the_report_shows_each_machines_saved_choice_and_where_it_came_from() {
             "screen": {"value": "mirror", "source": "default", "locked": false},
             "share_clipboard": {"value": true, "source": "default", "locked": false},
             "sharp_colour": {"value": false, "source": "default", "locked": false},
+            "gpu_decode": {"value": false, "source": "default", "locked": false},
         })
     );
     // A machine with a choice but no tab is listed too.
