@@ -42,6 +42,8 @@ use windows::Win32::UI::Input::KeyboardAndMouse::VK_F11;
 use windows::Win32::UI::WindowsAndMessaging::AppendMenuW;
 use windows::Win32::UI::WindowsAndMessaging::DefWindowProcW;
 use windows::Win32::UI::WindowsAndMessaging::DestroyWindow;
+use windows::Win32::UI::WindowsAndMessaging::GA_ROOT;
+use windows::Win32::UI::WindowsAndMessaging::GetAncestor;
 use windows::Win32::UI::WindowsAndMessaging::GetClientRect;
 use windows::Win32::UI::WindowsAndMessaging::GetSystemMenu;
 use windows::Win32::UI::WindowsAndMessaging::GetWindowRect;
@@ -56,6 +58,7 @@ use windows::Win32::UI::WindowsAndMessaging::PostQuitMessage;
 use windows::Win32::UI::WindowsAndMessaging::SW_RESTORE;
 use windows::Win32::UI::WindowsAndMessaging::SWP_NOACTIVATE;
 use windows::Win32::UI::WindowsAndMessaging::SWP_NOZORDER;
+use windows::Win32::UI::WindowsAndMessaging::SendMessageW;
 use windows::Win32::UI::WindowsAndMessaging::SetForegroundWindow;
 use windows::Win32::UI::WindowsAndMessaging::SetTimer;
 use windows::Win32::UI::WindowsAndMessaging::SetWindowPos;
@@ -66,8 +69,10 @@ use windows::Win32::UI::WindowsAndMessaging::WM_COPYDATA;
 use windows::Win32::UI::WindowsAndMessaging::WM_DESTROY;
 use windows::Win32::UI::WindowsAndMessaging::WM_DPICHANGED;
 use windows::Win32::UI::WindowsAndMessaging::WM_ENDSESSION;
+use windows::Win32::UI::WindowsAndMessaging::WM_ENTERMENULOOP;
 use windows::Win32::UI::WindowsAndMessaging::WM_ENTERSIZEMOVE;
 use windows::Win32::UI::WindowsAndMessaging::WM_ERASEBKGND;
+use windows::Win32::UI::WindowsAndMessaging::WM_EXITMENULOOP;
 use windows::Win32::UI::WindowsAndMessaging::WM_EXITSIZEMOVE;
 use windows::Win32::UI::WindowsAndMessaging::WM_KEYDOWN;
 use windows::Win32::UI::WindowsAndMessaging::WM_LBUTTONDOWN;
@@ -172,7 +177,9 @@ const TIMER_STATS: usize = 4;
 const TIMER_GRAB: usize = 5;
 /// The next tab retry (`Tabs::next_due`); re-armed after every event.
 const TIMER_RETRY: usize = 6;
-/// The size-move timer: about one 60 Hz frame.
+/// Presents while a menu's modal loop runs in place of the main loop.
+const TIMER_MENU: usize = 7;
+/// The size-move and menu timer: about one 60 Hz frame.
 const SIZE_MOVE_TICK: Duration = Duration::from_millis(16);
 /// How long a closing window waits for the session's Bye.
 const CLOSE_WAIT: Duration = Duration::from_secs(3);
@@ -307,6 +314,9 @@ pub struct App {
     chords: ChordsInfo,
     /// The waitable was signalled and not yet used by a `Present`.
     ready: bool,
+    /// A menu's modal loop is running: when it began and the pictures
+    /// shown since.
+    menu: Option<(Instant, u32)>,
     /// `WM_CLOSE` sent Bye to every session; the window goes when they are
     /// over or the close timer fires.
     closing: bool,
@@ -370,6 +380,7 @@ impl App {
             input: parts.input,
             chords: parts.chords,
             ready: false,
+            menu: None,
             closing: false,
             title: "gliff".to_owned(),
             typing_sent: Last::new(),
@@ -875,9 +886,9 @@ impl App {
         }
     }
 
-    /// The modal size-move loop starves the main loop: poll the waitable
-    /// and present from here.
-    fn on_size_move_timer(&mut self) {
+    /// A modal loop (size-move, or a menu's) starves the main loop: poll
+    /// the waitable and present from here. True when a picture was drawn.
+    fn on_modal_tick(&mut self) -> bool {
         if !self.ready
             && let Some(presenter) = &self.presenter
         {
@@ -885,7 +896,25 @@ impl App {
             let event = unsafe { WaitForSingleObjectEx(presenter.waitable(), 0, false) };
             self.ready = event == WAIT_OBJECT_0;
         }
-        self.pump();
+        self.drain_events();
+        self.present_due()
+    }
+
+    /// A menu opened: Windows runs its own message loop until it closes,
+    /// so the main loop no longer waits on the waitable.
+    fn on_enter_menu_loop(&mut self) {
+        self.menu = Some((Instant::now(), 0));
+        self.set_timer(TIMER_MENU, SIZE_MOVE_TICK);
+    }
+
+    fn on_exit_menu_loop(&mut self) {
+        self.kill_timer(TIMER_MENU);
+        if let Some((opened, shown)) = self.menu.take() {
+            crate::logging::line(&format!(
+                "menu: {shown} pictures shown in {} ms while it was open",
+                opened.elapsed().as_millis()
+            ));
+        }
     }
 
     fn on_dpi_changed(&mut self, dpi: u32, suggested: RECT) {
@@ -1465,10 +1494,27 @@ impl App {
                 self.on_exit_size_move();
                 Some(LRESULT(0))
             }
+            WM_ENTERMENULOOP => {
+                self.on_enter_menu_loop();
+                Some(LRESULT(0))
+            }
+            WM_EXITMENULOOP => {
+                self.on_exit_menu_loop();
+                Some(LRESULT(0))
+            }
             WM_TIMER => {
                 match wparam.0 {
                     TIMER_SETTLE => self.on_settle_timer(),
-                    TIMER_SIZE_MOVE => self.on_size_move_timer(),
+                    TIMER_SIZE_MOVE => {
+                        self.on_modal_tick();
+                    }
+                    TIMER_MENU => {
+                        if self.on_modal_tick()
+                            && let Some((_, shown)) = &mut self.menu
+                        {
+                            *shown += 1;
+                        }
+                    }
                     TIMER_CLOSE => {
                         crate::logging::line("close: no Bye within 3 s");
                         self.destroy();
@@ -1538,6 +1584,7 @@ impl App {
         self.kill_timer(TIMER_RETRY);
         self.kill_timer(TIMER_SETTLE);
         self.kill_timer(TIMER_SIZE_MOVE);
+        self.kill_timer(TIMER_MENU);
         // SAFETY: ends this thread's message loop.
         unsafe { PostQuitMessage(0) };
     }
@@ -1612,6 +1659,20 @@ fn replay() {
             // Still borrowed further up the stack: that frame replays.
             DEFERRED.with(|d| d.borrow_mut().insert(0, deferred));
             return;
+        }
+    }
+}
+
+/// A child window's menu tells the child it opened or closed; the
+/// top-level window, which presents, needs to know.
+pub fn forward_menu_loop(child: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) {
+    if matches!(msg, WM_ENTERMENULOOP | WM_EXITMENULOOP) {
+        // SAFETY: our own child; the top-level window is ours too.
+        unsafe {
+            let top = GetAncestor(child, GA_ROOT);
+            if !top.0.is_null() && top != child {
+                SendMessageW(top, msg, Some(wparam), Some(lparam));
+            }
         }
     }
 }

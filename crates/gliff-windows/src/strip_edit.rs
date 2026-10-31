@@ -276,6 +276,7 @@ fn context_menu(hwnd: HWND, lparam: LPARAM) {
 /// The edit field's window procedure.
 extern "system" fn proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
     const CTRL_A: usize = 0x01;
+    crate::window::forward_menu_loop(hwnd, msg, wparam, lparam);
     match msg {
         WM_KEYDOWN if wparam.0 == usize::from(VK_RETURN.0) => {
             let _ = with_app(|app| app.address_event(Event::Enter));
