@@ -325,8 +325,11 @@ after; any other goes to `DefWindowProc` and is dropped. `AppState` is `Connecti
   is open, a 16 ms timer polls the waitable and presents. `WM_ENTERMENULOOP`
   starts the menu timer and `WM_EXITMENULOOP` stops it. The strip and the
   address field own their popup menus, so they forward both messages to the
-  top-level window. When the menu closes, the log gets one line with the
-  number of pictures shown while it was open.
+  top-level window. While a menu is open, each new picture also polls the
+  waitable and presents at once, so the menu does not cap the rate at the
+  timer's (Windows rounds a 16 ms timer up to its clock tick). When the menu
+  closes, the log gets one line with the number of pictures shown while it
+  was open.
 
 - **Resize.** `ResizeGate` waits until the client size has held for 200 ms,
   sends at once when a drag ends (`WM_EXITSIZEMOVE`), and sends after

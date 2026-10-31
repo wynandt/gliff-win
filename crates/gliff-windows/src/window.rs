@@ -755,6 +755,9 @@ impl App {
             PresentOutcome::Occluded => {}
             PresentOutcome::DeviceLost => self.recreate(),
         }
+        if let Some((_, shown)) = &mut self.menu {
+            *shown += 1;
+        }
         true
     }
 
@@ -889,6 +892,13 @@ impl App {
     /// A modal loop (size-move, or a menu's) starves the main loop: poll
     /// the waitable and present from here. True when a picture was drawn.
     fn on_modal_tick(&mut self) -> bool {
+        self.poll_waitable();
+        self.drain_events();
+        self.present_due()
+    }
+
+    /// Sets `ready` if the waitable is signalled, without waiting.
+    fn poll_waitable(&mut self) {
         if !self.ready
             && let Some(presenter) = &self.presenter
         {
@@ -896,8 +906,6 @@ impl App {
             let event = unsafe { WaitForSingleObjectEx(presenter.waitable(), 0, false) };
             self.ready = event == WAIT_OBJECT_0;
         }
-        self.drain_events();
-        self.present_due()
     }
 
     /// A menu opened: Windows runs its own message loop until it closes,
@@ -1469,6 +1477,12 @@ impl App {
             // A hidden session's picture waits in its slot until its tab is shown.
             WM_APP_FRAME => {
                 if self.shown.is_some_and(|id| id.get() as usize == wparam.0) {
+                    // Inside a menu's loop the main loop never sees the
+                    // waitable, so look here: each picture goes out as it
+                    // arrives, not on the next timer tick.
+                    if self.menu.is_some() {
+                        self.poll_waitable();
+                    }
                     self.present_due();
                 }
                 Some(LRESULT(0))
@@ -1509,11 +1523,7 @@ impl App {
                         self.on_modal_tick();
                     }
                     TIMER_MENU => {
-                        if self.on_modal_tick()
-                            && let Some((_, shown)) = &mut self.menu
-                        {
-                            *shown += 1;
-                        }
+                        self.on_modal_tick();
                     }
                     TIMER_CLOSE => {
                         crate::logging::line("close: no Bye within 3 s");
