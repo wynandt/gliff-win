@@ -553,6 +553,13 @@ impl Core {
                 let fallback = self.in_decoder.back().map_or(0, |(id, _)| *id);
                 vec![self.present(frame, fallback)]
             }
+            // The GPU decoder failed and a fresh CPU one took over: it
+            // needs a keyframe, as after a failed decode.
+            (_, Err(DecodeError::Gpu(_))) => {
+                self.stats.drain_errors += 1;
+                self.in_decoder.clear();
+                vec![self.request_keyframe()]
+            }
             (_, Err(_)) => {
                 self.stats.drain_errors += 1;
                 Vec::new()

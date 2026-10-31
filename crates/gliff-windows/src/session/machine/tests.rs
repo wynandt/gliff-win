@@ -603,7 +603,23 @@ fn drained_pictures_are_presented_but_never_acked() {
         "drain error is only counted (net.rs:549-552)"
     );
     assert_eq!(core.stats().drain_errors, 1, "drain error counted");
-    assert_eq!(core.stats().acks, 1, "only the decode acked");
+    // A failed GPU drain leaves a fresh CPU decoder that needs a keyframe.
+    let _ = core.on_server(frame(1), au(), Bytes::new());
+    assert_eq!(
+        core.drained(Err(DecodeError::Gpu("drain: lost".to_owned()))),
+        vec![send(ClientMsg::RequestKeyframe)],
+        "GPU drain error: keyframe"
+    );
+    assert_eq!(core.stats().drain_errors, 2, "GPU drain error counted");
+    let next = core.decoded(done(2, Ok(Some(picture(1920)))));
+    assert!(
+        matches!(
+            next.as_slice(),
+            [_, Action::Present(Picture { frame_id: 2, .. })]
+        ),
+        "after a GPU drain error the FIFO restarts: {next:?}"
+    );
+    assert_eq!(core.stats().acks, 2, "only the decodes acked");
 }
 
 #[test]

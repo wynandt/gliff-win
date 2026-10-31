@@ -43,6 +43,7 @@ use crate::clip_link::Port;
 use crate::connect::SshFailure;
 use crate::connect::from_spawn_error;
 use crate::connect::log_line;
+use crate::decode::DecoderKind;
 use crate::decode::VideoDecoder;
 use crate::frame_slot::FrameSlot;
 use crate::input::InputOptions;
@@ -574,6 +575,16 @@ impl Session {
     /// over the last `secs` seconds, if it decoded anything.
     fn report_decode(&mut self, secs: f64) {
         let kind = self.decoder.kind();
+        self.report_decode_window(secs, kind);
+    }
+
+    /// Logs the window so far as `kind`'s, at a fallback.
+    fn report_decode_as(&mut self, kind: DecoderKind) {
+        let secs = self.colour_since.elapsed().as_secs_f64();
+        self.report_decode_window(secs, kind);
+    }
+
+    fn report_decode_window(&mut self, secs: f64, kind: DecoderKind) {
         if let Some(window) = &mut self.decode_window
             && !window.is_empty()
         {
@@ -721,10 +732,15 @@ impl Session {
                     main,
                     aux,
                 } => {
+                    let before = self.decoder.kind();
                     let t = Instant::now();
                     let result = self.decoder.decode(&main, &aux);
                     let ms = t.elapsed().as_secs_f64() * 1000.0;
                     self.log_decoder_notes();
+                    if self.decoder.kind() != before {
+                        // A fallback: the times so far are the old decoder's.
+                        self.report_decode_as(before);
+                    }
                     if let Some(window) = &mut self.decode_window {
                         window.push(ms as f32);
                     }
@@ -819,13 +835,14 @@ fn session_name(tag: Option<u32>) -> String {
     tag.map_or_else(|| "session".to_owned(), |n| format!("session {n}"))
 }
 
-/// One decode report: the decoder in use and the decode time per picture
-/// (median and 95th percentile) over the last `secs` seconds.
+/// One decode report: the decoder in use and the time per decode call (one
+/// call per received unit; median and 95th percentile) over the last
+/// `secs` seconds.
 fn decode_line(tag: Option<u32>, secs: f64, decoder: &str, times: &mut [f32]) -> String {
     times.sort_by(f32::total_cmp);
     let at = |q: f64| times[((times.len() - 1) as f64 * q).round() as usize];
     format!(
-        "{}: decode, last {secs:.1} s: decoder {decoder}, pictures {}, ms p50 {:.2} p95 {:.2}",
+        "{}: decode, last {secs:.1} s: decoder {decoder}, units {}, ms p50 {:.2} p95 {:.2}",
         session_name(tag),
         times.len(),
         at(0.5),
