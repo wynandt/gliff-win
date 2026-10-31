@@ -87,7 +87,7 @@ async fn video_frame_with_real_payload_round_trips_and_decodes() {
 
     let mut decoder = CpuDecoder::new().expect("OpenH264 decoder");
     let picture = decoder
-        .decode(&main)
+        .decode(&main, &[])
         .expect("decode the AU")
         .expect("a Baseline IDR is released at once");
     assert_eq!(picture.size(), (WIDTH, HEIGHT));

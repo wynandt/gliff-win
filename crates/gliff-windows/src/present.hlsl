@@ -30,13 +30,18 @@ VsOut vs_full(uint id : SV_VertexID) {
     return o;
 }
 
-// Pass 1, into the stream-sized RGB texture: Y at the pixel, U and V at
-// pixel / 2 (chroma repeated over each 2x2 block, as gliff-sw).
+// Pass 1, into the stream-sized RGB texture: Y at the pixel, U and V at the
+// pixel when they are full size (4:4:4), else at pixel / 2 (4:2:0, chroma
+// repeated over each 2x2 block, as gliff-sw).
 float4 ps_yuv(VsOut i) : SV_Target {
     int2 p = int2(i.pos.xy);
+    uint luma_w, luma_h, chroma_w, chroma_h;
+    plane_y.GetDimensions(luma_w, luma_h);
+    plane_u.GetDimensions(chroma_w, chroma_h);
+    int2 c = chroma_w == luma_w ? p : p / 2;
     float y = plane_y.Load(int3(p, 0)) * 255.0 - 16.0;
-    float cb = plane_u.Load(int3(p / 2, 0)) * 255.0 - 128.0;
-    float cr = plane_v.Load(int3(p / 2, 0)) * 255.0 - 128.0;
+    float cb = plane_u.Load(int3(c, 0)) * 255.0 - 128.0;
+    float cr = plane_v.Load(int3(c, 0)) * 255.0 - 128.0;
     float r = KY * y + KRV * cr;
     float g = KY * y + KGU * cb + KGV * cr;
     float b = KY * y + KBU * cb;

@@ -16,6 +16,7 @@ use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
 
 use bytes::Bytes;
+use gliff_proto::msg::ChromaMode;
 use gliff_proto::msg::ClientMsg;
 use gliff_proto::msg::ServerMsg;
 use gliff_transport::Framed;
@@ -23,6 +24,8 @@ use tokio::process::Child;
 use tokio::sync::mpsc;
 
 use super::Action;
+use super::Colour;
+use super::ColourCounts;
 use super::Core;
 use super::Decoded;
 use super::EndReason;
@@ -60,6 +63,9 @@ const KEY_HOLD: Duration = Duration::from_millis(DEADLINE_MS as u64 + 1);
 /// The most queued commands one coalescing pass reads, so a flood of mouse
 /// motion cannot starve the socket.
 const COALESCE_LIMIT: usize = 256;
+
+/// How often a Sharp colour session logs its colour counts.
+const COLOUR_REPORT: Duration = Duration::from_secs(5);
 /// How long ssh may take to exit after Bye and stdin EOF.
 pub const EXIT_WAIT: Duration = Duration::from_secs(5);
 
@@ -84,6 +90,8 @@ pub struct Options {
     pub panel: (u32, u32),
     /// The first Resize, sent after HelloAck.
     pub initial: ResizeReq,
+    /// The chroma modes the client offers (the machine's Sharp colour).
+    pub colour: Colour,
     /// Keys: the layout, the chords and the policy.
     pub input: InputOptions,
 }
@@ -333,7 +341,9 @@ async fn run(
     let (in_tx, mut in_rx) = mpsc::channel(INBOUND_QUEUE);
     let reader = tokio::spawn(read_loop(Framed::new(link.stdout), in_tx));
     let mut session = Session {
-        core: Core::new(opts.initial).with_pipeline(opts.input.pipeline()),
+        core: Core::new(opts.initial)
+            .with_colour(opts.colour)
+            .with_pipeline(opts.input.pipeline()),
         decoder,
         tx: Some(tx),
         engine,
@@ -344,9 +354,13 @@ async fn run(
         errors: Vec::new(),
         key_clock: None,
         watch: Watch::default(),
+        colour_since: Instant::now(),
     };
     session.send(
-        hello(client_caps(opts.panel), opts.input.keymap.clone()),
+        hello(
+            client_caps(opts.panel, opts.colour),
+            opts.input.keymap.clone(),
+        ),
         Bytes::new(),
     );
     session.run(&mut in_rx, &mut cmds, &mut child).await;
@@ -455,6 +469,8 @@ struct Session {
     /// Input the server has not answered with a picture, for resyncing a
     /// server that went quiet.
     watch: Watch,
+    /// Start of the colour counts' current window.
+    colour_since: Instant,
 }
 
 /// The hook time of a key and when it arrived here.
@@ -532,6 +548,22 @@ impl Session {
                 }
             }
             self.out.publish(self.core.stats());
+            if self.colour_since.elapsed() >= COLOUR_REPORT {
+                self.report_colour();
+            }
+        }
+        self.report_colour();
+    }
+
+    /// Logs the colour counts since the last report, for a Sharp colour
+    /// session that received or showed anything, and starts a new window.
+    fn report_colour(&mut self) {
+        let secs = self.colour_since.elapsed().as_secs_f64();
+        self.colour_since = Instant::now();
+        if let Some((chroma, counts)) = self.core.take_colour()
+            && !counts.is_empty()
+        {
+            crate::logging::line(&colour_line(self.spec.log_tag, secs, chroma, &counts));
         }
     }
 
@@ -650,9 +682,13 @@ impl Session {
                         engine.peer(msg, payload);
                     }
                 }
-                Action::Decode { frame_id, main } => {
+                Action::Decode {
+                    frame_id,
+                    main,
+                    aux,
+                } => {
                     let t = Instant::now();
-                    let result = self.decoder.decode(&main);
+                    let result = self.decoder.decode(&main, &aux);
                     let ms = t.elapsed().as_secs_f64() * 1000.0;
                     queue.extend(self.core.decoded(Decoded {
                         frame_id,
@@ -661,8 +697,8 @@ impl Session {
                         now_ms: now_ms(),
                     }));
                 }
-                Action::ResetDecoder => {
-                    if let Err(e) = self.decoder.reset() {
+                Action::ResetDecoder(chroma) => {
+                    if let Err(e) = self.decoder.reset(chroma) {
                         self.errors.push(format!("decoder reset: {e}"));
                     }
                 }
@@ -711,6 +747,32 @@ fn coalesce_motion(first: UiCmd, rx: &mut mpsc::UnboundedReceiver<UiCmd>) -> Vec
     }
     out.push(current);
     out
+}
+
+/// One colour report: what arrived, what the decoders made of it, and
+/// what was shown, over the last `secs` seconds.
+fn colour_line(
+    tag: Option<u32>,
+    secs: f64,
+    chroma: Option<ChromaMode>,
+    c: &ColourCounts,
+) -> String {
+    let session = tag.map_or_else(|| "session".to_owned(), |n| format!("session {n}"));
+    let stream = chroma.map_or_else(|| "none yet".to_owned(), |c| format!("{c:?}"));
+    format!(
+        "{session}: sharp colour, last {secs:.1} s: stream {stream}; frames {}, with aux {}, \
+         without aux {}, stray aux {}; shown 4:4:4 {}, shown 4:2:0 {}; decode errors: \
+         out of step {}, size mismatch {}, other {}",
+        c.frames,
+        c.with_aux,
+        c.without_aux,
+        c.stray_aux,
+        c.full,
+        c.half,
+        c.out_of_step,
+        c.size_mismatch,
+        c.other_errors,
+    )
 }
 
 fn now_ms() -> u64 {

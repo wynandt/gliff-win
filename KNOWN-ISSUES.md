@@ -7,12 +7,16 @@ is not listed here, please open an issue with a way to reproduce it.
 ## Not built yet
 
 - **Sound.** No audio and no microphone. Gliff's protocol has none either.
-- **Sharp coloured text.** The client asks for a 4:2:0 stream and decodes it on
-  the CPU, so coloured text is a little soft. Full colour (4:4:4) and GPU
-  decoding are not built.
+- **Sharp coloured text is off by default** ([#9](https://github.com/wynandt/gliff-win/issues/9)). Without *Sharp
+  colour* the client asks for a 4:2:0 stream, so coloured text is a little
+  soft. Turn it on per machine in the tab's *Connection settings*. A server
+  that encodes on the CPU still sends 4:2:0 unless it runs with
+  `--full-chroma`; see [docs/settings.md](docs/settings.md#sharp-colour).
+- **GPU video decoding.** The client decodes H.264 on the CPU. With *Sharp
+  colour* it decodes two streams, so the decode work at least doubles.
 - **System tray and start with Windows.**
-- **A settings window.** The two choices for one machine (Show as and Share
-  clipboard) are in a tab's right-click menu. Everything else is a flag or a
+- **A settings window.** The three choices for one machine (Show as, Share
+  clipboard and Sharp colour) are in a tab's right-click menu. Everything else is a flag or a
   key in `config.toml`; see [docs/settings.md](docs/settings.md).
 - **A light theme.** The tab strip and the failure panel are always dark.
 - **Progress and Cancel for big pastes.** Progress is written to the log only.
@@ -36,6 +40,8 @@ The client has run on one Windows machine. Not tried yet
   while the client runs.
 - Keyboard layouts other than US and German, and any IME.
 - Other GPUs and drivers, and `--adapter` beyond the default.
+- *Sharp colour* on a Windows machine: the 4:4:4 picture is proved on the
+  build machine only (decode, recombine and a CPU model of the shader).
 - Third-party clipboard managers.
 - With `--super-l registry`: whether the inactivity lock and a
   password-protected screen saver still lock Windows while the window is

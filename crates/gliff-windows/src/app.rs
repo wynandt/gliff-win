@@ -313,6 +313,7 @@ fn starter(
             spec,
             panel: panel_size(hwnd),
             initial,
+            colour: connection.colour(),
             input: settings.input_options(keymap.text),
         };
         let handle = start_with_clipboard(opts, Arc::clone(&waker) as Arc<dyn Waker>, launch.clip)?;

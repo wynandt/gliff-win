@@ -1267,7 +1267,8 @@ mod config_file {
             chosen(&again, "me@one"),
             Choice {
                 screen: Some(Screen::Own),
-                share_clipboard: Some(false)
+                share_clipboard: Some(false),
+                sharp_colour: None,
             }
         );
         assert_eq!(chosen(&again, "me@two"), Choice::default());

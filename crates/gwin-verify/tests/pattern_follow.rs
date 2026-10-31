@@ -22,6 +22,7 @@ use std::time::Instant;
 
 use gliff_windows::cli::DesktopMode;
 use gliff_windows::input::InputOptions;
+use gliff_windows::session::Colour;
 use gliff_windows::session::ResizeReq;
 use gliff_windows::session::UiCmd;
 use gliff_windows::session::driver::Options;
@@ -135,6 +136,7 @@ fn session(dir: &Path, hypr: &Path) -> SessionHandle {
         },
         panel: (3840, 2400),
         initial: WINDOWED,
+        colour: Colour::Standard,
         input: InputOptions::default(),
     };
     start(opts, Arc::new(Quiet)).expect("start the session thread")

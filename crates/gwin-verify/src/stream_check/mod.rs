@@ -36,6 +36,7 @@ use gliff_windows::h264::find_sps;
 use gliff_windows::link::Inbound;
 use gliff_windows::link::read_server;
 use gliff_windows::session::Action;
+use gliff_windows::session::Colour;
 use gliff_windows::session::Core;
 use gliff_windows::session::Decoded;
 use gliff_windows::session::EndReason;
@@ -477,7 +478,10 @@ async fn read_loop(
 
 impl Run {
     async fn session(&mut self, inbound: &mut InboundRx) {
-        self.send(hello(client_caps(self.opts.size), String::new()));
+        self.send(hello(
+            client_caps(self.opts.size, Colour::Standard),
+            String::new(),
+        ));
         let mut last_frame = Instant::now();
         loop {
             if self.phase == Phase::Done || self.core.is_ended() {
@@ -665,9 +669,13 @@ impl Run {
         while let Some(action) = queue.pop_front() {
             match action {
                 Action::Send(msg, _) => self.send(msg),
-                Action::Decode { frame_id, main } => {
+                Action::Decode {
+                    frame_id,
+                    main,
+                    aux,
+                } => {
                     let t = Instant::now();
-                    let result = self.decoder.decode(&main);
+                    let result = self.decoder.decode(&main, &aux);
                     let ms = t.elapsed().as_secs_f64() * 1000.0;
                     if let Phase::Measure { .. } = self.phase {
                         self.window.decode_ms.push(ms);
@@ -679,8 +687,8 @@ impl Run {
                         now_ms: now_ms(),
                     }));
                 }
-                Action::ResetDecoder => {
-                    if let Err(e) = self.decoder.reset() {
+                Action::ResetDecoder(chroma) => {
+                    if let Err(e) = self.decoder.reset(chroma) {
                         self.failures
                             .push(Failure::Link(format!("decoder reset: {e}")));
                     }

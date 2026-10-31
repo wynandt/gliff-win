@@ -28,6 +28,7 @@ use gliff_windows::input::InputOptions;
 use gliff_windows::keymap::Press;
 use gliff_windows::pointer::PointerEvent;
 use gliff_windows::route::InputRoute;
+use gliff_windows::session::Colour;
 use gliff_windows::session::ResizeReq;
 use gliff_windows::session::UiCmd;
 use gliff_windows::session::UiEvent;
@@ -196,6 +197,7 @@ fn window_with(
             },
             panel: (3840, 2400),
             initial: SIZE,
+            colour: Colour::Standard,
             input: InputOptions::default(),
         };
         start(opts, Arc::new(Quiet))

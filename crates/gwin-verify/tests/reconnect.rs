@@ -29,6 +29,7 @@ use gliff_windows::history::HostTarget;
 use gliff_windows::input::InputOptions;
 use gliff_windows::reconnect::Policy;
 use gliff_windows::route::InputRoute;
+use gliff_windows::session::Colour;
 use gliff_windows::session::ResizeReq;
 use gliff_windows::session::UiCmd;
 use gliff_windows::session::driver::Options;
@@ -143,6 +144,7 @@ impl Rig {
                     },
                     panel: (1920, 1200),
                     initial: SIZE,
+                    colour: Colour::Standard,
                     input: InputOptions::default(),
                 };
                 start(opts, Arc::new(Quiet))

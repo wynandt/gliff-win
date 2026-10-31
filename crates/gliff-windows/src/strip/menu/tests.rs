@@ -36,6 +36,8 @@ fn plain() -> Connection {
         share_clipboard: true,
         share_origin: Origin::Default,
         share_lock: None,
+        sharp_colour: false,
+        sharp_origin: Origin::Default,
     }
 }
 
@@ -340,6 +342,7 @@ fn the_submenu_shows_the_machines_choices_and_when_they_apply() {
             "( ) Own screen",
             "-",
             "[x] Share clipboard",
+            "[ ] Sharp colour",
             "-",
             "# Applies the next time this tab connects",
         ]
@@ -349,12 +352,15 @@ fn the_submenu_shows_the_machines_choices_and_when_they_apply() {
         screen_origin: Origin::Machine,
         share_clipboard: false,
         share_origin: Origin::Machine,
+        sharp_colour: true,
+        sharp_origin: Origin::Machine,
         ..plain()
     };
     let rows = connection_rows(&own);
     assert_eq!(rows[1], "( ) Mirror the remote screen");
     assert_eq!(rows[2], "(o) Own screen");
     assert_eq!(rows[4], "[ ] Share clipboard");
+    assert_eq!(rows[5], "[x] Sharp colour");
 }
 
 #[test]
@@ -365,6 +371,7 @@ fn a_row_asks_for_the_other_value_than_the_one_it_shows() {
             Command::ShowAs(Screen::Mirror),
             Command::ShowAs(Screen::Own),
             Command::ShareClipboard(false),
+            Command::SharpColour(true),
         ]
     );
     let off = Connection {
@@ -383,6 +390,8 @@ fn a_locked_row_is_greyed_and_gives_its_reason() {
         share_clipboard: false,
         share_origin: Origin::Flag,
         share_lock: Some("Locked: this window was started with --no-clipboard, which turns the clipboard off for every machine.".to_owned()),
+        sharp_colour: false,
+        sharp_origin: Origin::Default,
     };
     assert_eq!(
         connection_rows(&locked),
@@ -394,6 +403,7 @@ fn a_locked_row_is_greyed_and_gives_its_reason() {
             "-",
             "~[ ] Share clipboard",
             "# Locked: this window was started with --no-clipboard, which turns the clipboard off for every machine.",
+            "[ ] Sharp colour",
             "-",
             "# Applies the next time this tab connects",
         ]
@@ -423,8 +433,17 @@ fn own_screen() -> Connection {
 
 #[test]
 fn a_changed_choice_on_a_running_tab_offers_to_reconnect_instead_of_the_old_line() {
-    for status in [Status::Connecting, Status::Streaming] {
-        let rows = rows_for(&status, &own_screen(), Some(&started_like_plain()));
+    let sharp = Connection {
+        sharp_colour: true,
+        sharp_origin: Origin::Machine,
+        ..plain()
+    };
+    for (status, chosen) in [
+        (Status::Connecting, own_screen()),
+        (Status::Streaming, own_screen()),
+        (Status::Streaming, sharp),
+    ] {
+        let rows = rows_for(&status, &chosen, Some(&started_like_plain()));
         assert_eq!(
             rows.last().map(String::as_str),
             Some("=> Reconnect now to apply"),

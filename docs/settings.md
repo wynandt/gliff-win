@@ -6,7 +6,7 @@ The client reads its settings from three places. For each setting the first of t
 2. the `[settings]` table of `config.toml`,
 3. the built-in default.
 
-The same rule holds for every setting, with one addition: `screen` and `share_clipboard` can also be chosen for one machine, in that machine's tab menu. A machine's choice sits between the flag and the `[settings]` table (see [Connection choices for one machine](#connection-choices-for-one-machine)). The client writes `config.toml` when the tab set changes and when a connection choice is made in a tab menu. Every other setting is edited by hand.
+The same rule holds for every setting, with one addition: `screen` and `share_clipboard` can also be chosen for one machine, in that machine's tab menu, and `sharp_colour` is chosen there only. A machine's choice sits between the flag and the `[settings]` table (see [Connection choices for one machine](#connection-choices-for-one-machine)). The client writes `config.toml` when the tab set changes and when a connection choice is made in a tab menu. Every other setting is edited by hand.
 
 ## The config folder
 
@@ -107,12 +107,13 @@ shown = "user@two"
 
 ## Connection choices for one machine
 
-Right-click a tab and open **Connection settings**. It holds two choices for that machine only:
+Right-click a tab and open **Connection settings**. It holds three choices for that machine only:
 
 - **Show as:** *Mirror the remote screen* or *Own screen*. This is the `screen` setting.
 - **Share clipboard:** ticked or not. This is the `share_clipboard` setting.
+- **Sharp colour:** ticked or not, off by default. This is the `sharp_colour` key, which exists only in a machine's table ([below](#sharp-colour)).
 
-A choice is saved at once. **Share clipboard** applies at once to the tab's session: turned off, nothing is copied or pasted either way, and if what that machine copied is still on the Windows clipboard it is taken off (anything copied on Windows since is left alone); turned back on, sharing resumes in the same session. A session that started without sharing has no clipboard to resume, so ticking it reconnects that tab. **Show as** is a Reconnect-class setting: it applies the next time the tab connects, and the menu says so under the choices. If the tab has a session and the saved Show as choice differs from what that session started with, the line is replaced by **Reconnect now to apply**, which does what **Reconnect** does: it ends the session and starts a new one with the saved choices. A row that a flag or the file has locked never counts as a change. If you change a choice and then change it back, the line stays as it was. A tab with no session (stopped, waiting to retry, or given up) keeps the line, because its next connect applies the choice anyway. There is no settings window and no OK button.
+A choice is saved at once. **Share clipboard** applies at once to the tab's session: turned off, nothing is copied or pasted either way, and if what that machine copied is still on the Windows clipboard it is taken off (anything copied on Windows since is left alone); turned back on, sharing resumes in the same session. A session that started without sharing has no clipboard to resume, so ticking it reconnects that tab. **Show as** and **Sharp colour** are Reconnect-class: they apply the next time the tab connects, and the menu says so under the choices. If the tab has a session and a saved Show as or Sharp colour choice differs from what that session started with, the line is replaced by **Reconnect now to apply**, which does what **Reconnect** does: it ends the session and starts a new one with the saved choices. A row that a flag or the file has locked never counts as a change. If you change a choice and then change it back, the line stays as it was. A tab with no session (stopped, waiting to retry, or given up) keeps the line, because its next connect applies the choice anyway. There is no settings window and no OK button.
 
 **Where it is saved.** In `config.toml`, in one table per machine, named by the target as it is written in `machines`:
 
@@ -120,6 +121,7 @@ A choice is saved at once. **Share clipboard** applies at once to the tab's sess
 [overrides."user@host"]
 screen = "own"
 share_clipboard = false
+sharp_colour = true
 ```
 
 A table holds only what the user changed for that machine, so a machine that was never changed has no table. The table is a layer between the flag and `[settings]`:
@@ -149,6 +151,24 @@ The reason is one plain sentence, one of these:
 
 A locked row changes nothing and saves nothing. A choice saved earlier stays in the file and applies again when the flag is not given. `output = "NAME"` in `[settings]` does not lock: choosing *Mirror* for a machine mirrors that named screen, and choosing *Own screen* gives a private screen.
 
+## Sharp colour
+
+H.264 video normally carries colour at half the resolution in each direction (4:2:0), so the edges of coloured text are a little soft. With **Sharp colour** on, the client offers full-resolution colour (4:4:4) as well as 4:2:0 when the tab connects. The server then sends two 4:2:0 streams per frame, and the client decodes both and puts the full colour back together before it draws the frame. Off, the client offers 4:2:0 only, exactly as without the choice.
+
+- **The server decides.** The client offers; the server picks. A server that encodes on the GPU picks 4:4:4. A server that encodes on the CPU picks 4:2:0, because the second stream doubles its encode work, unless it runs with `--full-chroma`. A server started with `--low-bandwidth` always picks 4:2:0.
+- **Passing `--full-chroma`.** `server_path` takes one program, not a command line. To add the flag, put a small script on the remote machine and point `server_path` at it:
+
+  ```sh
+  #!/bin/sh
+  exec gliff-server --full-chroma "$@"
+  ```
+
+- **Slow links.** The server can drop back to 4:2:0 during a session when the link is short of room, and go back to 4:4:4 when there is room again. Each switch starts with a full frame, so the picture does not glitch.
+- **Cost.** The client decodes two streams instead of one. On dense coloured text that took two to four and a half times the decode time per frame, the server sent two to fourteen times the bytes (most when scrolling), and the frame the client uploads to the GPU is twice the size. [architecture.md](architecture.md#measurements) has the numbers.
+- **Which one you got.** Each `stream config` line in the log ends with the chroma the server picked (`Dual420` or `Single420`) and where it encodes (`encoder gpu` or `encoder cpu`).
+- **Whether it reaches the screen.** While Sharp colour is on, each session logs a `sharp colour` line about every 5 seconds while pictures arrive. It counts the frames received, how many carried their second (aux) half, the pictures shown at 4:4:4 and at 4:2:0, and decode errors by kind: `out of step` (one half gave a picture and the other did not), `size mismatch`, or `other`. On a working Dual420 stream, `shown 4:4:4` follows `with aux` and every other count stays at zero.
+- **No flag and no `[settings]` key.** The choice is per machine only, and nothing locks it.
+
 ## Chords that overlap
 
 A change that would let two chords fire on the same key press is an error at start, not a silent pick. The check covers the release chord, the Super+L chord (unless `super_l` is `off`), the three switch chords and the local chords.
@@ -160,7 +180,7 @@ The message names both chords, where each value came from (a flag, the file or t
 
 ## `--print-settings`
 
-`gliff-windows --print-settings` prints the settings as JSON and exits. It starts no session, so it takes no target, and it changes nothing on disk or in Windows. The JSON holds the config folder (and whether it is the default one), each setting with its value, where the value came from (`flag`, `file` or `default`) and its class, the machine lists (`machines`, `open`, `shown`), the saved connection choices, the recent hosts, and the notes from loading. Its keys are `config_dir`, `config_dir_is_default`, `settings` (each key holding `value`, `source` and `class`), `machines`, `open`, `shown`, `connection`, `recent_hosts` and `notes`. `connection` has one entry for each machine that is listed or has a saved choice, named by its target. Each entry has `screen` and `share_clipboard`, each with the `value` that machine runs with, its `source` (`flag`, `machine`, `file` or `default`) and `locked` (`true` when a flag, or `share_clipboard = false` in the file, decides it for every machine); a saved choice shows as source `machine`. Chords print in lowercase, such as `ctrl+alt+pagedown`. The client is a Windows program without a console: redirect the output to a file or a pipe to read it.
+`gliff-windows --print-settings` prints the settings as JSON and exits. It starts no session, so it takes no target, and it changes nothing on disk or in Windows. The JSON holds the config folder (and whether it is the default one), each setting with its value, where the value came from (`flag`, `file` or `default`) and its class, the machine lists (`machines`, `open`, `shown`), the saved connection choices, the recent hosts, and the notes from loading. Its keys are `config_dir`, `config_dir_is_default`, `settings` (each key holding `value`, `source` and `class`), `machines`, `open`, `shown`, `connection`, `recent_hosts` and `notes`. `connection` has one entry for each machine that is listed or has a saved choice, named by its target. Each entry has `screen`, `share_clipboard` and `sharp_colour`, each with the `value` that machine runs with, its `source` (`flag`, `machine`, `file` or `default`) and `locked` (`true` when a flag, or `share_clipboard = false` in the file, decides it for every machine); a saved choice shows as source `machine`. Chords print in lowercase, such as `ctrl+alt+pagedown`. The client is a Windows program without a console: redirect the output to a file or a pipe to read it.
 
 ## Recent hosts
 

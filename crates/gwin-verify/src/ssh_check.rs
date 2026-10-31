@@ -17,6 +17,7 @@ use gliff_transport::Framed;
 use gliff_windows::cli::DesktopMode;
 use gliff_windows::cli::FOCUSED_OUTPUT;
 use gliff_windows::link::read_server;
+use gliff_windows::session::Colour;
 use gliff_windows::session::client_caps;
 use gliff_windows::session::hello;
 use gliff_windows::ssh::SshSpec;
@@ -186,7 +187,7 @@ async fn session(
     let mut reader = Framed::new(stdout);
     writer
         .write_msg(&hello(
-            client_caps((PANEL.width, PANEL.height)),
+            client_caps((PANEL.width, PANEL.height), Colour::Standard),
             String::new(),
         ))
         .await?;

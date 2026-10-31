@@ -3,13 +3,14 @@
 //!
 //! Pure: no Win32, no files. [`crate::config`] reads and writes the file.
 //!
-//! Two settings can be chosen per machine, from the tab's menu: `screen`
-//! (Show as) and `share_clipboard`. A choice is kept in `config.toml` as
+//! Three settings can be chosen per machine, from the tab's menu: `screen`
+//! (Show as), `share_clipboard` and `sharp_colour`. A choice is kept in `config.toml` as
 //! `[overrides."user@host"]`, the name the design for the settings window
 //! uses, so the file does not change when that window comes. The order for a
 //! machine is: a flag, the machine's choice, the `[settings]` table, the
 //! default. A flag applies to every machine, so it locks the choice: the
-//! menu shows it greyed and says why.
+//! menu shows it greyed and says why. `sharp_colour` has no flag and no
+//! `[settings]` key: it is the machine's choice or off.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -17,6 +18,7 @@ use std::rc::Rc;
 use crate::cli::DesktopMode;
 use crate::cli::Screen;
 use crate::history::HostTarget;
+use crate::session::Colour;
 use crate::settings::Key;
 use crate::settings::Layer;
 use crate::settings::Resolved;
@@ -29,6 +31,7 @@ use crate::settings::Sources;
 pub struct Choice {
     pub screen: Option<Screen>,
     pub share_clipboard: Option<bool>,
+    pub sharp_colour: Option<bool>,
 }
 
 /// The `[overrides]` table: one [`Choice`] for each machine that has one,
@@ -84,7 +87,10 @@ impl Choices {
                     ("share_clipboard", toml::Value::Boolean(share)) => {
                         machine.choice.share_clipboard = Some(*share);
                     }
-                    ("screen" | "share_clipboard", _) => {
+                    ("sharp_colour", toml::Value::Boolean(sharp)) => {
+                        machine.choice.sharp_colour = Some(*sharp);
+                    }
+                    ("screen" | "share_clipboard" | "sharp_colour", _) => {
                         notes.push(format!(
                             "{key} in overrides.\"{name}\" is ignored: expected {}",
                             if key == "screen" {
@@ -121,6 +127,10 @@ impl Choices {
         self.machine(machine).choice.share_clipboard = Some(share);
     }
 
+    pub fn set_sharp_colour(&mut self, machine: &HostTarget, sharp: bool) {
+        self.machine(machine).choice.sharp_colour = Some(sharp);
+    }
+
     /// The machines that have a choice, in file order.
     pub fn machines(&self) -> Vec<(&HostTarget, Choice)> {
         self.machines
@@ -144,6 +154,9 @@ impl Choices {
             }
             if let Some(share) = machine.choice.share_clipboard {
                 own.insert("share_clipboard".to_owned(), share.into());
+            }
+            if let Some(sharp) = machine.choice.sharp_colour {
+                own.insert("sharp_colour".to_owned(), sharp.into());
             }
             if !own.is_empty() {
                 table.insert(machine.target.as_str().to_owned(), own.into());
@@ -258,12 +271,13 @@ impl Locks {
     }
 }
 
-/// The two choices a live session started with, kept so the menu can tell
+/// The choices a live session started with, kept so the menu can tell
 /// when the saved choice has moved on from them.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Running {
     pub screen: Screen,
     pub share_clipboard: bool,
+    pub sharp_colour: bool,
 }
 
 /// What one machine runs with, and what the menu shows for it.
@@ -275,6 +289,9 @@ pub struct Connection {
     pub share_clipboard: bool,
     pub share_origin: Origin,
     pub share_lock: Option<String>,
+    /// Off unless the machine's choice turns it on; nothing locks it.
+    pub sharp_colour: bool,
+    pub sharp_origin: Origin,
 }
 
 impl Connection {
@@ -305,6 +322,10 @@ impl Connection {
                     None,
                 ),
             };
+        let (sharp_colour, sharp_origin) = match choice.sharp_colour {
+            Some(sharp) => (sharp, Origin::Machine),
+            None => (false, Origin::Default),
+        };
         Self {
             screen,
             screen_origin,
@@ -312,6 +333,8 @@ impl Connection {
             share_clipboard,
             share_origin,
             share_lock,
+            sharp_colour,
+            sharp_origin,
         }
     }
 
@@ -320,7 +343,13 @@ impl Connection {
         Running {
             screen: self.screen,
             share_clipboard: self.share_clipboard,
+            sharp_colour: self.sharp_colour,
         }
+    }
+
+    /// The chroma modes a session started now offers.
+    pub fn colour(&self) -> Colour {
+        Colour::sharp(self.sharp_colour)
     }
 
     /// Whether a session that started with `live` would run differently if it
@@ -329,7 +358,8 @@ impl Connection {
     pub fn pending(&self, live: &Running) -> bool {
         let screen = self.screen_lock.is_none() && self.screen != live.screen;
         let share = self.share_lock.is_none() && self.share_clipboard != live.share_clipboard;
-        screen || share
+        let sharp = self.sharp_colour != live.sharp_colour;
+        screen || share || sharp
     }
 
     /// The `--print-settings` form: each choice with its value, where it
@@ -345,6 +375,11 @@ impl Connection {
                 "value": self.share_clipboard,
                 "source": self.share_origin.name(),
                 "locked": self.share_lock.is_some(),
+            },
+            "sharp_colour": {
+                "value": self.sharp_colour,
+                "source": self.sharp_origin.name(),
+                "locked": false,
             },
         })
     }

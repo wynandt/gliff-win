@@ -56,7 +56,7 @@ pub fn measure(clip: &Clip) -> anyhow::Result<Measured> {
     let start = Instant::now();
     for (index, unit) in clip.units.iter().enumerate() {
         let t = Instant::now();
-        let result = decoder.decode(unit);
+        let result = decoder.decode(unit, &[]);
         samples_ms.push(t.elapsed().as_secs_f64() * 1000.0);
         match result {
             Ok(Some(picture)) => {
@@ -285,7 +285,7 @@ mod tests {
         let mut compared = 0;
         let mut late = 0;
         for (i, unit) in clip.units.iter().enumerate() {
-            let a = ours.decode(unit).expect("our decode");
+            let a = ours.decode(unit, &[]).expect("our decode");
             let b = theirs.decode(unit, &[]).expect("gliff_sw decode");
             assert_eq!(a.is_some(), b.is_some(), "unit {i}: release timing");
             assert_eq!(ours.has_pending(), theirs.has_pending(), "unit {i}: held");
