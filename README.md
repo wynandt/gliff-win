@@ -37,7 +37,7 @@ privately through the Security tab, see [SECURITY.md](SECURITY.md).
 - **Sharp video.** H.264 decoded on the CPU and presented with Direct3D 11 at
   vsync. *Sharp colour*, a choice per machine, asks for full-resolution
   colour (4:4:4), so coloured text stays crisp. *GPU decode*, another choice
-  per machine, decodes on the graphics card and falls back to the CPU on its
+  per machine, decodes on the GPU and falls back to the CPU on its
   own ([details](docs/settings.md#gpu-decode)). The strip's fullscreen button, the window menu or `F11` (while Windows has
   the keyboard) toggles borderless fullscreen.
 - **Keyboard and mouse.** Every key, including Super chords, goes to Hyprland
@@ -300,7 +300,7 @@ means no document in this repository plans it.
 3. **GPU video decode is off by default.** The Linux client chooses with
    `--video cpu|gpu`. gliff-win decodes on the CPU (OpenH264) unless a
    machine's *GPU decode* choice is on, and each decoded picture is copied
-   back from the graphics card before it is drawn
+   back from the GPU before it is drawn
    ([details](docs/settings.md#gpu-decode)).
 4. **System tray and start with Windows.** Not in the Linux client 0.4.1
    either. Here the tray is designed, not built. Planned after

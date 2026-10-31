@@ -15,7 +15,7 @@ is not listed here, please open an issue with a way to reproduce it.
 - **GPU video decoding is off by default.** Without *GPU decode* the client
   decodes H.264 on the CPU, and with *Sharp colour* it decodes two streams,
   so the decode work at least doubles. With *GPU decode* on, each picture is
-  still copied back from the graphics card and uploaded again to draw; see
+  still copied back from the GPU and uploaded again to draw; see
   [docs/settings.md](docs/settings.md#gpu-decode).
 - **System tray and start with Windows.**
 - **A settings window.** The four choices for one machine (Show as, Share
