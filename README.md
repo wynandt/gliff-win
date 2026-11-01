@@ -5,8 +5,8 @@ desktop for Hyprland. gliff-win shows the Hyprland session of another machine
 in a normal, resizable Windows window, with one tab for each machine. All it
 needs between the two machines is ssh: no open ports, no accounts, no relay.
 
-This is version 0.1. It works and is used daily, and has been tried on one
-set of hardware. See [Not in 0.1](#not-in-01) and
+This is version 0.2. It works and is used daily, and has been tried on one
+set of hardware. See [Not in 0.2](#not-in-02) and
 [Verification](#verification).
 
 ## Status and contributing
@@ -34,7 +34,7 @@ privately through the Security tab, see [SECURITY.md](SECURITY.md).
   the picture keeps its shape. `--headless` asks the server for a private
   screen that follows your window instead, and `--output` mirrors a named
   screen.
-- **Sharp video.** H.264 decoded on the CPU and presented with Direct3D 11 at
+- **Sharp video.** H.264 decoded on the CPU by default and presented with Direct3D 11 at
   vsync. *Sharp colour*, a choice per machine, asks for full-resolution
   colour (4:4:4), so coloured text stays crisp. *GPU decode*, another choice
   per machine, decodes on the GPU and falls back to the CPU on its
@@ -266,7 +266,7 @@ reconnect; changing it in the remote desktop's own display settings is not
 supported and blanks the picture for 10 seconds or more
 ([details](docs/settings.md#which-remote-screen-the-window-shows)).
 
-## Not in 0.1
+## Not in 0.2
 
 - **System tray.** The window is the only place the client lives. A tray
   needs its own design for what closing the window means.
@@ -303,8 +303,8 @@ means no document in this repository plans it.
    back from the GPU before it is drawn
    ([details](docs/settings.md#gpu-decode)).
 4. **System tray and start with Windows.** Not in the Linux client 0.4.1
-   either. Here the tray is designed, not built. Planned after
-   the first release.
+   either. Here the tray is designed, not built. Planned for a
+   later release.
 5. **A settings window.** The four connection choices for one machine, "Show
    as" (mirror or own screen), "Share clipboard", "Sharp colour" and "GPU
    decode", are in a tab's right-click menu under *Connection settings*. Share
@@ -312,10 +312,10 @@ means no document in this repository plans it.
    Everything else is flags and `config.toml`; there is no window that edits
    them. The Linux client 0.4.1 has no settings window either, but its open
    pull request [omacom/gliff#98](https://github.com/omacom/gliff/pull/98) adds
-   one, and the design here follows it. Planned after the first release.
+   one, and the design here follows it. Planned for a later release.
 6. **Light and dark theme.** The strip and panel use a fixed dark palette. The
    Linux client follows its desktop theme. The plan is to follow the Windows app
-   theme, after the first release.
+   theme, in a later release.
 7. **Several monitors and mixed scales.** The window is per-monitor DPI aware,
    but moving it between monitors of different scale, or a scale change while
    it runs, is untested. Planned, not started.

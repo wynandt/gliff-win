@@ -31,7 +31,8 @@ is not listed here, please open an issue with a way to reproduce it.
 - **Touch and pen input.**
 - **Choosing the remote scale.** The remote screen always follows the Windows
   display scale. To change it, change the Windows scale and reconnect.
-- **Release binaries and an installer.** Build from source for now.
+- **An installer.** Releases are a zip of the programs, with no installer
+  and no code signature.
 
 ## Not tested
 

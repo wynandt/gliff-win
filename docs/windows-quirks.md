@@ -40,8 +40,8 @@ otherwise.
 - Keyboard layouts other than US and German. The layout table has about 25
   rows and is checked against xkeyboard-config, but only two layouts were typed
   on real hardware.
-- Any other GPU or driver. The video path is CPU decode and a D3D11 present,
-  and the adapter choice (`--adapter`) is untested beyond the default.
+- Any other GPU or driver. The video path is CPU decode (or GPU decode when
+  a machine's choice is on) and a D3D11 present, and the adapter choice (`--adapter`) is untested beyond the default.
 - Third-party clipboard managers.
 
 ## Windows versions
@@ -370,12 +370,14 @@ behaviour:
 
 ## Video
 
-- **Decode is on the CPU.** OpenH264 decodes the single 4:2:0 stream; a D3D11
+- **Decode is on the CPU by default.** OpenH264 decodes the 4:2:0 stream; a D3D11
   shader converts to RGB. H.264 levels up to 5.2 decode; a level above that makes
   every access unit fail, and `gwin-verify` reads the SPS to say so.
 - **The swap chain is flip-model,** two buffers, with `Present(1, 0)`; a lost device
   makes a new presenter on the same window.
-- **No hardware decode.** No GPU vendor's decoder has been tried.
+- **GPU decode is a choice per machine.** It uses the Windows H.264 decoder
+  (Media Foundation) with D3D11 video and falls back to OpenH264 on its own; see
+  [settings.md](settings.md#gpu-decode).
 
 ### Measured on the Windows machine
 
