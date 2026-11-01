@@ -179,8 +179,10 @@ pub enum UiCmd {
         axis: Axis,
         delta: i16,
     },
-    /// An Up for every held key and button (focus loss, lock, desktop
-    /// switch).
+    /// No wheel message has come for a while: end any open smooth scroll.
+    ScrollEnd,
+    /// An Up for every held key and button and a stop for an open smooth
+    /// scroll (focus loss, lock, desktop switch).
     ReleaseInput,
     /// The Windows layout changed: new XKB text.
     Keymap(String),
@@ -409,6 +411,11 @@ impl Core {
         self.input.holding()
     }
 
+    /// True while a smooth scroll waits for [`UiCmd::ScrollEnd`].
+    pub fn input_scrolling(&self) -> bool {
+        self.input.scrolling()
+    }
+
     pub fn stats(&self) -> &SessionStats {
         &self.stats
     }
@@ -626,6 +633,7 @@ impl Core {
             UiCmd::Keys(events) => self.input.keys(events),
             UiCmd::Pointer(event) => self.input.pointer(event),
             UiCmd::Wheel { axis, delta } => self.input.wheel(axis, delta),
+            UiCmd::ScrollEnd => self.input.scroll_end(),
             UiCmd::ReleaseInput => self.input.release_all(),
             UiCmd::Keymap(keymap) => vec![ClientMsg::Keymap { keymap }],
             UiCmd::ClearModifiers => self.input.clear_modifiers(),

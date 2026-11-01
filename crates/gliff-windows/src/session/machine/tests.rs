@@ -1270,7 +1270,7 @@ mod input {
             axis: Axis::Horizontal,
             delta: -120,
         });
-        // A part of a notch is no step.
+        // A part of a notch scrolls smoothly: no step.
         core.on_ui(UiCmd::Wheel {
             axis: Axis::Horizontal,
             delta: 40,

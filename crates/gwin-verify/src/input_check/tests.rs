@@ -33,7 +33,7 @@ fn the_pointer_plan_is_nine_clicks_the_wheel_and_six_buttons() {
     let plan = pointer_plan((1920, 1200));
     assert_eq!(
         plan.len(),
-        9 + 5 + 6,
+        9 + 3 + 6,
         "clicks, wheel cases, buttons: four and two thumb ones"
     );
 }

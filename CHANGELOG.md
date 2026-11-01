@@ -5,6 +5,14 @@ body of its GitHub release: the release workflow prints it with
 `scripts/release-notes` and refuses a version that has no section. To cut a
 release, see [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
+## [Unreleased]
+
+- A precision touchpad scrolls the remote smoothly, as on the Linux client.
+  Before, small finger movements did nothing until they added up to a whole
+  wheel notch, and then the remote jumped a step. A mouse wheel still scrolls
+  one step per notch.
+  ([#18](https://github.com/wynandt/gliff-win/issues/18))
+
 ## [0.2.0]
 
 Decoding on the GPU, sharper coloured text, and a picture that keeps moving

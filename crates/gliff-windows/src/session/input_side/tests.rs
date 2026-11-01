@@ -136,24 +136,36 @@ fn motion_is_sent_as_is() {
 }
 
 #[test]
-fn one_notch_is_one_axis_message_and_the_rest_is_carried() {
+fn touchpad_deltas_scroll_smoothly_until_the_scroll_ends() {
     let mut s = side();
-    assert!(s.wheel(Axis::Vertical, 60).is_empty(), "half a notch waits");
-    let msgs = s.wheel(Axis::Vertical, 60);
+    let axis = |value, discrete, stop| ClientMsg::PointerAxis {
+        axis: Axis::Vertical,
+        value,
+        discrete,
+        stop,
+    };
+    let mut msgs = Vec::new();
+    for delta in [-8, -8, -120] {
+        msgs.extend(s.wheel(Axis::Vertical, delta));
+    }
+    msgs.extend(s.release_all());
+    msgs.extend(s.wheel(Axis::Vertical, -120));
     assert_eq!(
         msgs,
-        vec![ClientMsg::PointerAxis {
-            axis: Axis::Vertical,
-            value: -15.0,
-            discrete: Some(-1),
-            stop: false,
-        }],
-        "the second half completes a notch up (negated for Wayland)"
+        vec![
+            axis(1.0, None, false),
+            axis(1.0, None, false),
+            axis(15.0, None, false),
+            axis(0.0, None, true),
+            axis(15.0, Some(1), false),
+        ],
+        "8 units is 1 pixel at once, a notch inside the gesture stays smooth, \
+         the end is a stop, and after it a notch is a wheel step again"
     );
 }
 
 #[test]
-fn release_all_ends_held_keys_and_buttons_and_drops_the_wheel_rest() {
+fn release_all_ends_held_keys_buttons_and_the_smooth_scroll() {
     let mut s = side();
     s.key(raw(0x41, 0x1e, Prefix::None, Press::Down, 0));
     s.pointer(PointerEvent::Button {
@@ -170,12 +182,15 @@ fn release_all_ends_held_keys_and_buttons_and_drops_the_wheel_rest() {
                 button: BTN_LEFT,
                 pressed: false
             },
+            ClientMsg::PointerAxis {
+                axis: Axis::Vertical,
+                value: 0.0,
+                discrete: None,
+                stop: true,
+            },
         ]
     );
-    assert!(
-        s.wheel(Axis::Vertical, 60).is_empty(),
-        "the rest restarted at zero"
-    );
+    assert!(!s.scrolling(), "the scroll is closed");
 }
 
 #[test]

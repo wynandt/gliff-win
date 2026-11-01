@@ -316,8 +316,11 @@ on Windows and pasted on Linux). See
   window takes the suggested rectangle. Sizes are rounded down to even and are never under 64.
 - **Leaving the window sends no more moves.** The client asks for `TME_LEAVE` and
   holds the capture on a button down, so a drag outside the window keeps going.
-- **The wheel has a remainder.** A notch is 120; precision touchpads send many
-  smaller steps. The client sends whole steps and keeps the rest.
+- **A touchpad scrolls smoothly.** A notch is 120; a precision touchpad sends
+  many smaller deltas through the same wheel messages. A delta of whole notches
+  goes out as wheel steps, any other as a smooth scroll that ends 150 ms after
+  the last message. Windows already adds the touchpad's inertia, so the remote
+  sees it as more smooth deltas.
 - **Thumb buttons** are `XBUTTON1` (back) and `XBUTTON2` (forward). `--side-buttons`
   chooses which Linux codes they send; the default is upstream's, and which default
   to keep is not decided yet.

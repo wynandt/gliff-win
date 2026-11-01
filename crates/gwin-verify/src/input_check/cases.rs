@@ -913,9 +913,9 @@ pub fn clicks(size: (u32, u32)) -> Vec<Case> {
 /// that reach the remote log as one.
 const WHEEL_SPACING: Duration = Duration::from_millis(400);
 
-/// Whole notches, a smooth stream, and a remainder carried across events.
-/// The last two cases depend on the one before: the same client keeps its
-/// remainder. Every step the client sends is followed by [`WHEEL_SPACING`].
+/// Whole notches, which reach the remote as wheel steps, and a smooth
+/// stream, which reaches it as a finger scroll that fires no wheel bind.
+/// Every step the client sends is followed by [`WHEEL_SPACING`].
 pub fn wheel() -> Vec<Case> {
     let event = |wheel, delta| Act::WheelEvent { wheel, delta };
     let events =
@@ -950,28 +950,11 @@ pub fn wheel() -> Vec<Case> {
                 "wheel:up",
             ]))),
         ),
-        // 15 events of 8 are one notch (120): the steps are events 15 and 30.
+        // Smaller than a notch: a smooth scroll, which Hyprland binds ignore.
         plain(
-            "wheel 30 smooth events of 8 are 2 steps",
-            with_pause(
-                [
-                    events(Wheel::Vertical, -8, 15),
-                    vec![Act::Pause(WHEEL_SPACING)],
-                    events(Wheel::Vertical, -8, 15),
-                ]
-                .concat(),
-            ),
-            Expect::remote(Remote::Exactly(names(&["wheel:down", "wheel:down"]))),
-        ),
-        plain(
-            "wheel 7 events of 17 carry the remainder",
-            with_pause(events(Wheel::Vertical, -17, 7)),
+            "wheel 30 smooth events of 8 are no wheel step",
+            with_pause(events(Wheel::Vertical, -8, 30)),
             Expect::remote(Remote::Nothing),
-        ),
-        plain(
-            "wheel the last 1 completes a step",
-            with_pause(events(Wheel::Vertical, -1, 1)),
-            Expect::remote(Remote::Exactly(names(&["wheel:down"]))),
         ),
         // Horizontal keeps its sign: right is positive on both sides.
         plain(

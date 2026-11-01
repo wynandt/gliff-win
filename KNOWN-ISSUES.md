@@ -27,7 +27,6 @@ is not listed here, please open an issue with a way to reproduce it.
   attachments), and streaming a big file without a spool folder. HTML and rich
   text are built but not proven on real machines. See
   [docs/clipboard.md](docs/clipboard.md#known-gaps).
-- **Smooth touchpad scrolling.** The client sends whole wheel steps.
 - **Touch and pen input.**
 - **Choosing the remote scale.** The remote screen always follows the Windows
   display scale. To change it, change the Windows scale and reconnect.
