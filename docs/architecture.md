@@ -48,8 +48,10 @@ server.
    verbatim, so the check is a whitelist, not quoting.
 3. The session thread sends `Hello` (protocol version, the keymap built from the
    Windows keyboard layout, and `client_caps`: H.264, a maximum of at least
-   3840x2400, and the chroma modes: Single420 only, or Dual420 and Single420
-   when the machine's *Sharp colour* choice is on), then runs the message loop.
+   3840x2400, the chroma modes: Single420 only, or Dual420 and Single420
+   when the machine's *Sharp colour* choice is on, and the optional protocol
+   features this client implements, `session::FEATURES`, none yet), then runs
+   the message loop.
 4. The server answers `HelloAck`, `StreamConfig`, then `VideoFrame`s. `link`
    reads each message with its payloads. `Core` turns each message into
    `Action`s that the driver performs.
@@ -107,7 +109,10 @@ Each choice names the alternative that was rejected.
 - **A separate repository, not a fork of Gliff.** The client touches neither the
   server nor the GTK client, so a fork would only add rebase work. The
   protocol, transport and software-codec crates are pinned by git revision and
-  bumped deliberately, one release at a time.
+  bumped deliberately, one release at a time. The client advertises its own
+  feature list, `session::FEATURES`, not upstream's `gliff_proto::msg::FEATURES`,
+  so a bump cannot turn on a feature this client does not implement. A feature
+  joins the list in the change that implements it.
 - **The protocol is not changed.** The stock `gliff-server` is the server. A
   feature the stock server cannot do, such as streaming virtual files, waits for
   upstream or for a client-side design that needs no wire change.
