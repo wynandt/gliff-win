@@ -48,8 +48,8 @@ server.
    verbatim, so the check is a whitelist, not quoting.
 3. The session thread sends `Hello` (protocol version, the keymap built from the
    Windows keyboard layout, and `client_caps`: H.264, a maximum of at least
-   3840x2400, the chroma modes: Single420 only, or Dual420 and Single420
-   when the machine's *Sharp colour* choice is on, and the optional protocol
+   3840x2400, the chroma modes (Single420 only, or Dual420 and Single420
+   when the machine's *Sharp colour* choice is on), and the optional protocol
    features this client implements, `session::FEATURES`, none yet), then runs
    the message loop.
 4. The server answers `HelloAck`, `StreamConfig`, then `VideoFrame`s. `link`

@@ -33,8 +33,11 @@ pub const ADVERTISED_FLOOR: (u32, u32) = (3840, 2400);
 /// The optional protocol features this client implements, sent in `Hello`.
 /// This is not upstream's `gliff_proto::msg::FEATURES`, which lists what
 /// upstream's own client and server implement, so bumping the upstream pin
-/// cannot advertise a feature this client ignores. Add a name here in the
-/// change that implements it.
+/// cannot advertise a feature this client ignores. Add a name here only in
+/// the change that implements it, and use the feature only when the server's
+/// `HelloAck` lists it too: a behaviour is used only when both ends list it.
+/// `Core` does not keep the `HelloAck` features yet, so the change that adds
+/// the first name must also keep them and check them.
 pub const FEATURES: &[&str] = &[];
 
 /// The colour a session asks for: a machine's *Sharp colour* choice.
@@ -63,7 +66,7 @@ impl Colour {
     }
 }
 
-/// What the client advertises: H.264 (CPU decode), the chroma modes of
+/// What the client advertises: H.264, the chroma modes of
 /// `colour`, a maximum of the component-wise max of `panel` and
 /// [`ADVERTISED_FLOOR`], and [`FEATURES`].
 pub fn client_caps(panel: (u32, u32), colour: Colour) -> ClientCaps {
