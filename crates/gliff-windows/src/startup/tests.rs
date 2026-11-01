@@ -188,6 +188,7 @@ fn the_report_shows_each_machines_saved_choice_and_where_it_came_from() {
             "share_clipboard": {"value": false, "source": "machine", "locked": false},
             "sharp_colour": {"value": true, "source": "machine", "locked": false},
             "gpu_decode": {"value": true, "source": "machine", "locked": false},
+            "send_win_l": {"value": false, "source": "default", "locked": false},
         })
     );
     assert_eq!(
@@ -197,6 +198,7 @@ fn the_report_shows_each_machines_saved_choice_and_where_it_came_from() {
             "share_clipboard": {"value": true, "source": "default", "locked": false},
             "sharp_colour": {"value": false, "source": "default", "locked": false},
             "gpu_decode": {"value": false, "source": "default", "locked": false},
+            "send_win_l": {"value": false, "source": "default", "locked": false},
         })
     );
     // A machine with a choice but no tab is listed too.

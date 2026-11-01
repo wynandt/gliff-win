@@ -233,27 +233,35 @@ user: `HKCU\Software\Microsoft\Windows\CurrentVersion\Policies\System\DisableLoc
 set to 1. Then the hook sees the `L`, and every other way to lock (the Start
 menu, the Ctrl+Alt+Del screen, `LockWorkStation()`) stops too.
 
-The client sets the value only while the window is focused or the pointer is
-over it, and puts it back 300 ms after that stops. A Win tap that the swallowed
+The client sets the value only while the window has the keyboard (it is
+focused, or with `--grab-follows hover` the pointer has grabbed it), and only
+for a machine whose *Send Win+L to this machine* switch is on (or with
+`--super-l registry`, below). A pointer resting on a window that does not have
+the keyboard never sets it. The value goes back 300 ms after the window loses
+the keyboard (so a quick focus flicker does not write the registry twice), and
+at once when the switch is turned off, the window shows a tab whose switch is
+off or no tab, or the computer goes to sleep. A Win tap that the swallowed
 `L` would leave behind is masked with a tagged tap of the unassigned `VK_E8`, so
 Start does not open. Every way the value could be left on has a way back:
 
 - a marker `HKCU\Software\gliff-windows\LockPolicy`, written before the value,
   keeps the prior state (absent, or its exact value) and the owner process;
-- the exit paths (drop guard, panic hook, `WM_CLOSE`, `WM_ENDSESSION`, a console
-  control handler) restore it;
+- the exit paths (drop guard, a panic on the window thread, `WM_DESTROY`,
+  `WM_ENDSESSION`, a console control handler) restore it;
 - a helper process (`gliff-windows.exe --lock-watchdog`) restores it if the client is
   killed, and also releases any Shift, Ctrl, Alt or Win key that Windows still
   counts as down;
 - on start, a marker whose owner is gone is restored and removed, in every
-  `--super-l` mode, so a switch to `chord` after a crash does not leave the
-  setting on;
+  `--super-l` mode and whatever the switches say. So a crash, or a kill that
+  takes the helper too (ending the whole process tree), leaves the setting on
+  only until the next start or `--restore-lock-policy`;
 - a value that was already 1 with no marker of ours is not ours and is never
   cleared;
 - `gliff-windows.exe --restore-lock-policy` does the same by hand.
 
-`--super-l chord` is the default. It does not change the setting (it only
-repairs a dead client's leftover, above): Win+L locks
+By default no machine's switch is on and `--super-l` is `chord`, so the client
+does not change the setting (it only repairs a dead client's leftover,
+above): Win+L locks
 Windows as usual, even while the window has the keyboard, and Ctrl+Alt+L
 (`--super-l-chord` changes the chord) sends Super+L to the remote machine. The
 client first releases the modifiers the remote machine holds, including Ctrl
@@ -262,19 +270,27 @@ modifiers again. On a tiling window manager such as Hyprland, Super+L is a
 focus binding, not a lock, so on the remote machine the chord moves focus.
 `--super-l off` forwards nothing.
 
-`--super-l registry` is opt-in and does everything described above. While the
-window is focused or the pointer is over it, Windows locking is switched off
-for your user. That covers Win+L, the Lock entry on the Ctrl+Alt+Del screen
+**Send Win+L to this machine** is the opt-in, one machine at a time. Right-click
+a tab, open *Connection settings* and tick it. It is off by default, saved as
+`send_win_l = true` in that machine's `[overrides."user@host"]` table, and
+applies at once, with no reconnect. While the window shows that tab and has
+the keyboard, Windows locking is switched off for your user. That covers Win+L, the Lock entry on the Ctrl+Alt+Del screen
 and the Lock entry in the Start menu. Win+L then goes to the remote machine, and
 with no live session (a failed tab) it does nothing at all. Whether the
 inactivity lock and the password-protected screen saver still work during that
 time has not been tested on Windows (see
 [KNOWN-ISSUES.md](../KNOWN-ISSUES.md)). Until that is
-settled, do not rely on either to lock a machine whose window is focused.
-A user whose `config.toml` already says `super_l = "registry"` keeps it.
+settled, do not rely on either to lock a machine whose window has the
+keyboard.
+`super_l = "registry"` in `config.toml` turns the switch on for every machine
+that has no choice of its own; a machine's own choice beats it.
+`--super-l registry` on the command line turns it on for every machine, and
+`--super-l chord` or `--super-l off` turns it off for every machine; either
+flag greys the switch in the menu, with the reason under it.
 
 `gwin-verify` starts its other checks with `--super-l chord`, so only the lock
-step writes the setting, and it should only be run by the person at the
+step (which starts the client with `--super-l registry`, the same route as the
+switch) writes the setting, and it should only be run by the person at the
 machine. An injected Win+L does not lock, so only a real key tests it.
 
 ### Layouts

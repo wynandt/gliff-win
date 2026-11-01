@@ -84,7 +84,7 @@ pub struct Args {
     pub forward_media_keys: bool,
     /// How Super+L reaches the remote machine: the stand-in chord only,
     /// which changes nothing on Windows (`chord`, the default), the lock
-    /// setting held while the window is focused or hovered, which switches
+    /// setting held while the window has the keyboard, which switches
     /// Windows locking off meanwhile (`registry`), or not at all (`off`).
     #[arg(long, value_enum)]
     pub super_l: Option<SuperL>,

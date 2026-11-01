@@ -18,8 +18,8 @@ is not listed here, please open an issue with a way to reproduce it.
   still copied back from the GPU and uploaded again to draw; see
   [docs/settings.md](docs/settings.md#gpu-decode).
 - **System tray and start with Windows.**
-- **A settings window.** The four choices for one machine (Show as, Share
-  clipboard, Sharp colour and GPU decode) are in a tab's right-click menu. Everything else is a flag or a
+- **A settings window.** The five choices for one machine (Show as, Share
+  clipboard, Sharp colour, GPU decode and Send Win+L) are in a tab's right-click menu. Everything else is a flag or a
   key in `config.toml`; see [docs/settings.md](docs/settings.md).
 - **A light theme.** The tab strip and the failure panel are always dark.
 - **Progress and Cancel for big pastes.** Progress is written to the log only.
@@ -46,11 +46,14 @@ The client has run on one Windows machine. Not tried yet
 - *Sharp colour* on a Windows machine: the 4:4:4 picture is proved on the
   build machine only (decode, recombine and a CPU model of the shader).
 - Third-party clipboard managers.
-- With `--super-l registry`: whether the inactivity lock and a
-  password-protected screen saver still lock Windows while the window is
-  focused or hovered. Until this is tested, do not rely on either to lock the
-  machine while the window has focus. The default (`--super-l chord`) changes
-  no Windows setting.
+- With *Send Win+L to this machine* on (or `--super-l registry`): whether
+  the inactivity lock and a password-protected screen saver still lock Windows
+  while the window has the keyboard. Until this is tested, do not rely on
+  either to lock the machine while the window has the keyboard. The default
+  (the switch off) changes no Windows setting.
+- With *Send Win+L to this machine* on: that Windows locks on wake after a
+  sleep that began while the window had the keyboard (the client clears the
+  setting when told the computer is going to sleep).
 
 ## Open issues
 

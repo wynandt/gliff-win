@@ -4,6 +4,7 @@ use std::rc::Rc;
 
 use super::CLEAR_DELAY_MS;
 use super::Change;
+use super::LockGate;
 use super::LockPolicy;
 use super::Marker;
 use super::Owner;
@@ -837,4 +838,61 @@ fn a_wish_for_on_after_a_failed_clear_turns_the_setting_on_again() {
         "Win+L goes to the remote again"
     );
     assert!(!p.clear_pending());
+}
+
+/// The window's side of the lock setting, end to end on the fake registry:
+/// the grab state's wish (focus, or a pointer resting on the window) behind
+/// the shown machine's *Send Win+L* switch.
+#[test]
+fn the_setting_is_on_only_while_the_window_has_the_keyboard_and_the_switch_is_on() {
+    use crate::grab_state::Event;
+    use crate::grab_state::Focus;
+    use crate::grab_state::Follow;
+    use crate::grab_state::GrabState;
+    use crate::grab_state::Pointer;
+
+    let mut state = GrabState::new(Follow::Focus);
+    let mut gate = LockGate::new(policy(None));
+    let event = |state: &mut GrabState, gate: &mut LockGate<Fake>, open, e| {
+        let wish = state.handle(e).lock;
+        gate.set(open, wish, true, 0)
+    };
+
+    // Focused on a machine whose switch is off: nothing is written.
+    event(&mut state, &mut gate, false, Event::Focus(Focus::Gained));
+    assert_eq!(gate.policy().registry().writes(), vec![], "switch off");
+
+    // The switch goes on: the marker first, then the value.
+    assert_eq!(gate.set(true, gate.wish(), true, 0), Change::Set);
+    assert_eq!(
+        gate.policy().registry().writes(),
+        vec![Op::WriteMarker(marker(Prior::Absent)), Op::WriteValue(1)]
+    );
+
+    // The shown tab changes to a machine with the switch off: the value is
+    // put back at once, with no tick and no delay.
+    assert_eq!(gate.set(false, gate.wish(), true, 1), Change::Cleared);
+    assert_eq!(
+        gate.policy().registry().writes()[2..],
+        [Op::DeleteValue, Op::DeleteMarker],
+        "restored at once"
+    );
+    assert_eq!(gate.policy().registry().value, None, "Win+L locks again");
+
+    // Back on a machine with the switch on, the window loses the keyboard
+    // and only the pointer rests on it: nothing is turned on.
+    let mut state = GrabState::new(Follow::Focus);
+    let mut gate = LockGate::new(policy(None));
+    event(
+        &mut state,
+        &mut gate,
+        true,
+        Event::Pointer(Pointer::Entered),
+    );
+    gate.policy_mut().tick(CLEAR_DELAY_MS + 1);
+    assert_eq!(
+        gate.policy().registry().writes(),
+        vec![],
+        "a pointer alone never turns Windows locking off"
+    );
 }

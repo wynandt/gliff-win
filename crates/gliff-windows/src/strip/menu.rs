@@ -38,6 +38,10 @@ pub enum Command {
     /// Choose whether the machine's session tries the GPU decoder first.
     /// The value is the new choice.
     GpuDecode(bool),
+    /// Choose whether a real Win+L goes to the machine (the Windows lock
+    /// shortcuts are off while the window shows it and has the keyboard).
+    /// Applies at once. The value is the new choice.
+    SendWinL(bool),
 }
 
 /// How a row of a choice is drawn.
@@ -94,7 +98,15 @@ fn running(status: &Status) -> bool {
 /// and the saved choices would run differently now, the settings submenu ends
 /// with a row that reconnects at once, in place of the line that says the
 /// choice applies at the next connect.
-pub fn tab_menu(status: &Status, connection: &Connection, live: Option<&Running>) -> Vec<Entry> {
+///
+/// `win_l_unusable` says why this window cannot hand Win+L to any machine
+/// now; the Win+L row keeps its tick (so it can be turned off) and says so.
+pub fn tab_menu(
+    status: &Status,
+    connection: &Connection,
+    live: Option<&Running>,
+    win_l_unusable: Option<&str>,
+) -> Vec<Entry> {
     let pending = live.is_some_and(|live| {
         matches!(status, Status::Connecting | Status::Streaming) && connection.pending(live)
     });
@@ -110,7 +122,7 @@ pub fn tab_menu(status: &Status, connection: &Connection, live: Option<&Running>
     entries.push(item(Command::CopyAddress, "Copy address"));
     entries.push(Entry::Submenu {
         label: "Connection settings",
-        rows: connection_rows(connection, pending),
+        rows: connection_rows(connection, pending, win_l_unusable),
     });
     entries.push(Entry::Separator);
     entries.push(item(
@@ -125,12 +137,17 @@ pub fn tab_menu(status: &Status, connection: &Connection, live: Option<&Running>
 }
 
 /// The rows of a tab's Connection settings submenu: how the machine is
-/// shown, whether its clipboard is shared and whether it asks for sharp
-/// colour. A choice a flag has made for
-/// every machine is greyed, with the reason under it. The last row is the
+/// shown, whether its clipboard is shared, whether it asks for sharp
+/// colour and the GPU decoder, and whether Win+L goes to it. A choice a flag has made for
+/// every machine is greyed, with the reason under it; a Win+L route this
+/// window cannot use (`win_l_unusable`) is said under its row. The last row is the
 /// Reconnect command when a change `pending` waits for the next connect, and
 /// a line that says when it applies otherwise.
-fn connection_rows(connection: &Connection, pending: bool) -> Vec<Entry> {
+fn connection_rows(
+    connection: &Connection,
+    pending: bool,
+    win_l_unusable: Option<&str>,
+) -> Vec<Entry> {
     let mut rows = vec![Entry::Note("Show as".to_owned())];
     for (screen, label) in [
         (Screen::Mirror, "Mirror the remote screen"),
@@ -173,6 +190,24 @@ fn connection_rows(connection: &Connection, pending: bool) -> Vec<Entry> {
         enabled: true,
     });
     rows.push(Entry::Separator);
+    rows.push(Entry::Choice {
+        command: Command::SendWinL(!connection.send_win_l),
+        label: "Send Win+L to this machine",
+        mark: Mark::Check,
+        selected: connection.send_win_l,
+        enabled: connection.send_win_l_lock.is_none(),
+    });
+    rows.push(Entry::Note(
+        connection
+            .send_win_l_lock
+            .clone()
+            .or_else(|| win_l_unusable.map(str::to_owned))
+            .unwrap_or_else(|| {
+                "Applies at once. Windows lock shortcuts are off while this window has the keyboard"
+                    .to_owned()
+            }),
+    ));
+    rows.push(Entry::Separator);
     rows.push(if pending {
         item(Command::Reconnect, "Reconnect now to apply")
     } else {
@@ -193,8 +228,8 @@ pub fn dot_command(status: &Status) -> Command {
 }
 
 /// Runs a command on the tabs; the effects are for the caller to carry out.
-/// `CopyAddress`, `ShowAs`, `ShareClipboard`, `SharpColour` and `GpuDecode`
-/// have none:
+/// `CopyAddress`, `ShowAs`, `ShareClipboard`, `SharpColour`, `GpuDecode`
+/// and `SendWinL` have none:
 /// the caller reads the address or saves the choice.
 pub fn run(command: Command, id: TabId, tabs: &mut Tabs) -> Vec<crate::tabs::Effect> {
     match command {
@@ -205,7 +240,8 @@ pub fn run(command: Command, id: TabId, tabs: &mut Tabs) -> Vec<crate::tabs::Eff
         | Command::ShowAs(_)
         | Command::ShareClipboard(_)
         | Command::SharpColour(_)
-        | Command::GpuDecode(_) => Vec::new(),
+        | Command::GpuDecode(_)
+        | Command::SendWinL(_) => Vec::new(),
     }
 }
 

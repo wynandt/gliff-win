@@ -34,8 +34,8 @@ pub enum MediaKeys {
 /// How Super+L reaches the remote machine (`--super-l`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
 pub enum SuperL {
-    /// Opt in: hold Windows' lock setting off while the window is focused or
-    /// hovered, so the real Win+L is forwarded. Windows locking, including the
+    /// Opt in: turn Windows locking off while the window has the keyboard,
+    /// so the real Win+L is forwarded. Windows locking, including the
     /// Ctrl+Alt+Del Lock entry and the Start menu, is off meanwhile.
     Registry,
     /// The stand-in chord only (`--super-l-chord`, Ctrl+Alt+L by default); the

@@ -51,7 +51,6 @@ use crate::clip_win::ClipWin;
 use crate::grab::Grab;
 use crate::grab::GrabConfig;
 use crate::hook;
-use crate::input::SuperL;
 use crate::lockreg;
 use crate::lockreg::LockGuard;
 use crate::machine_choices::Rules;
@@ -160,15 +159,15 @@ pub fn run(args: Args) -> ExitCode {
     crate::modifiers::install_exit_paths();
     // Every way out of this function puts the lock setting back (the panic
     // hook and the console handler cover the rest); nothing is held until
-    // the first grab.
-    let _restore = (settings.super_l == SuperL::Registry).then(|| {
-        if lockreg::init().is_none() {
-            crate::logging::line(
-                "lock setting: this process's start time is unreadable, so the registry route is off",
-            );
-        }
-        LockGuard
-    });
+    // the first grab of a machine whose Send Win+L switch is on. Armed in
+    // every mode, because the switch can turn on at any time; with nothing
+    // held, each path finds no marker of ours and does nothing.
+    if lockreg::init().is_none() {
+        crate::logging::line(
+            "lock setting: this process's start time is unreadable, so the registry route is off",
+        );
+    }
+    let _restore = LockGuard;
     let hwnd = match create_window() {
         Ok(hwnd) => hwnd,
         Err(e) => return fail(&format!("window creation failed: {e}")),
@@ -228,7 +227,6 @@ pub fn run(args: Args) -> ExitCode {
             timeout_secs: settings.grab_timeout_secs.map(GrabTimeout::get),
             policy: input_options.policy,
             release_chord: input_options.release_chord,
-            super_l: settings.super_l,
             local_chords: settings.local_chords.0.clone(),
             switch_chords: settings.switch_chords(),
             test_hooks: TestHooks::from_args(&args),

@@ -15,6 +15,9 @@ use windows::Win32::UI::Input::KeyboardAndMouse::ReleaseCapture;
 use windows::Win32::UI::Input::KeyboardAndMouse::SetCapture;
 use windows::Win32::UI::WindowsAndMessaging::GetMessageExtraInfo;
 use windows::Win32::UI::WindowsAndMessaging::GetMessageTime;
+use windows::Win32::UI::WindowsAndMessaging::PBT_APMRESUMEAUTOMATIC;
+use windows::Win32::UI::WindowsAndMessaging::PBT_APMRESUMESUSPEND;
+use windows::Win32::UI::WindowsAndMessaging::PBT_APMSUSPEND;
 use windows::Win32::UI::WindowsAndMessaging::WM_CAPTURECHANGED;
 use windows::Win32::UI::WindowsAndMessaging::WM_CHAR;
 use windows::Win32::UI::WindowsAndMessaging::WM_ENDSESSION;
@@ -29,6 +32,7 @@ use windows::Win32::UI::WindowsAndMessaging::WM_MBUTTONUP;
 use windows::Win32::UI::WindowsAndMessaging::WM_MOUSEHWHEEL;
 use windows::Win32::UI::WindowsAndMessaging::WM_MOUSEMOVE;
 use windows::Win32::UI::WindowsAndMessaging::WM_MOUSEWHEEL;
+use windows::Win32::UI::WindowsAndMessaging::WM_POWERBROADCAST;
 use windows::Win32::UI::WindowsAndMessaging::WM_RBUTTONDOWN;
 use windows::Win32::UI::WindowsAndMessaging::WM_RBUTTONUP;
 use windows::Win32::UI::WindowsAndMessaging::WM_SETFOCUS;
@@ -109,6 +113,10 @@ impl WindowInput {
             held: Vec::new(),
             keymap_log: Vec::new(),
         }
+    }
+
+    pub fn grab(&self) -> &Grab {
+        &self.grab
     }
 
     pub fn grab_mut(&mut self) -> &mut Grab {
@@ -217,6 +225,16 @@ impl WindowInput {
             }
             WM_ENDSESSION if wparam.0 != 0 => {
                 self.shutdown();
+                None
+            }
+            WM_POWERBROADCAST => {
+                // Sleep clears the lock setting at once; the wake (either
+                // kind) lets it follow the keyboard again.
+                match wparam.0 as u32 {
+                    PBT_APMSUSPEND => self.grab.suspend(true),
+                    PBT_APMRESUMESUSPEND | PBT_APMRESUMEAUTOMATIC => self.grab.suspend(false),
+                    _ => {}
+                }
                 None
             }
             WM_KEYDOWN | WM_SYSKEYDOWN | WM_KEYUP | WM_SYSKEYUP => {

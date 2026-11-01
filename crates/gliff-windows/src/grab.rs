@@ -60,14 +60,13 @@ use crate::grab_state::pointer_over;
 use crate::hook;
 use crate::hook::HookThread;
 use crate::input::KeyPolicy;
-use crate::input::SuperL;
 use crate::keymap::Chord;
 use crate::keymap::Prefix;
 use crate::keymap::Press;
 use crate::local_chords::LocalChord;
 use crate::lock_policy;
 use crate::lock_policy::Change;
-use crate::lock_policy::LockPolicy;
+use crate::lock_policy::LockGate;
 use crate::lock_policy::Owner;
 use crate::lock_policy::Recovery;
 use crate::lock_policy::Want;
@@ -105,7 +104,6 @@ pub struct GrabConfig {
     pub release_chord: Chord,
     /// The tab-switch chords, which the hook also watches for.
     pub switch_chords: SwitchChords,
-    pub super_l: SuperL,
     /// Chords the hook keeps for Windows while grabbing.
     pub local_chords: Vec<LocalChord>,
     /// The hidden test flags (nothing in a build without `test-hooks`).
@@ -135,8 +133,17 @@ pub struct Grab {
     state: GrabState,
     hook: Option<HookThread>,
     cmds: Arc<InputRoute<UiCmd>>,
-    lock: Option<LockPolicy<WinRegistry>>,
+    /// The lock setting, behind the shown machine's *Send Win+L* switch.
+    /// None when this process cannot name itself (no registry route).
+    lock: Option<LockGate<WinRegistry>>,
     lock_owner: Option<Owner>,
+    /// Whether the shown tab's machine gets a real Win+L.
+    send_win_l: bool,
+    /// The computer is going to sleep: the gate is closed until it wakes.
+    suspended: bool,
+    /// The watchdog helper did not start the last time the setting was to
+    /// be turned on, so it stayed off.
+    lock_watchdog_failed: bool,
     /// The helper that puts the lock setting back after a hard kill.
     watchdog: Option<std::process::Child>,
     /// The helper could not start; it is not tried again for modifiers.
@@ -164,15 +171,12 @@ impl Grab {
     pub fn new(hwnd: HWND, cmds: Arc<InputRoute<UiCmd>>, config: GrabConfig) -> Self {
         // One owner for the marker, the watchdog and the exit paths; none
         // when the start time is unreadable, and then there is no registry
-        // route (Super+L goes by the chord). The repair of a dead client's
-        // leftover runs in every mode.
+        // route (Super+L goes by the chord). The policy is made in every
+        // mode, so the per-machine switch can turn it on at any time; it
+        // writes nothing until the switch is on and the window has the
+        // keyboard. The repair of a dead client's leftover runs here, once.
         let owner = lockreg::owner();
-        let (lock, recovery) = lock_policy::start_up(
-            WinRegistry,
-            config.super_l == SuperL::Registry,
-            owner,
-            &WinProcesses,
-        );
+        let (lock, recovery) = lock_policy::start_up(WinRegistry, true, owner, &WinProcesses);
         if recovery != Recovery::Nothing {
             crate::logging::line(&format!("lock setting at start: {recovery}"));
         }
@@ -185,8 +189,11 @@ impl Grab {
             config,
             hook: None,
             cmds,
-            lock,
+            lock: lock.map(LockGate::new),
             lock_owner: owner,
+            send_win_l: false,
+            suspended: false,
+            lock_watchdog_failed: false,
             watchdog: None,
             watchdog_refused: false,
             tracking: false,
@@ -209,11 +216,74 @@ impl Grab {
 
     /// Whether the Windows lock setting is in force now.
     pub fn lock_held(&self) -> bool {
-        self.lock.as_ref().is_some_and(LockPolicy::is_effective)
+        self.lock
+            .as_ref()
+            .is_some_and(|gate| gate.policy().is_effective())
     }
 
     pub fn mode(&self) -> HookMode {
         self.state.mode()
+    }
+
+    /// The shown tab's machine gets a real Win+L (`on`) or not. Applies at
+    /// once: on, the lock setting follows the window's keyboard again; off,
+    /// it is cleared at once.
+    pub fn set_send_win_l(&mut self, on: bool) {
+        if self.send_win_l == on {
+            return;
+        }
+        self.send_win_l = on;
+        crate::logging::line(&format!(
+            "send Win+L to the shown machine: {}",
+            if on { "on" } else { "off" }
+        ));
+        self.apply_lock(self.state_wish());
+    }
+
+    /// The computer is going to sleep (`true`) or has woken (`false`). Going
+    /// to sleep clears the lock setting at once, so the machine can lock as
+    /// it sleeps and on waking.
+    pub fn suspend(&mut self, suspended: bool) {
+        if self.suspended == suspended {
+            return;
+        }
+        self.suspended = suspended;
+        crate::logging::line(if suspended {
+            "power: going to sleep, the lock setting is cleared"
+        } else {
+            "power: awake"
+        });
+        self.apply_lock(self.state_wish());
+    }
+
+    /// Why *Send Win+L to this machine* cannot work in this window now, in
+    /// one sentence for the menu; None while it can.
+    pub fn win_l_unusable(&self) -> Option<&'static str> {
+        let Some(gate) = &self.lock else {
+            return Some(
+                "Not available: this window cannot read its own start time, so it does not \
+                 turn Windows locking off. Win+L locks Windows.",
+            );
+        };
+        if gate.policy().is_disabled() {
+            return Some(
+                "Not available: another gliff window holds the Windows lock setting, or the \
+                 registry refused it (see the log). Win+L locks Windows.",
+            );
+        }
+        if self.lock_watchdog_failed {
+            return Some(
+                "Not available: the helper that puts the lock setting back after a crash \
+                 did not start (see the log). Win+L locks Windows.",
+            );
+        }
+        None
+    }
+
+    /// What the state last wished for the lock setting (on only while the
+    /// window has the keyboard), kept by the gate.
+    fn state_wish(&self) -> Want {
+        self.lock.as_ref().map_or(Want::Off, LockGate::wish)
     }
 
     /// A focus message from Windows. It settles anything the foreground
@@ -406,10 +476,10 @@ impl Grab {
             ));
             self.apply(out);
         }
-        if let Some(lock) = &mut self.lock
-            && lock.clear_pending()
+        if let Some(gate) = &mut self.lock
+            && gate.policy().clear_pending()
         {
-            let change = lock.tick(now);
+            let change = gate.policy_mut().tick(now);
             log_change(&change);
         }
         if hook::release_overdue() {
@@ -487,8 +557,8 @@ impl Grab {
         hook::set_mode(HookMode::Off);
         self.hook = None;
         self.restore_ime();
-        if let Some(lock) = &mut self.lock {
-            log_change(&lock.exit());
+        if let Some(gate) = &mut self.lock {
+            log_change(&gate.policy_mut().exit());
         }
         // The remote side was let go of by the session (Bye); Windows' own
         // modifier state is cleaned here, with the hook gone.
@@ -600,23 +670,41 @@ impl Grab {
                 ));
             }
         }
+        self.apply_lock(out.lock);
+    }
+
+    /// The lock setting for the state's `wish`, behind the gate: open while
+    /// the shown machine's switch is on and the computer is awake.
+    fn apply_lock(&mut self, wish: Want) {
+        let open = self.send_win_l && !self.suspended;
         let now = self.now_ms();
         // The helper that puts the setting back after a kill is started
         // before the setting is first turned on; if it cannot start the
         // setting stays off (and the next wish tries again), so a killed
         // client never leaves it set without a helper.
-        if out.lock == Want::On
-            && self.lock.as_ref().is_some_and(|l| !l.is_effective())
-            && self.lock_owner.is_some()
-            && let Err(e) = self.ensure_watchdog()
-        {
-            crate::logging::line(&format!(
-                "lock watchdog did not start, so the lock setting stays off: {e}"
-            ));
-            return;
-        }
-        if let Some(lock) = &mut self.lock {
-            log_change(&lock.want(out.lock, now));
+        let needs_helper = self
+            .lock
+            .as_ref()
+            .is_some_and(|gate| gate.would_turn_on(open, wish));
+        let ready = if needs_helper && self.lock_owner.is_some() {
+            match self.ensure_watchdog() {
+                Ok(()) => {
+                    self.lock_watchdog_failed = false;
+                    true
+                }
+                Err(e) => {
+                    crate::logging::line(&format!(
+                        "lock watchdog did not start, so the lock setting stays off: {e}"
+                    ));
+                    self.lock_watchdog_failed = true;
+                    false
+                }
+            }
+        } else {
+            true
+        };
+        if let Some(gate) = &mut self.lock {
+            log_change(&gate.set(open, wish, ready, now));
         }
     }
 

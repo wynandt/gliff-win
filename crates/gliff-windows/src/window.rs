@@ -54,6 +54,9 @@ use windows::Win32::UI::WindowsAndMessaging::IsWindow;
 use windows::Win32::UI::WindowsAndMessaging::KillTimer;
 use windows::Win32::UI::WindowsAndMessaging::MF_SEPARATOR;
 use windows::Win32::UI::WindowsAndMessaging::MF_STRING;
+use windows::Win32::UI::WindowsAndMessaging::PBT_APMRESUMEAUTOMATIC;
+use windows::Win32::UI::WindowsAndMessaging::PBT_APMRESUMESUSPEND;
+use windows::Win32::UI::WindowsAndMessaging::PBT_APMSUSPEND;
 use windows::Win32::UI::WindowsAndMessaging::PostQuitMessage;
 use windows::Win32::UI::WindowsAndMessaging::SW_RESTORE;
 use windows::Win32::UI::WindowsAndMessaging::SWP_NOACTIVATE;
@@ -79,6 +82,7 @@ use windows::Win32::UI::WindowsAndMessaging::WM_LBUTTONDOWN;
 use windows::Win32::UI::WindowsAndMessaging::WM_MBUTTONDOWN;
 use windows::Win32::UI::WindowsAndMessaging::WM_MOUSEMOVE;
 use windows::Win32::UI::WindowsAndMessaging::WM_PAINT;
+use windows::Win32::UI::WindowsAndMessaging::WM_POWERBROADCAST;
 use windows::Win32::UI::WindowsAndMessaging::WM_RBUTTONDOWN;
 use windows::Win32::UI::WindowsAndMessaging::WM_SETCURSOR;
 use windows::Win32::UI::WindowsAndMessaging::WM_SIZE;
@@ -199,6 +203,8 @@ enum Deferred {
     /// `WM_ENDSESSION` (the session is ending): the rest of the shutdown,
     /// after the lock setting was already put back at once.
     EndSession,
+    /// `WM_POWERBROADCAST`: the computer goes to sleep (`true`) or woke.
+    Power(bool),
 }
 
 /// What the starter records for each session it starts, for its view.
@@ -1013,6 +1019,7 @@ impl App {
         if self.typing_sent.update(typing) {
             self.input.grab_mut().typing(typing);
         }
+        self.sync_win_l();
     }
 
     /// Shows the failure panel over the picture while the shown tab has
@@ -1186,7 +1193,12 @@ impl App {
             .session()
             .and_then(|session| self.views.get(&session))
             .map(|view| &view.running);
-        Some(menu::tab_menu(tab.status(), &connection, live))
+        Some(menu::tab_menu(
+            tab.status(),
+            &connection,
+            live,
+            self.input.grab().win_l_unusable(),
+        ))
     }
 
     pub(crate) fn strip_command(&mut self, command: MenuCommand, id: crate::tabs::TabId) {
@@ -1201,7 +1213,8 @@ impl App {
         if let MenuCommand::ShowAs(_)
         | MenuCommand::ShareClipboard(_)
         | MenuCommand::SharpColour(_)
-        | MenuCommand::GpuDecode(_) = command
+        | MenuCommand::GpuDecode(_)
+        | MenuCommand::SendWinL(_) = command
         {
             self.choose(command, id);
             return;
@@ -1212,7 +1225,8 @@ impl App {
 
     /// A choice from the Connection settings submenu: kept for the tab's
     /// machine and saved at once. The screen, the colour and the decoder
-    /// apply at the next connect; the clipboard applies to the tab's session at once. A row a flag has
+    /// apply at the next connect; the clipboard applies to the tab's session
+    /// at once, and so does Send Win+L when the tab is shown. A row a flag has
     /// locked is greyed in the menu and cannot get here; if it did, the
     /// rules would still ignore it.
     fn choose(&mut self, command: MenuCommand, id: crate::tabs::TabId) {
@@ -1226,6 +1240,7 @@ impl App {
                 MenuCommand::ShareClipboard(share) => book.set_share_clipboard(&machine, share),
                 MenuCommand::SharpColour(sharp) => book.set_sharp_colour(&machine, sharp),
                 MenuCommand::GpuDecode(gpu) => book.set_gpu_decode(&machine, gpu),
+                MenuCommand::SendWinL(send) => book.set_send_win_l(&machine, send),
                 _ => return,
             }
         }
@@ -1234,9 +1249,25 @@ impl App {
         if let Err(e) = self.files.config.save() {
             crate::logging::line(&format!("config: connection choice not saved: {e}"));
         }
-        if let MenuCommand::ShareClipboard(_) = command {
-            self.share_now(id, self.rules.shares_clipboard(&machine));
+        match command {
+            MenuCommand::ShareClipboard(_) => {
+                self.share_now(id, self.rules.shares_clipboard(&machine));
+            }
+            MenuCommand::SendWinL(_) => self.sync_win_l(),
+            _ => {}
         }
+    }
+
+    /// Hands the grab the Send Win+L switch of the shown tab's machine (off
+    /// with no tab shown). Called with every strip sync, so a tab switch, a
+    /// new tab or a forgotten one is caught up at once.
+    fn sync_win_l(&mut self) {
+        let send = self
+            .tabs
+            .shown()
+            .and_then(|id| self.tabs.tab(id))
+            .is_some_and(|tab| self.rules.connection(tab.target()).send_win_l);
+        self.input.grab_mut().set_send_win_l(send);
     }
 
     /// Applies the clipboard choice to the tab's session. One that started
@@ -1628,6 +1659,7 @@ impl App {
             Deferred::Size => self.on_size(),
             Deferred::Destroy => self.on_destroy(),
             Deferred::EndSession => self.input.shutdown(),
+            Deferred::Power(suspended) => self.input.grab_mut().suspend(suspended),
         }
     }
 }
@@ -1751,6 +1783,11 @@ pub extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPA
                     crate::lockreg::restore_now();
                     Some(Deferred::EndSession)
                 }
+                WM_POWERBROADCAST => match wparam.0 as u32 {
+                    PBT_APMSUSPEND => Some(Deferred::Power(true)),
+                    PBT_APMRESUMESUSPEND | PBT_APMRESUMEAUTOMATIC => Some(Deferred::Power(false)),
+                    _ => None,
+                },
                 _ => None,
             };
             if let Some(deferred) = deferred {

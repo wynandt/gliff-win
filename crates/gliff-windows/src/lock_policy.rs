@@ -13,8 +13,10 @@ pub const POLICY_VALUE: &str = "DisableLockWorkstation";
 /// Where the marker lives, under HKCU.
 pub const MARKER_KEY: &str = r"Software\gliff-windows\LockPolicy";
 
-/// How long the setting stays on after the pointer or focus leaves, so a
-/// pointer jittering at the window edge does not flap it.
+/// How long the setting stays on after the window loses the keyboard, so a
+/// grab that flickers (a pointer jittering at the window edge in hover mode,
+/// a quick focus round trip) does not flap it. Closing the gate
+/// ([`LockGate`]) does not wait.
 pub const CLEAR_DELAY_MS: u32 = 300;
 /// How long to wait before trying a failed restore again.
 const RETRY_MS: u32 = 1_000;
@@ -281,7 +283,8 @@ pub fn start_up<R: Registry>(
     }
 }
 
-/// The state machine behind `want = grabbed || hovered`.
+/// The state machine behind the wish (the window has the keyboard), which
+/// [`LockGate`] passes on while the gate is open.
 #[derive(Debug)]
 pub struct LockPolicy<R: Registry> {
     registry: R,
@@ -382,6 +385,16 @@ impl<R: Registry> LockPolicy<R> {
 
     pub fn clear_pending(&self) -> bool {
         self.clear_at.is_some()
+    }
+
+    /// The setting should be off now, without the delay of [`Self::want`]:
+    /// the gate closed, so no flicker is to be smoothed over. A failed
+    /// restore is tried again on a later [`Self::tick`].
+    pub fn clear_now(&mut self, now_ms: u32) -> Change {
+        match self.state {
+            State::Held => self.restore(now_ms),
+            State::AlreadyOff | State::Idle | State::Disabled => self.want(Want::Off, now_ms),
+        }
     }
 
     /// Every exit path: put the setting back now. Idempotent.
@@ -512,6 +525,65 @@ impl<R: Registry> LockPolicy<R> {
     fn fail(&mut self, error: RegError) -> Change {
         self.state = State::Disabled;
         Change::Failed(error)
+    }
+}
+
+/// The lock setting as the window drives it: on only while the shown tab's
+/// machine has *Send Win+L to this machine* on (the gate is open) and the
+/// window has the keyboard (the wish). A wish that goes off is cleared after
+/// [`CLEAR_DELAY_MS`]; a gate that closes (the switch goes off, the shown tab
+/// changes to a machine without it, no tab is shown, the computer goes to
+/// sleep) clears it at once.
+#[derive(Debug)]
+pub struct LockGate<R: Registry> {
+    policy: LockPolicy<R>,
+    open: bool,
+    wish: Want,
+}
+
+impl<R: Registry> LockGate<R> {
+    /// Closed, with no wish: nothing is written until both turn on.
+    pub fn new(policy: LockPolicy<R>) -> Self {
+        Self {
+            policy,
+            open: false,
+            wish: Want::Off,
+        }
+    }
+
+    pub fn policy(&self) -> &LockPolicy<R> {
+        &self.policy
+    }
+
+    pub fn policy_mut(&mut self) -> &mut LockPolicy<R> {
+        &mut self.policy
+    }
+
+    /// Whether moving to `open` and `wish` would write the setting on: the
+    /// caller starts the watchdog helper first.
+    pub fn would_turn_on(&self, open: bool, wish: Want) -> bool {
+        open && wish == Want::On && !self.policy.is_effective() && !self.policy.is_disabled()
+    }
+
+    /// Moves to `open` and `wish`. `ready` is false when a turn-on must not
+    /// happen (the watchdog helper did not start): the setting is then left
+    /// as it is, and the next call tries again.
+    pub fn set(&mut self, open: bool, wish: Want, ready: bool, now_ms: u32) -> Change {
+        let closing = self.open && !open;
+        self.open = open;
+        self.wish = wish;
+        if closing {
+            return self.policy.clear_now(now_ms);
+        }
+        let want = if open { wish } else { Want::Off };
+        if want == Want::On && !ready && !self.policy.is_effective() {
+            return Change::Nothing;
+        }
+        self.policy.want(want, now_ms)
+    }
+
+    pub fn wish(&self) -> Want {
+        self.wish
     }
 }
 

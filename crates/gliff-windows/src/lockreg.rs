@@ -84,13 +84,17 @@ const REGISTRY_MUTEX: &str = "Local\\gliff-windows-lock-policy";
 /// stuck holder must not keep the lock setting from being put back).
 const REGISTRY_WAIT_MS: u32 = 2_000;
 
-/// Set once this process is on its way out (or has panicked, which ends it:
-/// see the hook): the setting is not turned on again after that, so the
-/// restore that follows is the last word.
+/// Set once this process is on its way out (or its window thread has
+/// panicked, which ends it: see the hook): the setting is not turned on
+/// again after that, so the restore that follows is the last word.
 static EXITING: AtomicBool = AtomicBool::new(false);
 
 /// The owner of this process, set once by [`init`].
 static OWNER: OnceLock<Owner> = OnceLock::new();
+/// The thread that called [`init`]: the window's. A panic there ends the
+/// process; one on another thread (a session's, which the window reports
+/// and outlives) does not, so it leaves the setting to the window.
+static MAIN_THREAD: OnceLock<std::thread::ThreadId> = OnceLock::new();
 
 fn reg_error(what: &str, code: WIN32_ERROR) -> RegError {
     RegError(format!("{what}: error {}", code.0))
@@ -421,15 +425,19 @@ impl OwnerExit for WaitOnProcess {
 }
 
 /// Records this process as the owner for [`restore_now`] and installs the
-/// panic hook and the console control handler. Call once, early.
+/// panic hook (for this thread, the window's: see [`MAIN_THREAD`]) and the
+/// console control handler. Call once, early, on the window's thread.
 pub fn init() -> Option<Owner> {
     let owner = current_owner();
     if let Some(owner) = owner {
         let _ = OWNER.set(owner);
     }
+    let _ = MAIN_THREAD.set(std::thread::current().id());
     let previous = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
-        restore_now();
+        if MAIN_THREAD.get() == Some(&std::thread::current().id()) {
+            restore_now();
+        }
         previous(info);
     }));
     // SAFETY: `ctrl_handler` is a valid handler routine for the process's

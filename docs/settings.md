@@ -107,14 +107,15 @@ shown = "user@two"
 
 ## Connection choices for one machine
 
-Right-click a tab and open **Connection settings**. It holds four choices for that machine only:
+Right-click a tab and open **Connection settings**. It holds five choices for that machine only:
 
 - **Show as:** *Mirror the remote screen* or *Own screen*. This is the `screen` setting.
 - **Share clipboard:** ticked or not. This is the `share_clipboard` setting.
 - **Sharp colour:** ticked or not, off by default. This is the `sharp_colour` key, which exists only in a machine's table ([below](#sharp-colour)).
 - **GPU decode:** ticked or not, off by default. This is the `gpu_decode` key, which exists only in a machine's table ([below](#gpu-decode)).
+- **Send Win+L to this machine:** ticked or not, off by default. This is the `send_win_l` key ([below](#send-winl-to-this-machine)).
 
-A choice is saved at once. **Share clipboard** applies at once to the tab's session: turned off, nothing is copied or pasted either way, and if what that machine copied is still on the Windows clipboard it is taken off (anything copied on Windows since is left alone); turned back on, sharing resumes in the same session. A session that started without sharing has no clipboard to resume, so ticking it reconnects that tab. **Show as**, **Sharp colour** and **GPU decode** are Reconnect-class: they apply the next time the tab connects, and the menu says so under the choices. If the tab has a session and a saved Show as, Sharp colour or GPU decode choice differs from what that session started with, the line is replaced by **Reconnect now to apply**, which does what **Reconnect** does: it ends the session and starts a new one with the saved choices. A row that a flag or the file has locked never counts as a change. If you change a choice and then change it back, the line stays as it was. A tab with no session (stopped, waiting to retry, or given up) keeps the line, because its next connect applies the choice anyway. There is no settings window and no OK button.
+A choice is saved at once. **Send Win+L to this machine** applies at once and never needs a reconnect. **Share clipboard** applies at once to the tab's session: turned off, nothing is copied or pasted either way, and if what that machine copied is still on the Windows clipboard it is taken off (anything copied on Windows since is left alone); turned back on, sharing resumes in the same session. A session that started without sharing has no clipboard to resume, so ticking it reconnects that tab. **Show as**, **Sharp colour** and **GPU decode** are Reconnect-class: they apply the next time the tab connects, and the menu says so under the choices. If the tab has a session and a saved Show as, Sharp colour or GPU decode choice differs from what that session started with, the line is replaced by **Reconnect now to apply**, which does what **Reconnect** does: it ends the session and starts a new one with the saved choices. A row that a flag or the file has locked never counts as a change. If you change a choice and then change it back, the line stays as it was. A tab with no session (stopped, waiting to retry, or given up) keeps the line, because its next connect applies the choice anyway. There is no settings window and no OK button.
 
 **Where it is saved.** In `config.toml`, in one table per machine, named by the target as it is written in `machines`:
 
@@ -124,6 +125,7 @@ screen = "own"
 share_clipboard = false
 sharp_colour = true
 gpu_decode = true
+send_win_l = true
 ```
 
 A table holds only what the user changed for that machine, so a machine that was never changed has no table. The table is a layer between the flag and `[settings]`:
@@ -137,12 +139,14 @@ The same table name and keys are the ones the design for the later settings wind
 
 **A flag locks the choice.** A flag applies to every machine, so the menu cannot override it. The choice is shown greyed, with the reason on a line below:
 
-| Locked by | Show as | Share clipboard |
-|---|---|---|
-| `--headless` | Own screen, locked | |
-| `--output NAME` | Mirror, locked | |
-| `--no-clipboard` | | Off, locked |
-| `share_clipboard = false` in `[settings]` | | Off, locked (the clipboard is not started, so it is off for every machine) |
+| Locked by | Show as | Share clipboard | Send Win+L |
+|---|---|---|---|
+| `--headless` | Own screen, locked | | |
+| `--output NAME` | Mirror, locked | | |
+| `--no-clipboard` | | Off, locked | |
+| `share_clipboard = false` in `[settings]` | | Off, locked (the clipboard is not started, so it is off for every machine) | |
+| `--super-l registry` | | | On, locked |
+| `--super-l chord` or `--super-l off` | | | Off, locked |
 
 The reason is one plain sentence, one of these:
 
@@ -150,8 +154,19 @@ The reason is one plain sentence, one of these:
 - `Locked: this window was started with --output, which applies to every machine.`
 - `Locked: this window was started with --no-clipboard, which turns the clipboard off for every machine.`
 - `Locked: config.toml has share_clipboard = false, which turns the clipboard off for every machine.`
+- `Locked: this window was started with --super-l, which applies to every machine.`
 
 A locked row changes nothing and saves nothing. A choice saved earlier stays in the file and applies again when the flag is not given. `output = "NAME"` in `[settings]` does not lock: choosing *Mirror* for a machine mirrors that named screen, and choosing *Own screen* gives a private screen.
+
+## Send Win+L to this machine
+
+Windows handles Win+L itself, before any program sees it, so by default Win+L locks Windows even while the window has the keyboard, and `Ctrl+Alt+L` (`super_l_chord`) sends Super+L instead. With **Send Win+L to this machine** on, a real Win+L goes to that machine. The menu row says what it costs: *Windows lock shortcuts are off while this window has the keyboard*.
+
+- **When locking is off.** Only while the window shows a tab whose switch is on and the window has the keyboard. A pointer resting on the window without the keyboard does not turn locking off. Windows locking is back 300 ms after the window loses the keyboard, and at once when the switch is turned off, another tab or no tab is shown, or the computer goes to sleep. While locking is off, the Lock entries in the Start menu and on the Ctrl+Alt+Del screen do nothing either. If this window cannot turn locking off (another gliff window holds the setting, the registry refused it, or its helper did not start), the menu says so under the row and Win+L locks Windows.
+- **How.** The per-user `DisableLockWorkstation` value, with a marker, a watchdog helper and a repair at start, so an exit leaves it as it was, and a crash or a kill leaves it set at most until the next start (or `--restore-lock-policy`). See [Win+L and the lock setting](windows-quirks.md#winl-and-the-lock-setting).
+- **Applies at once.** Ticking or unticking takes effect without a reconnect or a restart, and the menu never offers *Reconnect now to apply* for it.
+- **With the file and the flag.** The order is the usual one: the `--super-l` flag (locks the row: `registry` on, `chord` or `off` off), the machine's `send_win_l`, then `super_l = "registry"` in `[settings]` (on for every machine with no choice of its own), then off.
+- **The chord still works.** `Ctrl+Alt+L` sends Super+L whether the switch is on or off, unless `super_l` is `off`.
 
 ## Sharp colour
 

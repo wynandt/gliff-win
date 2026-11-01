@@ -44,7 +44,7 @@ fn own() -> Choice {
         screen: Some(Screen::Own),
         share_clipboard: None,
         sharp_colour: None,
-        gpu_decode: None,
+        ..Choice::default()
     }
 }
 
@@ -53,7 +53,7 @@ fn mirror() -> Choice {
         screen: Some(Screen::Mirror),
         share_clipboard: None,
         sharp_colour: None,
-        gpu_decode: None,
+        ..Choice::default()
     }
 }
 
@@ -62,7 +62,7 @@ fn sharing(share: bool) -> Choice {
         screen: None,
         share_clipboard: Some(share),
         sharp_colour: None,
-        gpu_decode: None,
+        ..Choice::default()
     }
 }
 
@@ -77,6 +77,11 @@ fn a_machine_with_no_choice_runs_with_the_defaults() {
     assert_eq!(
         c.desktop_mode(&resolved.settings),
         DesktopMode::mirror_focused()
+    );
+    // Win+L stays with Windows unless chosen.
+    assert_eq!(
+        (c.send_win_l, c.send_win_l_origin, &c.send_win_l_lock),
+        (false, Origin::Default, &None)
     );
 }
 
@@ -122,6 +127,23 @@ fn a_choice_beats_the_file() {
         (c.share_clipboard, c.share_origin),
         (false, Origin::Machine)
     );
+
+    // The file's `super_l = "registry"` sends Win+L to machines with no
+    // choice; a machine's own choice beats it either way.
+    let send = |on: bool| Choice {
+        send_win_l: Some(on),
+        ..Choice::default()
+    };
+    let (c, _) = connection(&[], "super_l = \"registry\"", Choice::default());
+    assert_eq!((c.send_win_l, c.send_win_l_origin), (true, Origin::File));
+    let (c, _) = connection(&[], "super_l = \"registry\"", send(false));
+    assert_eq!(
+        (c.send_win_l, c.send_win_l_origin),
+        (false, Origin::Machine)
+    );
+    let (c, _) = connection(&[], "", send(true));
+    assert_eq!((c.send_win_l, c.send_win_l_origin), (true, Origin::Machine));
+    assert_eq!(c.send_win_l_lock, None);
 }
 
 #[test]
@@ -163,6 +185,24 @@ fn a_flag_locks_the_choice_and_says_why() {
     assert_eq!(c.share_origin, Origin::Flag);
     let why = c.share_lock.clone().expect("locked");
     assert!(why.contains("--no-clipboard"), "{why}");
+
+    // Any `--super-l` flag decides Win+L for every machine.
+    for (flag, value) in [("registry", true), ("chord", false), ("off", false)] {
+        let choice = Choice {
+            send_win_l: Some(!value),
+            ..Choice::default()
+        };
+        let (c, _) = connection(&["--super-l", flag], "", choice);
+        assert_eq!(
+            (c.send_win_l, c.send_win_l_origin),
+            (value, Origin::Flag),
+            "--super-l {flag}"
+        );
+        assert_eq!(
+            c.send_win_l_lock.as_deref(),
+            Some("Locked: this window was started with --super-l, which applies to every machine.")
+        );
+    }
 }
 
 #[test]
@@ -239,8 +279,7 @@ fn a_saved_choice_is_remembered_per_machine_without_regard_to_host_case() {
         Choice {
             screen: Some(Screen::Own),
             share_clipboard: Some(false),
-            sharp_colour: None,
-            gpu_decode: None,
+            ..Choice::default()
         }
     );
     assert_eq!(choices.of(&host("other@one")), Choice::default());
@@ -254,10 +293,11 @@ fn choices_are_written_one_table_per_machine_and_read_back() {
     choices.set_screen(&host("me@one"), Screen::Own);
     choices.set_share_clipboard(&host("me@one"), false);
     choices.set_screen(&host("me@two"), Screen::Mirror);
+    choices.set_send_win_l(&host("me@two"), true);
     let table = choices.to_table();
     assert_eq!(
         table,
-        "[\"me@one\"]\nscreen = \"own\"\nshare_clipboard = false\n[\"me@two\"]\nscreen = \"mirror\"\n"
+        "[\"me@one\"]\nscreen = \"own\"\nshare_clipboard = false\n[\"me@two\"]\nscreen = \"mirror\"\nsend_win_l = true\n"
             .parse::<toml::Table>()
             .expect("TOML")
     );
@@ -337,6 +377,13 @@ fn nothing_is_pending_when_the_session_started_with_what_is_chosen() {
     assert!(!c.pending(&started(Screen::Mirror, true)));
     let (c, _) = connection(&[], "", own());
     assert!(!c.pending(&started(Screen::Own, true)));
+    // Win+L applies at once, so it never waits for a reconnect.
+    let send = Choice {
+        send_win_l: Some(true),
+        ..Choice::default()
+    };
+    let (c, _) = connection(&[], "", send);
+    assert!(!c.pending(&started(Screen::Mirror, true)));
 }
 
 #[test]
