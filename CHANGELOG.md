@@ -5,6 +5,32 @@ body of its GitHub release: the release workflow prints it with
 `scripts/release-notes` and refuses a version that has no section. To cut a
 release, see [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
+## [0.2.0]
+
+Decoding on the GPU, sharper coloured text, and a picture that keeps moving
+while a menu is open or the window is dragged.
+
+- GPU decode, a choice per machine in a tab's *Connection settings*, off by
+  default. It decodes H.264 with the Windows decoder (Media Foundation) and
+  Direct3D 11 video, shows the same picture pixel for pixel, and falls back to
+  the CPU on its own, saying why in the log.
+  ([#7](https://github.com/wynandt/gliff-win/issues/7))
+- Sharp colour, a choice per machine, off by default. It asks the server for
+  full-resolution colour (4:4:4, sent as two 4:2:0 streams), so coloured text
+  stays crisp. The server decides: one that encodes on the CPU sends 4:4:4
+  only when it runs with `--full-chroma`.
+  ([#9](https://github.com/wynandt/gliff-win/issues/9))
+- The picture keeps updating while a right-click menu or the window menu is
+  open. Before, it froze until the menu closed.
+  ([#11](https://github.com/wynandt/gliff-win/issues/11))
+- The picture keeps the stream's full frame rate while the window is dragged
+  or resized. Before, it dropped well below it.
+  ([#14](https://github.com/wynandt/gliff-win/issues/14))
+
+Both new choices apply the next time the tab connects, or at once with
+*Reconnect now to apply*. [docs/settings.md](https://github.com/wynandt/gliff-win/blob/main/docs/settings.md)
+has the details.
+
 ## [0.1.0]
 
 First release: a Windows client for [Gliff](https://github.com/omacom/gliff)
