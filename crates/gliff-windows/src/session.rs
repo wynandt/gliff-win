@@ -25,11 +25,20 @@ use gliff_proto::msg::ClientCaps;
 use gliff_proto::msg::ClientMsg;
 use gliff_proto::msg::Codec;
 use gliff_proto::msg::PROTOCOL_VERSION;
-use gliff_proto::msg::features;
 
 /// The smallest size the client advertises, so a later panel or a
 /// fullscreen window never needs a new handshake.
 pub const ADVERTISED_FLOOR: (u32, u32) = (3840, 2400);
+
+/// The optional protocol features this client implements, sent in `Hello`.
+/// This is not upstream's `gliff_proto::msg::FEATURES`, which lists what
+/// upstream's own client and server implement, so bumping the upstream pin
+/// cannot advertise a feature this client ignores. Add a name here only in
+/// the change that implements it, and use the feature only when the server's
+/// `HelloAck` lists it too: a behaviour is used only when both ends list it.
+/// `Core` does not keep the `HelloAck` features yet, so the change that adds
+/// the first name must also keep them and check them.
+pub const FEATURES: &[&str] = &[];
 
 /// The colour a session asks for: a machine's *Sharp colour* choice.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -57,16 +66,16 @@ impl Colour {
     }
 }
 
-/// What the client advertises: H.264 (CPU decode), the chroma modes of
-/// `colour`, and a maximum of the component-wise max of `panel` and
-/// [`ADVERTISED_FLOOR`].
+/// What the client advertises: H.264, the chroma modes of
+/// `colour`, a maximum of the component-wise max of `panel` and
+/// [`ADVERTISED_FLOOR`], and [`FEATURES`].
 pub fn client_caps(panel: (u32, u32), colour: Colour) -> ClientCaps {
     ClientCaps {
         codecs: vec![Codec::H264],
         max_width: panel.0.max(ADVERTISED_FLOOR.0),
         max_height: panel.1.max(ADVERTISED_FLOOR.1),
         chroma: colour.offered().to_vec(),
-        features: features(),
+        features: FEATURES.iter().map(|f| (*f).to_owned()).collect(),
     }
 }
 
@@ -194,6 +203,17 @@ mod tests {
     fn caps_grow_with_a_larger_panel_per_axis() {
         let caps = client_caps((5120, 1440), Colour::Standard);
         assert_eq!((caps.max_width, caps.max_height), (5120, 2400));
+    }
+
+    #[test]
+    fn caps_advertise_no_protocol_features_yet() {
+        for colour in [Colour::Standard, Colour::Sharp] {
+            assert_eq!(
+                client_caps((1920, 1080), colour).features,
+                Vec::<String>::new(),
+                "this client implements no optional feature, whatever the upstream pin lists"
+            );
+        }
     }
 
     #[test]
