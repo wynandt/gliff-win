@@ -179,8 +179,10 @@ pub enum UiCmd {
         axis: Axis,
         delta: i16,
     },
-    /// An Up for every held key and button (focus loss, lock, desktop
-    /// switch).
+    /// No wheel message has come for a while: end any open smooth scroll.
+    ScrollEnd,
+    /// An Up for every held key and button and a stop for an open smooth
+    /// scroll (focus loss, lock, desktop switch).
     ReleaseInput,
     /// The Windows layout changed: new XKB text.
     Keymap(String),
@@ -252,6 +254,10 @@ pub struct SessionStats {
     /// Wayland counts: "vertical+" (down), "vertical-" (up), "horizontal+"
     /// (right), "horizontal-" (left).
     pub wheel_steps_sent: BTreeMap<String, u64>,
+    /// Smooth scroll events sent (a part of a notch, `discrete` empty).
+    pub smooth_scrolls_sent: u64,
+    /// Ends of a smooth scroll (`stop`) sent.
+    pub scroll_stops_sent: u64,
     /// Button presses sent, by Linux button code.
     pub button_presses_sent: BTreeMap<u32, u64>,
     /// Keys held down now (sent Down, no Up yet): zero in a session that is
@@ -262,7 +268,8 @@ pub struct SessionStats {
 }
 
 impl SessionStats {
-    /// Counts the wheel steps and button presses in a message sent.
+    /// Counts the wheel steps, smooth scrolls and button presses in a message
+    /// sent.
     fn count_sent(&mut self, msg: &ClientMsg) {
         match msg {
             ClientMsg::PointerAxis {
@@ -280,6 +287,12 @@ impl SessionStats {
                     .entry(format!("{name}{sign}"))
                     .or_default() += u64::from(steps.unsigned_abs());
             }
+            ClientMsg::PointerAxis {
+                discrete: None,
+                stop: true,
+                ..
+            } => self.scroll_stops_sent += 1,
+            ClientMsg::PointerAxis { discrete: None, .. } => self.smooth_scrolls_sent += 1,
             ClientMsg::PointerButton {
                 button,
                 pressed: true,
@@ -407,6 +420,11 @@ impl Core {
     /// timer.
     pub fn input_holding(&self) -> bool {
         self.input.holding()
+    }
+
+    /// True while a smooth scroll waits for [`UiCmd::ScrollEnd`].
+    pub fn input_scrolling(&self) -> bool {
+        self.input.scrolling()
     }
 
     pub fn stats(&self) -> &SessionStats {
@@ -626,6 +644,7 @@ impl Core {
             UiCmd::Keys(events) => self.input.keys(events),
             UiCmd::Pointer(event) => self.input.pointer(event),
             UiCmd::Wheel { axis, delta } => self.input.wheel(axis, delta),
+            UiCmd::ScrollEnd => self.input.scroll_end(),
             UiCmd::ReleaseInput => self.input.release_all(),
             UiCmd::Keymap(keymap) => vec![ClientMsg::Keymap { keymap }],
             UiCmd::ClearModifiers => self.input.clear_modifiers(),

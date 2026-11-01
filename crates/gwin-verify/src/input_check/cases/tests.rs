@@ -251,24 +251,6 @@ fn there_are_nine_click_targets_inside_the_output() {
 }
 
 #[test]
-fn the_remainder_cases_follow_each_other_without_a_client_restart() {
-    let cases = wheel();
-    let seven = cases
-        .iter()
-        .position(|c| c.name.contains("7 events of 17"))
-        .expect("seven");
-    assert!(
-        cases[seven].flags.is_empty() && cases[seven + 1].flags.is_empty(),
-        "same flags, so the harness keeps the client and its remainder"
-    );
-    assert_eq!(
-        cases[seven].expect.remote,
-        Remote::Nothing,
-        "119 is no step"
-    );
-}
-
-#[test]
 fn the_thumb_buttons_are_checked_by_the_codes_each_mapping_sends() {
     let cases = buttons();
     let seen: Vec<_> = cases
@@ -303,14 +285,12 @@ fn every_wheel_step_is_followed_by_more_than_the_scroll_event_delay() {
             .iter()
             .filter(|a| matches!(a, Act::WheelEvent { .. } | Act::Pause(_)))
             .collect();
-        let mut sum = 0i32;
         for (i, act) in acts.iter().enumerate() {
+            // Only a whole notch is a wheel step; anything finer is smooth.
             let Act::WheelEvent { delta, .. } = act else {
                 continue;
             };
-            sum += i32::from(delta.abs());
-            if sum >= 120 {
-                sum -= 120;
+            if i32::from(*delta) % 120 == 0 {
                 let waits = match acts.get(i + 1) {
                     Some(Act::Pause(d)) => *d > Duration::from_millis(300),
                     None => true,

@@ -56,7 +56,11 @@ default `--side-buttons upstream` sends Back as 278 and Forward as 277;
 **Wheel.** Hyprland skips a scroll bind whose event comes less than
 `binds:scroll_event_delay` ms (300 by default) after the previous scroll event,
 and a skipped event restarts that wait. The wheel cases wait 400 ms after every
-step the client sends; `diag` shows the option's value.
+step the client sends; `diag` shows the option's value. A smooth scroll
+reaches Hyprland as a wheel event today (see
+[windows-quirks.md](../windows-quirks.md#pointer-and-dpi)), so it fires a wheel bind at most
+once per `binds:scroll_event_delay`; the smooth case expects at least one
+`wheel:down` and no `wheel:up`.
 
 While it is armed, the remote machine's own keyboard is in the submap too, so nobody
 should use the remote machine during a run. If a run is stuck, `hyprctl dispatch

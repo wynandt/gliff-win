@@ -123,49 +123,72 @@ impl ButtonState {
     }
 }
 
-/// Wheel deltas to whole steps, with the remainder carried over (decision 10).
-/// One notch (120) is one step, the same as upstream sends for one GTK wheel
-/// click. A touchpad's small deltas add up to a step per full notch.
+/// Wheel messages to scroll events (see "A wheel notch is a step" in
+/// docs/architecture.md). A delta of whole notches is that many wheel steps,
+/// as upstream sends for one GTK wheel click. Any other delta, from a precision
+/// touchpad or a high-resolution wheel, is a smooth (finger) scroll at once,
+/// which stays open on its axis until [`Scroll::end`].
 #[derive(Debug, Default)]
-pub struct WheelAccumulator {
-    rest: [i32; 2],
+pub struct Scroll {
+    /// Whether a smooth scroll is open, vertical then horizontal.
+    open: [bool; 2],
 }
 
-impl WheelAccumulator {
-    /// Adds `delta` (Windows units; positive is away from the user for the
-    /// vertical wheel and right for the horizontal one) and returns one event
-    /// for every whole notch crossed. The vertical direction is negated,
-    /// since Wayland's positive vertical is down.
+impl Scroll {
+    /// Events for one wheel message. `delta` is in Windows units: positive is
+    /// away from the user for the vertical wheel and right for the horizontal
+    /// one. The vertical direction is negated, since Wayland's positive
+    /// vertical is down. While a smooth scroll is open on either axis, every
+    /// delta is smooth, so a gesture does not switch kind once started; its
+    /// first delta decides (a first delta of exactly 120 is a wheel step).
     pub fn push(&mut self, axis: Axis, delta: i16) -> Vec<PointerEvent> {
         let (slot, sign) = match axis {
             Axis::Vertical => (0, -1),
             Axis::Horizontal => (1, 1),
         };
-        self.rest[slot] += i32::from(delta);
-        let steps = self.rest[slot] / WHEEL_DELTA;
-        self.rest[slot] -= steps * WHEEL_DELTA;
-        let direction = steps.signum() * sign;
-        (0..steps.abs())
-            .map(|_| PointerEvent::Axis {
+        let delta = i32::from(delta) * sign;
+        if delta == 0 {
+            return Vec::new();
+        }
+        if !self.is_open() && delta % WHEEL_DELTA == 0 {
+            let direction = delta.signum();
+            return (0..(delta / WHEEL_DELTA).abs())
+                .map(|_| PointerEvent::Axis {
+                    axis,
+                    value: STEP_VALUE * f64::from(direction),
+                    discrete: Some(direction),
+                    stop: false,
+                })
+                .collect();
+        }
+        self.open[slot] = true;
+        vec![PointerEvent::Axis {
+            axis,
+            value: STEP_VALUE * f64::from(delta) / f64::from(WHEEL_DELTA),
+            discrete: None,
+            stop: false,
+        }]
+    }
+
+    /// True while a smooth scroll waits for its end.
+    pub fn is_open(&self) -> bool {
+        self.open.contains(&true)
+    }
+
+    /// A stop for each axis with an open smooth scroll, which closes it: the
+    /// gesture ended (no wheel message for a while, or the input is released).
+    pub fn end(&mut self) -> Vec<PointerEvent> {
+        [Axis::Vertical, Axis::Horizontal]
+            .into_iter()
+            .zip(std::mem::take(&mut self.open))
+            .filter(|(_, open)| *open)
+            .map(|(axis, _)| PointerEvent::Axis {
                 axis,
-                value: STEP_VALUE * f64::from(direction),
-                discrete: Some(direction),
-                stop: false,
+                value: 0.0,
+                discrete: None,
+                stop: true,
             })
             .collect()
-    }
-
-    /// The remainder of an axis, in Windows units (tests and the log).
-    pub fn rest(&self, axis: Axis) -> i32 {
-        match axis {
-            Axis::Vertical => self.rest[0],
-            Axis::Horizontal => self.rest[1],
-        }
-    }
-
-    /// Forget the remainders, for a focus change.
-    pub fn reset(&mut self) {
-        self.rest = [0; 2];
     }
 }
 

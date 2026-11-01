@@ -1,5 +1,5 @@
 //! The session thread's input state: the key pipeline, the held buttons and
-//! the wheel remainders, turned into protocol messages. Pure.
+//! the open smooth scrolls, turned into protocol messages. Pure.
 //!
 //! The session thread is the only writer, so the held-key and held-button
 //! sets are never shared; focus loss, the release chord, lock, the desktop
@@ -15,7 +15,7 @@ use crate::keymap::KeyEvent;
 use crate::keymap::Press;
 use crate::pointer::ButtonState;
 use crate::pointer::PointerEvent;
-use crate::pointer::WheelAccumulator;
+use crate::pointer::Scroll;
 
 /// Messages to send, and whether the release chord completed.
 #[derive(Debug, Default, PartialEq)]
@@ -30,7 +30,7 @@ pub struct KeyOut {
 pub struct InputSide {
     pipeline: KeyPipeline,
     buttons: ButtonState,
-    wheel: WheelAccumulator,
+    scroll: Scroll,
 }
 
 impl InputSide {
@@ -38,7 +38,7 @@ impl InputSide {
         Self {
             pipeline,
             buttons: ButtonState::default(),
-            wheel: WheelAccumulator::default(),
+            scroll: Scroll::default(),
         }
     }
 
@@ -88,8 +88,19 @@ impl InputSide {
     /// a held Ctrl (Ctrl+wheel zooms).
     pub fn wheel(&mut self, axis: Axis, delta: i16) -> Vec<ClientMsg> {
         let mut msgs = self.flush_held();
-        msgs.extend(self.wheel.push(axis, delta).into_iter().map(pointer_msg));
+        msgs.extend(self.scroll.push(axis, delta).into_iter().map(pointer_msg));
         msgs
+    }
+
+    /// True while a smooth scroll is open: call [`Self::scroll_end`] once
+    /// no wheel message has come for a while.
+    pub fn scrolling(&self) -> bool {
+        self.scroll.is_open()
+    }
+
+    /// A stop for each open smooth scroll.
+    pub fn scroll_end(&mut self) -> Vec<ClientMsg> {
+        self.scroll.end().into_iter().map(pointer_msg).collect()
     }
 
     fn flush_held(&mut self) -> Vec<ClientMsg> {
@@ -110,9 +121,9 @@ impl InputSide {
             .collect()
     }
 
-    /// An Up for every held key and button; the wheel remainders restart.
+    /// An Up for every held key and button, and a stop for each open smooth
+    /// scroll.
     pub fn release_all(&mut self) -> Vec<ClientMsg> {
-        self.wheel.reset();
         let mut msgs: Vec<ClientMsg> = self
             .pipeline
             .release_all()
@@ -120,6 +131,7 @@ impl InputSide {
             .map(key_msg)
             .collect();
         msgs.extend(self.buttons.release_all().into_iter().map(pointer_msg));
+        msgs.extend(self.scroll_end());
         msgs
     }
 }

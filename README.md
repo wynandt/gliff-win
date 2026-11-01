@@ -326,18 +326,16 @@ means no document in this repository plans it.
    proven on hardware. Copy and cut also act as copy only. Windows "virtual
    files" are not built: files go through a spool folder, as in the Linux client.
    Planned if real use shows a need.
-10. **Smooth touchpad scrolling.** The protocol has pixel scrolling. gliff-win
-    sends whole wheel steps and carries the remainder. On the backlog.
-11. **Touch and pen.** The Linux client turns the first finger into a left
+10. **Touch and pen.** The Linux client turns the first finger into a left
     click. gliff-win has no touch code of its own and no pen support. Whether
     Windows' own touch-to-mouse conversion gives a usable result is untested.
     Not planned yet.
-12. **Release hotkey choices.** The Linux client takes `double-escape` or
+11. **Release hotkey choices.** The Linux client takes `double-escape` or
     `none`. gliff-win takes any chord of keys, such as `shift+esc`, and the
     default is `ctrl+alt+home`. It cannot be turned off: `--release-chord none`
     stops the client at start, and `release_chord = "none"` in `config.toml` is
     ignored and logged. Not planned yet.
-13. **A package or installer.** The Linux client ships as a package.
+12. **A package or installer.** The Linux client ships as a package.
     gliff-win ships as a zip of the programs on the Releases page, with no
     installer and no code signature.
 

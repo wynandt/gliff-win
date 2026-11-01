@@ -165,6 +165,12 @@ pub struct InputInfo {
     /// the remote desktop made of it.
     #[serde(default)]
     pub wheel_steps_sent: BTreeMap<String, u64>,
+    /// Smooth scroll events sent (a touchpad's part of a notch), and the ends
+    /// of those scrolls.
+    #[serde(default)]
+    pub smooth_scrolls_sent: u64,
+    #[serde(default)]
+    pub scroll_stops_sent: u64,
     /// Button presses sent to the server by Linux button code (272 left,
     /// 273 right, 274 middle, 275 and 276 or 277 and 278 for the thumbs).
     #[serde(default)]

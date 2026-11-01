@@ -27,7 +27,6 @@ is not listed here, please open an issue with a way to reproduce it.
   attachments), and streaming a big file without a spool folder. HTML and rich
   text are built but not proven on real machines. See
   [docs/clipboard.md](docs/clipboard.md#known-gaps).
-- **Smooth touchpad scrolling.** The client sends whole wheel steps.
 - **Touch and pen input.**
 - **Choosing the remote scale.** The remote screen always follows the Windows
   display scale. To change it, change the Windows scale and reconnect.
@@ -61,6 +60,10 @@ The client has run on one Windows machine. Not tried yet
 - **One wheel notch was dropped once at 150% scale** and has not been seen
   again. If it happens to you, `wheel_steps_sent` in `input-stats.json` tells a
   dropped send from a dropped scroll.
+- **A touchpad scroll reaches the remote as a wheel scroll.** It scrolls
+  smoothly, but Hyprland's wheel binds can fire during it and applications add
+  no kinetic scrolling. The cause is the order in which the server sends the
+  scroll; see [docs/windows-quirks.md](docs/windows-quirks.md#pointer-and-dpi).
 - **A click between the two halves of an AltGr press** carries a Ctrl; see
   [docs/windows-quirks.md](docs/windows-quirks.md#known-limitations).
 - **`--output auto` can pick a leftover private screen** left by a server that

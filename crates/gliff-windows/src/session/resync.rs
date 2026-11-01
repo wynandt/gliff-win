@@ -4,8 +4,8 @@
 //! discards the mode a headless output was given at runtime) keeps the link
 //! and sends nothing, so the client sees only that nothing answers its input.
 //! A still screen also sends nothing, so silence alone is not a stall:
-//! [`Watch`] needs [`MIN_INPUTS`] key presses, button presses or wheel steps
-//! with no picture since, and the first of them [`SILENCE`] old. It owns no
+//! [`Watch`] needs [`MIN_INPUTS`] key presses, button presses or wheel
+//! messages with no picture since, and the first of them [`SILENCE`] old. It owns no
 //! clock; the driver passes `now`.
 
 use std::time::Duration;
@@ -29,7 +29,7 @@ pub struct Watch {
 }
 
 impl Watch {
-    /// A key press, button press or wheel step was sent.
+    /// A key press, button press or wheel message was sent.
     pub fn input(&mut self, now: Instant) {
         self.unanswered = match self.unanswered {
             Some((since, n)) => Some((since, n.saturating_add(1))),

@@ -57,8 +57,8 @@ impl CaseResult {
 }
 
 /// Runs every case in order. The client restarts only when the flags
-/// change, so cases that depend on its state (a carried wheel remainder)
-/// run back to back with the same flags.
+/// change, so cases that depend on its state run back to back with the same
+/// flags.
 pub fn run_cases(h: &mut impl Harness, cases: &[Case]) -> Vec<CaseResult> {
     let mut results = Vec::new();
     let mut running: Option<&[String]> = None;

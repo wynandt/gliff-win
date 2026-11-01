@@ -316,8 +316,26 @@ on Windows and pasted on Linux). See
   window takes the suggested rectangle. Sizes are rounded down to even and are never under 64.
 - **Leaving the window sends no more moves.** The client asks for `TME_LEAVE` and
   holds the capture on a button down, so a drag outside the window keeps going.
-- **The wheel has a remainder.** A notch is 120; precision touchpads send many
-  smaller steps. The client sends whole steps and keeps the rest.
+- **A touchpad scrolls smoothly.** A notch is 120; a precision touchpad sends
+  many smaller deltas through the same wheel messages. A delta of whole notches
+  goes out as wheel steps, any other as a smooth scroll that ends 150 ms after
+  the last message. Windows already adds the touchpad's inertia, so the remote
+  sees it as more smooth deltas.
+
+  The client marks the smooth scroll as a finger scroll (`discrete` empty),
+  but the remote does not see it as one today. The server's virtual pointer
+  sends the axis source before the axis (`crates/hypr-input/src/thread.rs`,
+  the `InputCmd::Axis` arm), and Hyprland's virtual pointer starts a new axis
+  event, whose source is the wheel, on every axis request
+  (`src/protocols/VirtualPointer.cpp`, `setAxis`). So each smooth delta
+  reaches the remote as a wheel event with no step, Hyprland makes up a
+  high-resolution wheel value for it (8 per pixel), and applications that read
+  that value scroll smoothly. Two things follow: Hyprland's wheel binds
+  (`mouse_up`, `mouse_down` and so on) can fire during a touchpad scroll, at
+  most once per `binds:scroll_event_delay`, and applications see no finger
+  scroll, so they add no kinetic scrolling of their own. The upstream Linux
+  client sends its touchpad the same way and is affected the same way.
+  Sending the source after the axis would fix it on the server.
 - **Thumb buttons** are `XBUTTON1` (back) and `XBUTTON2` (forward). `--side-buttons`
   chooses which Linux codes they send; the default is upstream's, and which default
   to keep is not decided yet.
@@ -519,7 +537,7 @@ and no stall detection (`net.rs`), so it is affected the same way.
 
 **What the client does about it.** It cannot see the compositor, so it
 watches for the symptom: input that gets no answer. When a key press, a button
-press or a wheel step has gone out, at least three have gone out unanswered, and
+press or a wheel message has gone out, at least three have gone out unanswered, and
 no `VideoFrame` or `StreamConfig` has arrived for 3 s, the session sends a
 *resync*: a Resize to the same size less 32 px of width (more when the window
 is under 352 px wide), then at once the real Resize again. A size that differs

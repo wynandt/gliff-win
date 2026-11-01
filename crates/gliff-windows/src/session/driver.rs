@@ -61,6 +61,10 @@ pub const IDLE_DRAIN: Duration = Duration::from_millis(150);
 /// How long after a key arrives the AltGr filter's deadline has passed: the
 /// filter waits [`DEADLINE_MS`] and gives up when more than that has gone.
 const KEY_HOLD: Duration = Duration::from_millis(DEADLINE_MS as u64 + 1);
+/// How long after the last wheel message an open smooth scroll ends: longer
+/// than the gap between a touchpad's messages, including the inertia
+/// Windows adds after the fingers lift.
+const SCROLL_END_GAP: Duration = Duration::from_millis(150);
 /// The most queued commands one coalescing pass reads, so a flood of mouse
 /// motion cannot starve the socket.
 const COALESCE_LIMIT: usize = 256;
@@ -360,6 +364,7 @@ async fn run(
         reason: None,
         errors: Vec::new(),
         key_clock: None,
+        wheel_clock: None,
         watch: Watch::default(),
         colour_since: Instant::now(),
         decode_window: opts.gpu_decode.then(Vec::new),
@@ -474,6 +479,8 @@ struct Session {
     /// The newest key's clocks, so the AltGr deadline can be checked in the
     /// hook's clock without reading it.
     key_clock: Option<KeyClock>,
+    /// When the newest wheel message arrived, for ending a smooth scroll.
+    wheel_clock: Option<WheelClock>,
     /// Input the server has not answered with a picture, for resyncing a
     /// server that went quiet.
     watch: Watch,
@@ -505,6 +512,21 @@ impl KeyClock {
     }
 }
 
+/// When the newest wheel message arrived. One clock serves both axes, so
+/// every open smooth scroll ends together.
+#[derive(Clone, Copy, Debug)]
+struct WheelClock {
+    arrived: Instant,
+}
+
+impl WheelClock {
+    /// When an open smooth scroll ends. It is fixed by the newest wheel
+    /// message, so waking for something else does not move it.
+    fn deadline(self) -> Instant {
+        self.arrived + SCROLL_END_GAP
+    }
+}
+
 impl Session {
     async fn run(
         &mut self,
@@ -519,6 +541,7 @@ impl Session {
             self.tick_if_due();
             self.resync_if_due();
             let key_due = self.key_due();
+            let scroll_due = self.scroll_due();
             let resync_due = self.watch.due();
             let idle = self.decoder.has_pending();
             tokio::select! {
@@ -547,6 +570,11 @@ impl Session {
                 }
                 () = tokio::time::sleep_until(key_due.unwrap_or_else(Instant::now).into()), if key_due.is_some() => {
                     self.tick_if_due();
+                }
+                // Queued commands go first: after a stall they may hold more
+                // of the same gesture, which a stop would split in two.
+                () = tokio::time::sleep_until(scroll_due.unwrap_or_else(Instant::now).into()), if scroll_due.is_some() && cmds.is_empty() => {
+                    self.end_scroll_if_due();
                 }
                 () = tokio::time::sleep_until(resync_due.unwrap_or_else(Instant::now).into()), if resync_due.is_some() => {
                     self.resync_if_due();
@@ -619,6 +647,11 @@ impl Session {
                 arrived: Instant::now(),
             });
         }
+        if let UiCmd::Wheel { .. } = &cmd {
+            self.wheel_clock = Some(WheelClock {
+                arrived: Instant::now(),
+            });
+        }
         if is_stimulus(&cmd) && self.core.stats().configs > 0 {
             self.watch.input(Instant::now());
         }
@@ -667,6 +700,22 @@ impl Session {
             && now >= due
         {
             self.on_cmd(UiCmd::Tick(clock.hook_ms(now)));
+        }
+    }
+
+    /// When an open smooth scroll ends; see [`WheelClock::deadline`].
+    fn scroll_due(&self) -> Option<Instant> {
+        self.wheel_clock
+            .filter(|_| self.core.input_scrolling())
+            .map(WheelClock::deadline)
+    }
+
+    /// Taking the time first means a Core that drops the command (an ended
+    /// session) cannot leave a deadline in the past for the loop to spin on.
+    fn end_scroll_if_due(&mut self) {
+        if self.scroll_due().is_some_and(|due| Instant::now() >= due) {
+            self.wheel_clock = None;
+            self.on_cmd(UiCmd::ScrollEnd);
         }
     }
 
@@ -773,7 +822,7 @@ impl Session {
 }
 
 /// Whether the user did something a working server answers with a picture:
-/// a press (not a release or a motion) or a wheel step.
+/// a press (not a release or a motion) or a scroll.
 fn is_stimulus(cmd: &UiCmd) -> bool {
     match cmd {
         UiCmd::Key(key) => key.press == Press::Down,
