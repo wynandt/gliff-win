@@ -87,6 +87,8 @@ fn sample() -> ClientStats {
             }),
             keymap_sent: vec!["keymap_sent us reason=start".into()],
             wheel_steps_sent: BTreeMap::new(),
+            smooth_scrolls_sent: 0,
+            scroll_stops_sent: 0,
             button_presses_sent: BTreeMap::new(),
         },
         sessions: vec![SessionEntry {

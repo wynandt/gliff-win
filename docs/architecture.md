@@ -172,9 +172,15 @@ Each choice names the alternative that was rejected.
   many wheel steps, as upstream sends one wheel click. Any other delta, which a
   precision touchpad or a high-resolution wheel sends, goes out at once as a
   continuous (finger) scroll of 15 pixels per 120, with no step, and the
-  remote sees the gesture end (`stop`) when no wheel message has come for
-  `SCROLL_END_GAP` (150 ms) or the input is released. While a smooth scroll
-  is open, every delta is smooth, so one gesture never switches kind.
+  gesture ends (`stop`) when no wheel message has come for `SCROLL_END_GAP`
+  (150 ms, the same as GTK's scroll capture threshold) or the input is
+  released. While a smooth scroll is open on either axis, every delta is
+  smooth, so a gesture does not switch kind once it has started. Its first
+  delta decides: a touchpad whose first delta is exactly 120 sends that one as
+  a wheel step, and a mouse notch that comes during a touchpad's inertia goes
+  out smooth. One open flag per axis and one deadline for both end them
+  together. What the remote makes of it depends on the server: see
+  [windows-quirks.md](windows-quirks.md#pointer-and-dpi).
   Rejected: summing small deltas into whole steps, which scrolled nothing
   until a notch added up and then jumped; asking Windows which device sent the
   message, which cannot be tested off Windows and would still send a
@@ -249,7 +255,7 @@ perform, in order: `Send`, `Decode`, `ResetDecoder`, `Present` and `Ui`.
   its link but stopped sending pictures after the remote compositor reloaded
   (see [windows-quirks.md](windows-quirks.md#the-remote-compositor-reloads)).
   When to do it is the pure `session::resync::Watch`: it counts key presses,
-  button presses and wheel steps with no `VideoFrame` or `StreamConfig` since,
+  button presses and wheel messages with no `VideoFrame` or `StreamConfig` since,
   and is due 3 s after the first of at least three, no sooner than 30 s after
   the last resync. The driver owns its clock. Each session's driver has its own
   `Watch` and its own 30 s limit, so a hidden tab whose server went quiet is

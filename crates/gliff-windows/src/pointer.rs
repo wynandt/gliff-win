@@ -138,8 +138,9 @@ impl Scroll {
     /// Events for one wheel message. `delta` is in Windows units: positive is
     /// away from the user for the vertical wheel and right for the horizontal
     /// one. The vertical direction is negated, since Wayland's positive
-    /// vertical is down. While a smooth scroll is open, every delta is smooth,
-    /// so one gesture never switches kind.
+    /// vertical is down. While a smooth scroll is open on either axis, every
+    /// delta is smooth, so a gesture does not switch kind once started; its
+    /// first delta decides (a first delta of exactly 120 is a wheel step).
     pub fn push(&mut self, axis: Axis, delta: i16) -> Vec<PointerEvent> {
         let (slot, sign) = match axis {
             Axis::Vertical => (0, -1),

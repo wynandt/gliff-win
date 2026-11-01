@@ -914,8 +914,7 @@ pub fn clicks(size: (u32, u32)) -> Vec<Case> {
 const WHEEL_SPACING: Duration = Duration::from_millis(400);
 
 /// Whole notches, which reach the remote as wheel steps, and a smooth
-/// stream, which reaches it as a finger scroll that fires no wheel bind.
-/// Every step the client sends is followed by [`WHEEL_SPACING`].
+/// stream. Every step the client sends is followed by [`WHEEL_SPACING`].
 pub fn wheel() -> Vec<Case> {
     let event = |wheel, delta| Act::WheelEvent { wheel, delta };
     let events =
@@ -950,11 +949,18 @@ pub fn wheel() -> Vec<Case> {
                 "wheel:up",
             ]))),
         ),
-        // Smaller than a notch: a smooth scroll, which Hyprland binds ignore.
+        // Smaller than a notch: a smooth scroll. The client sends it as a
+        // finger scroll, but the server sends the source before the axis and
+        // Hyprland's virtual pointer then makes it a wheel event, so the
+        // down bind fires once per `binds:scroll_event_delay` (once or twice
+        // here, by timing). It never fires the other way.
         plain(
-            "wheel 30 smooth events of 8 are no wheel step",
+            "wheel 30 smooth events of 8 scroll down",
             with_pause(events(Wheel::Vertical, -8, 30)),
-            Expect::remote(Remote::Nothing),
+            Expect::remote(Remote::InOrder {
+                entries: names(&["wheel:down"]),
+                never: names(&["wheel:up"]),
+            }),
         ),
         // Horizontal keeps its sign: right is positive on both sides.
         plain(

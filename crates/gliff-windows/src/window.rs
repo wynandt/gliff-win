@@ -1405,6 +1405,8 @@ impl App {
         let mut input = self.input.info(shown.and_then(|view| view.shown_geometry));
         if let Some((_, sent, _)) = primary {
             input.wheel_steps_sent.clone_from(&sent.wheel_steps_sent);
+            input.smooth_scrolls_sent = sent.smooth_scrolls_sent;
+            input.scroll_stops_sent = sent.scroll_stops_sent;
             input
                 .button_presses_sent
                 .clone_from(&sent.button_presses_sent);

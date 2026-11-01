@@ -1258,7 +1258,7 @@ mod input {
     }
 
     #[test]
-    fn wheel_steps_and_button_presses_are_counted_as_sent() {
+    fn wheel_steps_smooth_scrolls_and_button_presses_are_counted_as_sent() {
         let mut core = streaming();
         for delta in [-120, -120, 120] {
             core.on_ui(UiCmd::Wheel {
@@ -1270,11 +1270,14 @@ mod input {
             axis: Axis::Horizontal,
             delta: -120,
         });
-        // A part of a notch scrolls smoothly: no step.
-        core.on_ui(UiCmd::Wheel {
-            axis: Axis::Horizontal,
-            delta: 40,
-        });
+        // A part of a notch scrolls smoothly: no step, and then its end.
+        for _ in 0..2 {
+            core.on_ui(UiCmd::Wheel {
+                axis: Axis::Horizontal,
+                delta: 40,
+            });
+        }
+        core.on_ui(UiCmd::ScrollEnd);
         for press in [Press::Down, Press::Up, Press::Down] {
             core.on_ui(UiCmd::Pointer(PointerEvent::Button { button: 278, press }));
         }
@@ -1294,6 +1297,11 @@ mod input {
             .map(|(k, v)| (*k, *v))
             .collect();
         assert_eq!(presses, [(278, 2)], "two presses, the release is not one");
+        assert_eq!(
+            (stats.smooth_scrolls_sent, stats.scroll_stops_sent),
+            (2, 1),
+            "two smooth deltas and one end"
+        );
     }
 
     #[test]

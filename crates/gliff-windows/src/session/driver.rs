@@ -364,7 +364,7 @@ async fn run(
         reason: None,
         errors: Vec::new(),
         key_clock: None,
-        wheel_at: None,
+        wheel_clock: None,
         watch: Watch::default(),
         colour_since: Instant::now(),
         decode_window: opts.gpu_decode.then(Vec::new),
@@ -480,7 +480,7 @@ struct Session {
     /// hook's clock without reading it.
     key_clock: Option<KeyClock>,
     /// When the newest wheel message arrived, for ending a smooth scroll.
-    wheel_at: Option<Instant>,
+    wheel_clock: Option<WheelClock>,
     /// Input the server has not answered with a picture, for resyncing a
     /// server that went quiet.
     watch: Watch,
@@ -509,6 +509,21 @@ impl KeyClock {
     fn hook_ms(self, now: Instant) -> u32 {
         let elapsed = now.saturating_duration_since(self.arrived);
         self.time_ms.wrapping_add(elapsed.as_millis() as u32)
+    }
+}
+
+/// When the newest wheel message arrived. One clock serves both axes, so
+/// every open smooth scroll ends together.
+#[derive(Clone, Copy, Debug)]
+struct WheelClock {
+    arrived: Instant,
+}
+
+impl WheelClock {
+    /// When an open smooth scroll ends. It is fixed by the newest wheel
+    /// message, so waking for something else does not move it.
+    fn deadline(self) -> Instant {
+        self.arrived + SCROLL_END_GAP
     }
 }
 
@@ -633,7 +648,9 @@ impl Session {
             });
         }
         if let UiCmd::Wheel { .. } = &cmd {
-            self.wheel_at = Some(Instant::now());
+            self.wheel_clock = Some(WheelClock {
+                arrived: Instant::now(),
+            });
         }
         if is_stimulus(&cmd) && self.core.stats().configs > 0 {
             self.watch.input(Instant::now());
@@ -686,19 +703,18 @@ impl Session {
         }
     }
 
-    /// When an open smooth scroll ends, [`SCROLL_END_GAP`] after the newest
-    /// wheel message.
+    /// When an open smooth scroll ends; see [`WheelClock::deadline`].
     fn scroll_due(&self) -> Option<Instant> {
-        self.wheel_at
+        self.wheel_clock
             .filter(|_| self.core.input_scrolling())
-            .map(|at| at + SCROLL_END_GAP)
+            .map(WheelClock::deadline)
     }
 
     /// Taking the time first means a Core that drops the command (an ended
     /// session) cannot leave a deadline in the past for the loop to spin on.
     fn end_scroll_if_due(&mut self) {
         if self.scroll_due().is_some_and(|due| Instant::now() >= due) {
-            self.wheel_at = None;
+            self.wheel_clock = None;
             self.on_cmd(UiCmd::ScrollEnd);
         }
     }

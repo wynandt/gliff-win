@@ -254,6 +254,10 @@ pub struct SessionStats {
     /// Wayland counts: "vertical+" (down), "vertical-" (up), "horizontal+"
     /// (right), "horizontal-" (left).
     pub wheel_steps_sent: BTreeMap<String, u64>,
+    /// Smooth scroll events sent (a part of a notch, `discrete` empty).
+    pub smooth_scrolls_sent: u64,
+    /// Ends of a smooth scroll (`stop`) sent.
+    pub scroll_stops_sent: u64,
     /// Button presses sent, by Linux button code.
     pub button_presses_sent: BTreeMap<u32, u64>,
     /// Keys held down now (sent Down, no Up yet): zero in a session that is
@@ -264,7 +268,8 @@ pub struct SessionStats {
 }
 
 impl SessionStats {
-    /// Counts the wheel steps and button presses in a message sent.
+    /// Counts the wheel steps, smooth scrolls and button presses in a message
+    /// sent.
     fn count_sent(&mut self, msg: &ClientMsg) {
         match msg {
             ClientMsg::PointerAxis {
@@ -282,6 +287,12 @@ impl SessionStats {
                     .entry(format!("{name}{sign}"))
                     .or_default() += u64::from(steps.unsigned_abs());
             }
+            ClientMsg::PointerAxis {
+                discrete: None,
+                stop: true,
+                ..
+            } => self.scroll_stops_sent += 1,
+            ClientMsg::PointerAxis { discrete: None, .. } => self.smooth_scrolls_sent += 1,
             ClientMsg::PointerButton {
                 button,
                 pressed: true,
