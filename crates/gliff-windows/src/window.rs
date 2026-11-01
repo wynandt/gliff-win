@@ -54,6 +54,9 @@ use windows::Win32::UI::WindowsAndMessaging::IsWindow;
 use windows::Win32::UI::WindowsAndMessaging::KillTimer;
 use windows::Win32::UI::WindowsAndMessaging::MF_SEPARATOR;
 use windows::Win32::UI::WindowsAndMessaging::MF_STRING;
+use windows::Win32::UI::WindowsAndMessaging::PBT_APMRESUMEAUTOMATIC;
+use windows::Win32::UI::WindowsAndMessaging::PBT_APMRESUMESUSPEND;
+use windows::Win32::UI::WindowsAndMessaging::PBT_APMSUSPEND;
 use windows::Win32::UI::WindowsAndMessaging::PostQuitMessage;
 use windows::Win32::UI::WindowsAndMessaging::SW_RESTORE;
 use windows::Win32::UI::WindowsAndMessaging::SWP_NOACTIVATE;
@@ -79,6 +82,7 @@ use windows::Win32::UI::WindowsAndMessaging::WM_LBUTTONDOWN;
 use windows::Win32::UI::WindowsAndMessaging::WM_MBUTTONDOWN;
 use windows::Win32::UI::WindowsAndMessaging::WM_MOUSEMOVE;
 use windows::Win32::UI::WindowsAndMessaging::WM_PAINT;
+use windows::Win32::UI::WindowsAndMessaging::WM_POWERBROADCAST;
 use windows::Win32::UI::WindowsAndMessaging::WM_RBUTTONDOWN;
 use windows::Win32::UI::WindowsAndMessaging::WM_SETCURSOR;
 use windows::Win32::UI::WindowsAndMessaging::WM_SIZE;
@@ -199,6 +203,8 @@ enum Deferred {
     /// `WM_ENDSESSION` (the session is ending): the rest of the shutdown,
     /// after the lock setting was already put back at once.
     EndSession,
+    /// `WM_POWERBROADCAST`: the computer goes to sleep (`true`) or woke.
+    Power(bool),
 }
 
 /// What the starter records for each session it starts, for its view.
@@ -1187,7 +1193,12 @@ impl App {
             .session()
             .and_then(|session| self.views.get(&session))
             .map(|view| &view.running);
-        Some(menu::tab_menu(tab.status(), &connection, live))
+        Some(menu::tab_menu(
+            tab.status(),
+            &connection,
+            live,
+            self.input.grab().win_l_unusable(),
+        ))
     }
 
     pub(crate) fn strip_command(&mut self, command: MenuCommand, id: crate::tabs::TabId) {
@@ -1648,6 +1659,7 @@ impl App {
             Deferred::Size => self.on_size(),
             Deferred::Destroy => self.on_destroy(),
             Deferred::EndSession => self.input.shutdown(),
+            Deferred::Power(suspended) => self.input.grab_mut().suspend(suspended),
         }
     }
 }
@@ -1771,6 +1783,11 @@ pub extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPA
                     crate::lockreg::restore_now();
                     Some(Deferred::EndSession)
                 }
+                WM_POWERBROADCAST => match wparam.0 as u32 {
+                    PBT_APMSUSPEND => Some(Deferred::Power(true)),
+                    PBT_APMRESUMESUSPEND | PBT_APMRESUMEAUTOMATIC => Some(Deferred::Power(false)),
+                    _ => None,
+                },
                 _ => None,
             };
             if let Some(deferred) = deferred {

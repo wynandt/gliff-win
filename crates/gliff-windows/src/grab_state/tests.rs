@@ -64,7 +64,11 @@ mod focus {
     fn hovering_without_focus_takes_only_super_l() {
         let mut s = state();
         let o = run(&mut s, &[ENTER]);
-        assert_eq!((o.mode, o.lock), (HookMode::SuperLOnly, Want::On));
+        assert_eq!(
+            (o.mode, o.lock),
+            (HookMode::SuperLOnly, Want::Off),
+            "a pointer alone never turns Windows locking off"
+        );
         let o = run(&mut s, &[LEAVE]);
         assert_eq!((o.mode, o.lock), (HookMode::Off, Want::Off));
         assert_eq!(o.release, Release::Nothing, "SuperLOnly held no keys");
@@ -100,12 +104,13 @@ mod focus {
     }
 
     #[test]
-    fn released_but_hovering_still_forwards_super_l() {
-        // "To lock the Windows machine, press the release chord and move away."
+    fn released_but_hovering_gives_win_l_back_to_windows() {
+        // Released, the window no longer has the keyboard: Win+L locks
+        // Windows again (after the setting's delay), pointer or not.
         let mut s = state();
         run(&mut s, &[GAIN, ENTER]);
         let o = run(&mut s, &[Event::ReleaseChord]);
-        assert_eq!((o.mode, o.lock), (HookMode::SuperLOnly, Want::On));
+        assert_eq!((o.mode, o.lock), (HookMode::SuperLOnly, Want::Off));
         let o = run(&mut s, &[LEAVE]);
         assert_eq!(
             (o.mode, o.lock),
@@ -215,8 +220,8 @@ mod secure_desktop_and_lock {
 }
 
 #[test]
-fn enter_leave_focus_sequences_never_leave_the_setting_on_with_the_hook_off() {
-    // Every sequence of up to four events keeps lock == (mode != Off).
+fn enter_leave_focus_sequences_never_leave_the_setting_on_without_the_keyboard() {
+    // Every sequence of up to three events keeps lock == (mode == Grab).
     let events = [
         GAIN,
         LOSE,
@@ -238,10 +243,10 @@ fn enter_leave_focus_sequences_never_leave_the_setting_on_with_the_hook_off() {
                     let mut s = GrabState::new(follow);
                     for e in [a, b, c] {
                         let o = s.handle(e);
-                        let want = if o.mode == HookMode::Off {
-                            Want::Off
-                        } else {
+                        let want = if o.mode == HookMode::Grab {
                             Want::On
+                        } else {
+                            Want::Off
                         };
                         assert_eq!(o.lock, want, "{follow:?} after {a:?} {b:?} {c:?}");
                     }

@@ -10,7 +10,8 @@ release, see [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 - *Send Win+L to this machine*, a switch per machine in a tab's *Connection
   settings*, off by default. With it on, a real Win+L goes to that machine:
   Windows lock shortcuts are off while the window shows that tab and has the
-  keyboard, and back 300 ms after. It applies at once and is saved as
+  keyboard, back at once when the switch goes off or another tab is shown,
+  and 300 ms after the window loses the keyboard. It applies at once and is saved as
   `send_win_l` in `config.toml`. `--super-l registry` now turns it on for
   every machine, and `--super-l chord` or `off` turns it off for every
   machine. ([#21](https://github.com/wynandt/gliff-win/issues/21))

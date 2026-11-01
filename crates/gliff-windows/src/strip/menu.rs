@@ -98,7 +98,15 @@ fn running(status: &Status) -> bool {
 /// and the saved choices would run differently now, the settings submenu ends
 /// with a row that reconnects at once, in place of the line that says the
 /// choice applies at the next connect.
-pub fn tab_menu(status: &Status, connection: &Connection, live: Option<&Running>) -> Vec<Entry> {
+///
+/// `win_l_unusable` says why this window cannot hand Win+L to any machine
+/// now; the Win+L row keeps its tick (so it can be turned off) and says so.
+pub fn tab_menu(
+    status: &Status,
+    connection: &Connection,
+    live: Option<&Running>,
+    win_l_unusable: Option<&str>,
+) -> Vec<Entry> {
     let pending = live.is_some_and(|live| {
         matches!(status, Status::Connecting | Status::Streaming) && connection.pending(live)
     });
@@ -114,7 +122,7 @@ pub fn tab_menu(status: &Status, connection: &Connection, live: Option<&Running>
     entries.push(item(Command::CopyAddress, "Copy address"));
     entries.push(Entry::Submenu {
         label: "Connection settings",
-        rows: connection_rows(connection, pending),
+        rows: connection_rows(connection, pending, win_l_unusable),
     });
     entries.push(Entry::Separator);
     entries.push(item(
@@ -131,10 +139,15 @@ pub fn tab_menu(status: &Status, connection: &Connection, live: Option<&Running>
 /// The rows of a tab's Connection settings submenu: how the machine is
 /// shown, whether its clipboard is shared, whether it asks for sharp
 /// colour and the GPU decoder, and whether Win+L goes to it. A choice a flag has made for
-/// every machine is greyed, with the reason under it. The last row is the
+/// every machine is greyed, with the reason under it; a Win+L route this
+/// window cannot use (`win_l_unusable`) is said under its row. The last row is the
 /// Reconnect command when a change `pending` waits for the next connect, and
 /// a line that says when it applies otherwise.
-fn connection_rows(connection: &Connection, pending: bool) -> Vec<Entry> {
+fn connection_rows(
+    connection: &Connection,
+    pending: bool,
+    win_l_unusable: Option<&str>,
+) -> Vec<Entry> {
     let mut rows = vec![Entry::Note("Show as".to_owned())];
     for (screen, label) in [
         (Screen::Mirror, "Mirror the remote screen"),
@@ -185,10 +198,14 @@ fn connection_rows(connection: &Connection, pending: bool) -> Vec<Entry> {
         enabled: connection.send_win_l_lock.is_none(),
     });
     rows.push(Entry::Note(
-        connection.send_win_l_lock.clone().unwrap_or_else(|| {
-            "Applies at once. Windows lock shortcuts are off while this window has the keyboard"
-                .to_owned()
-        }),
+        connection
+            .send_win_l_lock
+            .clone()
+            .or_else(|| win_l_unusable.map(str::to_owned))
+            .unwrap_or_else(|| {
+                "Applies at once. Windows lock shortcuts are off while this window has the keyboard"
+                    .to_owned()
+            }),
     ));
     rows.push(Entry::Separator);
     rows.push(if pending {

@@ -47,7 +47,7 @@ fn plain() -> Connection {
 }
 
 fn labels(status: &Status) -> Vec<&'static str> {
-    tab_menu(status, &plain(), None)
+    tab_menu(status, &plain(), None, None)
         .into_iter()
         .map(|e| match e {
             Entry::Item { label, .. } | Entry::Submenu { label, .. } => label,
@@ -58,7 +58,7 @@ fn labels(status: &Status) -> Vec<&'static str> {
 }
 
 fn commands(status: &Status) -> Vec<Command> {
-    tab_menu(status, &plain(), None)
+    tab_menu(status, &plain(), None, None)
         .into_iter()
         .filter_map(|e| match e {
             Entry::Item { command, .. } => Some(command),
@@ -73,10 +73,18 @@ fn connection_rows(connection: &Connection) -> Vec<String> {
     rows_for(&Status::Streaming, connection, None)
 }
 
+/// The same rows when this window cannot hand Win+L to any machine.
+fn rows_unusable(connection: &Connection, reason: &str) -> Vec<String> {
+    rows_from(tab_menu(&Status::Streaming, connection, None, Some(reason)))
+}
+
 /// The same rows for a tab with this status whose session started with `live`.
 /// A row that is a command of its own shows as `=> text`.
 fn rows_for(status: &Status, connection: &Connection, live: Option<&Running>) -> Vec<String> {
-    let entries = tab_menu(status, connection, live);
+    rows_from(tab_menu(status, connection, live, None))
+}
+
+fn rows_from(entries: Vec<Entry>) -> Vec<String> {
     let rows = entries
         .into_iter()
         .find_map(|e| match e {
@@ -113,7 +121,7 @@ fn rows_for(status: &Status, connection: &Connection, live: Option<&Running>) ->
 }
 
 fn choice_commands(connection: &Connection) -> Vec<Command> {
-    let entries = tab_menu(&Status::Streaming, connection, None);
+    let entries = tab_menu(&Status::Streaming, connection, None, None);
     let rows = entries.into_iter().find_map(|e| match e {
         Entry::Submenu { rows, .. } => Some(rows),
         _ => None,
@@ -442,6 +450,29 @@ fn a_locked_row_is_greyed_and_gives_its_reason() {
     };
     let rows = connection_rows(&screen_only);
     assert!(rows.contains(&"[x] Share clipboard".to_owned()), "{rows:?}");
+    // A route this window cannot use: the row keeps its tick, so it can be
+    // turned off, and says why under it; a flag's reason still comes first.
+    let unusable = "Not available: the registry refused it. Win+L locks Windows.";
+    let chosen = Connection {
+        send_win_l: true,
+        send_win_l_origin: Origin::Machine,
+        send_win_l_lock: None,
+        ..plain()
+    };
+    let rows = rows_unusable(&chosen, unusable);
+    let at = rows
+        .iter()
+        .position(|row| row == "[x] Send Win+L to this machine")
+        .expect("the Win+L row, ticked and usable");
+    assert_eq!(rows[at + 1], format!("# {unusable}"));
+    let rows = rows_unusable(&screen_only, unusable);
+    assert!(
+        rows.contains(
+            &"# Locked: this window was started with --super-l, which applies to every machine."
+                .to_owned()
+        ),
+        "{rows:?}"
+    );
 }
 
 /// What the live session of `plain()` started with.
@@ -488,6 +519,7 @@ fn the_reconnect_row_does_what_the_reconnect_item_does() {
         &Status::Streaming,
         &own_screen(),
         Some(&started_like_plain()),
+        None,
     );
     let rows = entries
         .iter()

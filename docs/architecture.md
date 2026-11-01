@@ -151,7 +151,7 @@ Each choice names the alternative that was rejected.
   moment the pointer is over the taskbar, and keystrokes meant for another window
   go to the remote machine while the pointer rests on gliff. (`--grab-follows`.)
 - **Super+L reaches the remote machine through the per-user lock setting,
-  held only while the window is focused or hovered, with crash safety.** Windows
+  held only while the window has the keyboard, with crash safety.** Windows
   handles Win+L before any hook. Rejected: dropping the `L` while Win is held
   (the first design: Super+L would never reach the remote machine), and a
   machine-wide policy (needs admin). The setting is written behind a marker, a
@@ -160,13 +160,19 @@ Each choice names the alternative that was rejected.
   by default that is all there is, and nothing on Windows changes (a start
   still repairs a dead client's leftover marker). The lock setting is opt-in
   per machine, the tab menu's *Send Win+L to this machine* (`send_win_l`),
-  because it switches Windows locking off while the window is focused or
-  hovered (what is not yet tested about it is in
-  [KNOWN-ISSUES.md](../KNOWN-ISSUES.md)). The switch only gates the wish
-  `grab_state` already makes: the policy exists from the start in every mode,
-  and `Grab` passes its wish on as *off* unless the shown tab's machine has the
-  switch on. So the switch applies at once, a tab change or an untick clears
-  the value 300 ms later, and every registry write stays in `lockreg`.
+  because it switches Windows locking off while the window has the keyboard
+  (what is not yet tested about it is in
+  [KNOWN-ISSUES.md](../KNOWN-ISSUES.md)). `grab_state` wishes it on only in
+  the `Grab` hook mode: a pointer resting on a window that does not have the
+  keyboard never turns locking off, for the same reason the grab follows focus
+  by default (keystrokes meant for another window would lose their Win+L). The
+  switch is a gate in front of that wish (`lock_policy::LockGate`, pure, with
+  the policy inside): the policy exists from the start in every mode, the
+  wish passes only while the shown tab's machine has the switch on and the
+  computer is awake, a wish that goes off is cleared 300 ms later (a focus
+  flicker), and a gate that closes (an untick, a tab change to a machine
+  without it, no tab, sleep) clears it at once. Every registry write stays in
+  `lockreg`.
   Rejected: a client-wide switch (the choice belongs to the remote machine:
   only some bind Super+L to something), making `--super-l` itself a
   per-machine choice (the stand-in chord and its conflict check are
@@ -722,7 +728,7 @@ thread, which stalls in the modal size-move loop.
 | `pass_log`, `modifiers` | Keys the hook let through on purpose, so the window does not mistake them for a silent hook (`silent_hook_judge`: the window and the hook must both be grabbing, and the key not noted); and the check that no Shift, Ctrl, Alt or Super key stays down in Windows after a grab. |
 | `grab_state` | The pure focus or hover state machine that says when the keyboard goes to the remote machine. |
 | `foreground_watch` | The pure decision behind the once-a-second foreground check: whether the window in front is ours, and when two looks at another program's window count as a lost focus. |
-| `super_l`, `lock_policy` | When the per-user `DisableLockWorkstation` value is on (only while the window is focused or hovered, and the shown tab's machine has *Send Win+L to this machine* on), as a state machine. |
+| `super_l`, `lock_policy` | When the per-user `DisableLockWorkstation` value is on (only while the window has the keyboard, and the shown tab's machine has *Send Win+L to this machine* on), as a state machine. |
 | `session::input_side` | Turns key and pointer events into protocol messages on the session thread. |
 | `hook` (Windows) | `WH_KEYBOARD_LL` on its own thread. While grabbed it swallows every key. A watchdog reinstalls it if Windows drops it. |
 | `grab` (Windows) | The input-desktop poll (releases everything at a UAC or secure desktop), the foreground check (releases the grab when another program's window has been in front for two looks), session lock notifications, IME off, hover tracking. |

@@ -20,8 +20,10 @@ pub enum Follow {
 pub enum HookMode {
     /// Not installed.
     Off,
-    /// Only Super+L is taken (the lock setting is on and Windows would still
-    /// see every other key).
+    /// Only Super+L is taken, and Windows sees every other key. The lock
+    /// setting is not turned on for it (that needs the keyboard), so Win+L
+    /// reaches the hook here only when Windows locking is already off by the
+    /// user's own setting.
     SuperLOnly,
     /// Every key is swallowed and forwarded.
     Grab,
@@ -92,7 +94,8 @@ pub enum Release {
 pub struct Output {
     pub mode: HookMode,
     pub release: Release,
-    /// Whether the Windows lock setting should be on.
+    /// Whether the Windows lock setting should be on: only while the window
+    /// has the keyboard ([`HookMode::Grab`]), never for a pointer alone.
     pub lock: Want,
     /// This event ended the grab because `--grab-timeout-secs` ran out.
     pub timed_out: bool,
@@ -211,7 +214,9 @@ impl GrabState {
         } else {
             Release::Nothing
         };
-        let lock = if self.mode != HookMode::Off {
+        // Only with the keyboard: a pointer resting on the window while
+        // another program has the keyboard must not stop Win+L locking.
+        let lock = if self.mode == HookMode::Grab {
             Want::On
         } else {
             Want::Off

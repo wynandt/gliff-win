@@ -48,9 +48,12 @@ The client has run on one Windows machine. Not tried yet
 - Third-party clipboard managers.
 - With *Send Win+L to this machine* on (or `--super-l registry`): whether
   the inactivity lock and a password-protected screen saver still lock Windows
-  while the window is focused or hovered. Until this is tested, do not rely on
-  either to lock the machine while the window has focus. The default (the
-  switch off) changes no Windows setting.
+  while the window has the keyboard. Until this is tested, do not rely on
+  either to lock the machine while the window has the keyboard. The default
+  (the switch off) changes no Windows setting.
+- With *Send Win+L to this machine* on: that Windows locks on wake after a
+  sleep that began while the window had the keyboard (the client clears the
+  setting when told the computer is going to sleep).
 
 ## Open issues
 

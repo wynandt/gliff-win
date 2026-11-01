@@ -335,9 +335,10 @@ pub struct Connection {
     /// Off unless the machine's choice turns it on; nothing locks it.
     pub gpu_decode: bool,
     pub gpu_origin: Origin,
-    /// Whether a real Win+L goes to this machine: the per-user lock setting
-    /// is off while the window shows it and has the keyboard. Live: never
-    /// part of [`Running`].
+    /// Whether a real Win+L goes to this machine: Windows' own Win+L is
+    /// turned off (the per-user `DisableLockWorkstation` setting is set to 1)
+    /// while the window shows it and has the keyboard. Live: never part of
+    /// [`Running`].
     pub send_win_l: bool,
     pub send_win_l_origin: Origin,
     pub send_win_l_lock: Option<String>,
