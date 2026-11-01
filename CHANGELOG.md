@@ -28,7 +28,8 @@ while a menu is open or the window is dragged.
   ([#14](https://github.com/wynandt/gliff-win/issues/14))
 
 Both new choices apply the next time the tab connects, or at once with
-*Reconnect now to apply*. [docs/settings.md](docs/settings.md) has the details.
+*Reconnect now to apply*. [docs/settings.md](https://github.com/wynandt/gliff-win/blob/main/docs/settings.md)
+has the details.
 
 ## [0.1.0]
 
