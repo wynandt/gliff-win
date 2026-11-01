@@ -60,7 +60,6 @@ use crate::grab_state::pointer_over;
 use crate::hook;
 use crate::hook::HookThread;
 use crate::input::KeyPolicy;
-use crate::input::SuperL;
 use crate::keymap::Chord;
 use crate::keymap::Prefix;
 use crate::keymap::Press;
@@ -105,7 +104,6 @@ pub struct GrabConfig {
     pub release_chord: Chord,
     /// The tab-switch chords, which the hook also watches for.
     pub switch_chords: SwitchChords,
-    pub super_l: SuperL,
     /// Chords the hook keeps for Windows while grabbing.
     pub local_chords: Vec<LocalChord>,
     /// The hidden test flags (nothing in a build without `test-hooks`).
@@ -137,6 +135,11 @@ pub struct Grab {
     cmds: Arc<InputRoute<UiCmd>>,
     lock: Option<LockPolicy<WinRegistry>>,
     lock_owner: Option<Owner>,
+    /// Whether the shown tab's machine gets a real Win+L: the lock setting
+    /// follows the state's wish only while this is on, and is off otherwise.
+    send_win_l: bool,
+    /// What the state last wished for the lock setting, before the switch.
+    lock_wish: Want,
     /// The helper that puts the lock setting back after a hard kill.
     watchdog: Option<std::process::Child>,
     /// The helper could not start; it is not tried again for modifiers.
@@ -164,15 +167,12 @@ impl Grab {
     pub fn new(hwnd: HWND, cmds: Arc<InputRoute<UiCmd>>, config: GrabConfig) -> Self {
         // One owner for the marker, the watchdog and the exit paths; none
         // when the start time is unreadable, and then there is no registry
-        // route (Super+L goes by the chord). The repair of a dead client's
-        // leftover runs in every mode.
+        // route (Super+L goes by the chord). The policy is made in every
+        // mode, so the per-machine switch can turn it on at any time; it
+        // writes nothing until the switch is on and the window has the
+        // keyboard. The repair of a dead client's leftover runs here, once.
         let owner = lockreg::owner();
-        let (lock, recovery) = lock_policy::start_up(
-            WinRegistry,
-            config.super_l == SuperL::Registry,
-            owner,
-            &WinProcesses,
-        );
+        let (lock, recovery) = lock_policy::start_up(WinRegistry, true, owner, &WinProcesses);
         if recovery != Recovery::Nothing {
             crate::logging::line(&format!("lock setting at start: {recovery}"));
         }
@@ -187,6 +187,8 @@ impl Grab {
             cmds,
             lock,
             lock_owner: owner,
+            send_win_l: false,
+            lock_wish: Want::Off,
             watchdog: None,
             watchdog_refused: false,
             tracking: false,
@@ -214,6 +216,21 @@ impl Grab {
 
     pub fn mode(&self) -> HookMode {
         self.state.mode()
+    }
+
+    /// The shown tab's machine gets a real Win+L (`on`) or not. Applies at
+    /// once: on, the lock setting follows the window's wish again; off, it is
+    /// cleared after the usual delay.
+    pub fn set_send_win_l(&mut self, on: bool) {
+        if self.send_win_l == on {
+            return;
+        }
+        self.send_win_l = on;
+        crate::logging::line(&format!(
+            "send Win+L to the shown machine: {}",
+            if on { "on" } else { "off" }
+        ));
+        self.apply_lock(self.lock_wish);
     }
 
     /// A focus message from Windows. It settles anything the foreground
@@ -600,12 +617,20 @@ impl Grab {
                 ));
             }
         }
+        self.apply_lock(out.lock);
+    }
+
+    /// The lock setting for the state's `wish`, gated by the shown machine's
+    /// switch: with the switch off the wish is always off.
+    fn apply_lock(&mut self, wish: Want) {
+        self.lock_wish = wish;
+        let want = if self.send_win_l { wish } else { Want::Off };
         let now = self.now_ms();
         // The helper that puts the setting back after a kill is started
         // before the setting is first turned on; if it cannot start the
         // setting stays off (and the next wish tries again), so a killed
         // client never leaves it set without a helper.
-        if out.lock == Want::On
+        if want == Want::On
             && self.lock.as_ref().is_some_and(|l| !l.is_effective())
             && self.lock_owner.is_some()
             && let Err(e) = self.ensure_watchdog()
@@ -616,7 +641,7 @@ impl Grab {
             return;
         }
         if let Some(lock) = &mut self.lock {
-            log_change(&lock.want(out.lock, now));
+            log_change(&lock.want(want, now));
         }
     }
 

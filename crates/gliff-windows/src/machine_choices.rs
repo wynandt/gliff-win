@@ -3,14 +3,18 @@
 //!
 //! Pure: no Win32, no files. [`crate::config`] reads and writes the file.
 //!
-//! Four settings can be chosen per machine, from the tab's menu: `screen`
-//! (Show as), `share_clipboard`, `sharp_colour` and `gpu_decode`. A choice is kept in `config.toml` as
+//! Five settings can be chosen per machine, from the tab's menu: `screen`
+//! (Show as), `share_clipboard`, `sharp_colour`, `gpu_decode` and
+//! `send_win_l`. A choice is kept in `config.toml` as
 //! `[overrides."user@host"]`, the name the design for the settings window
 //! uses, so the file does not change when that window comes. The order for a
 //! machine is: a flag, the machine's choice, the `[settings]` table, the
 //! default. A flag applies to every machine, so it locks the choice: the
 //! menu shows it greyed and says why. `sharp_colour` and `gpu_decode` have
 //! no flag and no `[settings]` key: each is the machine's choice or off.
+//! `send_win_l` is locked by any `--super-l` flag (on for `registry`, off for
+//! `chord` and `off`); with no choice, `super_l = "registry"` in the file
+//! turns it on.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -18,6 +22,7 @@ use std::rc::Rc;
 use crate::cli::DesktopMode;
 use crate::cli::Screen;
 use crate::history::HostTarget;
+use crate::input::SuperL;
 use crate::session::Colour;
 use crate::settings::Key;
 use crate::settings::Layer;
@@ -33,6 +38,7 @@ pub struct Choice {
     pub share_clipboard: Option<bool>,
     pub sharp_colour: Option<bool>,
     pub gpu_decode: Option<bool>,
+    pub send_win_l: Option<bool>,
 }
 
 /// The `[overrides]` table: one [`Choice`] for each machine that has one,
@@ -94,7 +100,13 @@ impl Choices {
                     ("gpu_decode", toml::Value::Boolean(gpu)) => {
                         machine.choice.gpu_decode = Some(*gpu);
                     }
-                    ("screen" | "share_clipboard" | "sharp_colour" | "gpu_decode", _) => {
+                    ("send_win_l", toml::Value::Boolean(send)) => {
+                        machine.choice.send_win_l = Some(*send);
+                    }
+                    (
+                        "screen" | "share_clipboard" | "sharp_colour" | "gpu_decode" | "send_win_l",
+                        _,
+                    ) => {
                         notes.push(format!(
                             "{key} in overrides.\"{name}\" is ignored: expected {}",
                             if key == "screen" {
@@ -139,6 +151,10 @@ impl Choices {
         self.machine(machine).choice.gpu_decode = Some(gpu);
     }
 
+    pub fn set_send_win_l(&mut self, machine: &HostTarget, send: bool) {
+        self.machine(machine).choice.send_win_l = Some(send);
+    }
+
     /// The machines that have a choice, in file order.
     pub fn machines(&self) -> Vec<(&HostTarget, Choice)> {
         self.machines
@@ -168,6 +184,9 @@ impl Choices {
             }
             if let Some(gpu) = machine.choice.gpu_decode {
                 own.insert("gpu_decode".to_owned(), gpu.into());
+            }
+            if let Some(send) = machine.choice.send_win_l {
+                own.insert("send_win_l".to_owned(), send.into());
             }
             if !own.is_empty() {
                 table.insert(machine.target.as_str().to_owned(), own.into());
@@ -237,6 +256,7 @@ pub struct Lock<T> {
 pub struct Locks {
     pub screen: Option<Lock<Screen>>,
     pub share_clipboard: Option<Lock<bool>>,
+    pub send_win_l: Option<Lock<bool>>,
 }
 
 impl Locks {
@@ -275,9 +295,17 @@ impl Locks {
                     .to_owned(),
             })
         };
+        let send_win_l = flags.super_l.map(|super_l| Lock {
+            value: super_l == SuperL::Registry,
+            origin: Origin::Flag,
+            reason:
+                "Locked: this window was started with --super-l, which applies to every machine."
+                    .to_owned(),
+        });
         Self {
             screen,
             share_clipboard,
+            send_win_l,
         }
     }
 }
@@ -307,6 +335,12 @@ pub struct Connection {
     /// Off unless the machine's choice turns it on; nothing locks it.
     pub gpu_decode: bool,
     pub gpu_origin: Origin,
+    /// Whether a real Win+L goes to this machine: the per-user lock setting
+    /// is off while the window shows it and has the keyboard. Live: never
+    /// part of [`Running`].
+    pub send_win_l: bool,
+    pub send_win_l_origin: Origin,
+    pub send_win_l_lock: Option<String>,
 }
 
 impl Connection {
@@ -345,6 +379,16 @@ impl Connection {
             Some(gpu) => (gpu, Origin::Machine),
             None => (false, Origin::Default),
         };
+        let (send_win_l, send_win_l_origin, send_win_l_lock) =
+            match (&locks.send_win_l, choice.send_win_l) {
+                (Some(lock), _) => (lock.value, lock.origin, Some(lock.reason.clone())),
+                (None, Some(send)) => (send, Origin::Machine, None),
+                (None, None) => (
+                    settings.super_l == SuperL::Registry,
+                    sources.of(Key::SuperL).into(),
+                    None,
+                ),
+            };
         Self {
             screen,
             screen_origin,
@@ -356,6 +400,9 @@ impl Connection {
             sharp_origin,
             gpu_decode,
             gpu_origin,
+            send_win_l,
+            send_win_l_origin,
+            send_win_l_lock,
         }
     }
 
@@ -408,6 +455,11 @@ impl Connection {
                 "value": self.gpu_decode,
                 "source": self.gpu_origin.name(),
                 "locked": false,
+            },
+            "send_win_l": {
+                "value": self.send_win_l,
+                "source": self.send_win_l_origin.name(),
+                "locked": self.send_win_l_lock.is_some(),
             },
         })
     }

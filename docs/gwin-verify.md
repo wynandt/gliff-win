@@ -372,7 +372,8 @@ Run order for a hardware gate:
 2. On the Windows machine: `keys`, then `pointer`.
 3. `keys --only lock`: the one step in which the client changes a Windows
    setting (the per-user `DisableLockWorkstation` value, with
-   `--super-l registry`, which the step passes itself; the other checks run the client
+   `--super-l registry`, which the step passes itself and which turns *Send
+   Win+L to this machine* on for every machine; the other checks run the client
    in `chord` mode). It needs a person at the machine to press Win+L and
    unlock once. `gwin-verify` itself only reads the registry. If the run is cut
    short, `gliff-windows.exe --restore-lock-policy` puts the value back.

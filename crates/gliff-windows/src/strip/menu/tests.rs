@@ -40,6 +40,9 @@ fn plain() -> Connection {
         sharp_origin: Origin::Default,
         gpu_decode: false,
         gpu_origin: Origin::Default,
+        send_win_l: false,
+        send_win_l_origin: Origin::Default,
+        send_win_l_lock: None,
     }
 }
 
@@ -347,6 +350,9 @@ fn the_submenu_shows_the_machines_choices_and_when_they_apply() {
             "[ ] Sharp colour",
             "[ ] GPU decode",
             "-",
+            "[ ] Send Win+L to this machine",
+            "# Applies at once. Windows lock shortcuts are off while this window has the keyboard",
+            "-",
             "# Applies the next time this tab connects",
         ]
     );
@@ -379,6 +385,7 @@ fn a_row_asks_for_the_other_value_than_the_one_it_shows() {
             Command::ShareClipboard(false),
             Command::SharpColour(true),
             Command::GpuDecode(true),
+            Command::SendWinL(true),
         ]
     );
     let off = Connection {
@@ -401,6 +408,12 @@ fn a_locked_row_is_greyed_and_gives_its_reason() {
         sharp_origin: Origin::Default,
         gpu_decode: false,
         gpu_origin: Origin::Default,
+        send_win_l: false,
+        send_win_l_origin: Origin::Flag,
+        send_win_l_lock: Some(
+            "Locked: this window was started with --super-l, which applies to every machine."
+                .to_owned(),
+        ),
     };
     assert_eq!(
         connection_rows(&locked),
@@ -414,6 +427,9 @@ fn a_locked_row_is_greyed_and_gives_its_reason() {
             "# Locked: this window was started with --no-clipboard, which turns the clipboard off for every machine.",
             "[ ] Sharp colour",
             "[ ] GPU decode",
+            "-",
+            "~[ ] Send Win+L to this machine",
+            "# Locked: this window was started with --super-l, which applies to every machine.",
             "-",
             "# Applies the next time this tab connects",
         ]

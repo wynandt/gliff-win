@@ -153,8 +153,8 @@ Each tab shows the machine's full name and a dot:
 - **Right-click a tab** for Connect, Reconnect, Disconnect, Copy address,
   Connection settings and Forget. Forget removes the tab. Copy address puts
   `user@host` on the Windows clipboard. Connection settings is a submenu for
-  that machine only: how it is shown (mirror or own screen) and whether it shares
-  the clipboard. A row that a flag or `config.toml` has decided for every machine
+  that machine only: how it is shown (mirror or own screen), whether it shares
+  the clipboard, and whether Win+L goes to it. A row that a flag or `config.toml` has decided for every machine
   is greyed, with a line under it that says which, such as "Locked: this window was
   started with --output, which applies to every machine." See [Options](#options).
 - **Middle-click a tab** to stop it if it has a session or is starting one,
@@ -188,7 +188,7 @@ While the window has the keyboard, every key goes to the remote machine.
 | `Ctrl+Alt+PageDown` | Next tab. |
 | `Ctrl+Alt+PageUp` | Previous tab. |
 | `Ctrl+Alt+1` to `9` | Tab by position. |
-| `Ctrl+Alt+L` | Sends Super+L to the remote machine. Win+L still locks Windows. |
+| `Ctrl+Alt+L` | Sends Super+L to the remote machine. Win+L still locks Windows, unless *Send Win+L to this machine* is on for the tab. |
 | `Win+Shift+S` | Stays on Windows, so a snip goes to the Windows clipboard and from there to the remote machine. |
 
 All of these can be changed in `config.toml`, and all but the release chord can
@@ -233,7 +233,7 @@ not trust. Limits, formats and the file rules are in
 | `--grab-timeout-secs <N>` | Let go of the keyboard after N seconds. Off by default. |
 | `--injected-keys <forward\|local>` | Keys that other programs inject (auto-type): send them (default) or keep them on Windows. |
 | `--forward-media-keys` | Send volume and media keys to the remote machine instead of keeping them on Windows. |
-| `--super-l <chord\|registry\|off>` | How Super+L gets through. Default `chord`: the client changes no Windows setting, Win+L locks Windows and `Ctrl+Alt+L` sends Super+L. `registry` is opt-in and switches Windows locking off while the window is focused or hovered; read [Win+L and the lock setting](docs/windows-quirks.md#winl-and-the-lock-setting) first. |
+| `--super-l <chord\|registry\|off>` | How Super+L gets through. Default `chord`: the client changes no Windows setting, Win+L locks Windows and `Ctrl+Alt+L` sends Super+L. `registry` turns *Send Win+L to this machine* on for every machine; `chord` and `off` turn it off for every machine. Without the flag, each tab's menu decides; read [Win+L and the lock setting](docs/windows-quirks.md#winl-and-the-lock-setting) first. |
 | `--super-l-chord <CHORD>` | The chord that sends Super+L. Default `ctrl+alt+l`. |
 | `--local-chords <LIST>` | Chords that stay on Windows while the keyboard is captured. Default `win+shift+s`; `none` keeps nothing. |
 | `--side-buttons <upstream\|linux-mouse>` | Which codes the two thumb buttons send. Default `upstream`. |
@@ -251,12 +251,14 @@ The keys, the defaults and the chord rules are in
 
 **Connection choices for one machine.** Right-click a tab and open
 *Connection settings* to choose, for that machine only, *Show as* (mirror the
-remote screen, or its own screen), *Share clipboard* and *Sharp colour*
-(full-resolution colour, off by default). The choice is saved in
-`config.toml` at once and applies the next time the tab connects. When a tab
+remote screen, or its own screen), *Share clipboard*, *Sharp colour*
+(full-resolution colour, off by default), *GPU decode* and *Send Win+L to
+this machine* (off by default; it applies at once). The choice is saved in
+`config.toml` at once; the screen, the colour and the decoder apply the next
+time the tab connects. When a tab
 has a session that started with something else, the menu shows *Reconnect now
 to apply*, which reconnects that tab in one click. A flag (`--headless`,
-`--output`, `--no-clipboard`) applies to every machine and beats the menu: the
+`--output`, `--no-clipboard`, `--super-l`) applies to every machine and beats the menu: the
 menu then shows the choice greyed, with the reason. There is no settings window
 yet. See [docs/settings.md](docs/settings.md#connection-choices-for-one-machine).
 
@@ -305,10 +307,11 @@ means no document in this repository plans it.
 4. **System tray and start with Windows.** Not in the Linux client 0.4.1
    either. Here the tray is designed, not built. Planned for a
    later release.
-5. **A settings window.** The four connection choices for one machine, "Show
-   as" (mirror or own screen), "Share clipboard", "Sharp colour" and "GPU
-   decode", are in a tab's right-click menu under *Connection settings*. Share
-   clipboard applies at once; the others apply the next time the tab connects.
+5. **A settings window.** The five connection choices for one machine, "Show
+   as" (mirror or own screen), "Share clipboard", "Sharp colour", "GPU
+   decode" and "Send Win+L to this machine", are in a tab's right-click menu
+   under *Connection settings*. Share clipboard and Send Win+L apply at once;
+   the others apply the next time the tab connects.
    Everything else is flags and `config.toml`; there is no window that edits
    them. The Linux client 0.4.1 has no settings window either, but its open
    pull request [omacom/gliff#98](https://github.com/omacom/gliff/pull/98) adds
@@ -365,8 +368,10 @@ than 4096 pixels (upstream lists the last two as not built).
   changes no Windows lock setting, so Win+L locks Windows even while the window
   has the keyboard. Press `Ctrl+Alt+L` to send Super+L to the remote machine
   (on a tiling window manager such as Hyprland, Super+L is a focus binding,
-  not a lock). With `--super-l registry` Windows locking is switched off while
-  the window is focused or hovered; see
+  not a lock). To send the real Win+L, right-click the tab, open *Connection
+  settings* and tick *Send Win+L to this machine*: Windows lock shortcuts are
+  then off while the window shows that tab and has the keyboard, and back
+  300 ms after it does not. See
   [docs/windows-quirks.md](docs/windows-quirks.md#winl-and-the-lock-setting).
 - **A paste does not arrive.** The log records each offer, request and
   transfer with its serial; see [docs/clipboard.md](docs/clipboard.md).

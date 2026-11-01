@@ -1268,8 +1268,7 @@ mod config_file {
             Choice {
                 screen: Some(Screen::Own),
                 share_clipboard: Some(false),
-                sharp_colour: None,
-                gpu_decode: None,
+                ..Choice::default()
             }
         );
         assert_eq!(chosen(&again, "me@two"), Choice::default());

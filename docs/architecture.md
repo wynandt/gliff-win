@@ -157,10 +157,22 @@ Each choice names the alternative that was rejected.
   machine-wide policy (needs admin). The setting is written behind a marker, a
   watchdog process restores it if the client is killed, and
   `--restore-lock-policy` does it by hand. `Ctrl+Alt+L` is the stand-in chord;
-  `--super-l chord`, the default, uses only that and changes nothing on
-  Windows (a start in any mode still repairs a dead client's leftover marker). The lock setting is the opt-in `--super-l registry`, because it
-  switches Windows locking off while the window is focused or hovered
-  (what is not yet tested about it is in [KNOWN-ISSUES.md](../KNOWN-ISSUES.md)).
+  by default that is all there is, and nothing on Windows changes (a start
+  still repairs a dead client's leftover marker). The lock setting is opt-in
+  per machine, the tab menu's *Send Win+L to this machine* (`send_win_l`),
+  because it switches Windows locking off while the window is focused or
+  hovered (what is not yet tested about it is in
+  [KNOWN-ISSUES.md](../KNOWN-ISSUES.md)). The switch only gates the wish
+  `grab_state` already makes: the policy exists from the start in every mode,
+  and `Grab` passes its wish on as *off* unless the shown tab's machine has the
+  switch on. So the switch applies at once, a tab change or an untick clears
+  the value 300 ms later, and every registry write stays in `lockreg`.
+  Rejected: a client-wide switch (the choice belongs to the remote machine:
+  only some bind Super+L to something), making `--super-l` itself a
+  per-machine choice (the stand-in chord and its conflict check are
+  client-wide and read at start), and creating the policy on the first
+  switch-on (the start-up repair would then run in the middle of a session).
+  `--super-l registry` still turns the switch on for every machine.
 - **Win+Shift+S stays on Windows as a local chord.** A grab forwards every key,
   so the snipping overlay would reach the remote machine and Windows would never
   see it. A local chord is kept for Windows: when its trigger goes down with
@@ -710,7 +722,7 @@ thread, which stalls in the modal size-move loop.
 | `pass_log`, `modifiers` | Keys the hook let through on purpose, so the window does not mistake them for a silent hook (`silent_hook_judge`: the window and the hook must both be grabbing, and the key not noted); and the check that no Shift, Ctrl, Alt or Super key stays down in Windows after a grab. |
 | `grab_state` | The pure focus or hover state machine that says when the keyboard goes to the remote machine. |
 | `foreground_watch` | The pure decision behind the once-a-second foreground check: whether the window in front is ours, and when two looks at another program's window count as a lost focus. |
-| `super_l`, `lock_policy` | When the per-user `DisableLockWorkstation` value is on (only while the window is focused or hovered), as a state machine. |
+| `super_l`, `lock_policy` | When the per-user `DisableLockWorkstation` value is on (only while the window is focused or hovered, and the shown tab's machine has *Send Win+L to this machine* on), as a state machine. |
 | `session::input_side` | Turns key and pointer events into protocol messages on the session thread. |
 | `hook` (Windows) | `WH_KEYBOARD_LL` on its own thread. While grabbed it swallows every key. A watchdog reinstalls it if Windows drops it. |
 | `grab` (Windows) | The input-desktop poll (releases everything at a UAC or secure desktop), the foreground check (releases the grab when another program's window has been in front for two looks), session lock notifications, IME off, hover tracking. |
@@ -720,9 +732,9 @@ thread, which stalls in the modal size-move loop.
 Held keys and buttons are released on focus loss, on the release chord, when a
 UAC prompt or the secure desktop takes the input, and when the session ends.
 Unknown mouse buttons are dropped. Motion is coalesced to the latest value on
-the session thread. The Super+L lock setting is changed only by the opt-in
-`--super-l registry`; the default `--super-l chord` changes
-nothing on Windows.
+the session thread. The Super+L lock setting is changed only for a machine
+whose opt-in *Send Win+L to this machine* is on (or with `--super-l registry`);
+by default nothing on Windows changes.
 
 ## Clipboard
 
@@ -830,8 +842,8 @@ client for Windows that uses the server and the protocol as they are.
   Keys that other programs inject are forwarded by default.
 - The Windows keyboard layout is sent as an XKB keymap, with a fallback to `us`.
 - Super+L reaches the remote machine through the stand-in chord by default.
-  The real Win+L needs the opt-in per-user lock setting, because Windows keeps
-  it from hooks; Linux has no equivalent.
+  The real Win+L needs the per-user lock setting, opted into per machine from
+  the tab menu, because Windows keeps it from hooks; Linux has no equivalent.
 - Unknown mouse buttons are dropped.
 - The clipboard runs on its own thread on the classic Win32 clipboard, in place
   of upstream's GTK thread, and maps by MIME type.

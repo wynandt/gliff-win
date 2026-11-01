@@ -44,7 +44,7 @@ fn own() -> Choice {
         screen: Some(Screen::Own),
         share_clipboard: None,
         sharp_colour: None,
-        gpu_decode: None,
+        ..Choice::default()
     }
 }
 
@@ -53,7 +53,7 @@ fn mirror() -> Choice {
         screen: Some(Screen::Mirror),
         share_clipboard: None,
         sharp_colour: None,
-        gpu_decode: None,
+        ..Choice::default()
     }
 }
 
@@ -62,7 +62,7 @@ fn sharing(share: bool) -> Choice {
         screen: None,
         share_clipboard: Some(share),
         sharp_colour: None,
-        gpu_decode: None,
+        ..Choice::default()
     }
 }
 
@@ -229,6 +229,61 @@ fn the_file_turning_the_clipboard_off_locks_the_share_choice() {
 }
 
 #[test]
+fn send_win_l_is_off_by_default_per_machine_live_and_locked_by_any_super_l_flag() {
+    let send = |on: bool| Choice {
+        send_win_l: Some(on),
+        ..Choice::default()
+    };
+    let state = |c: &Connection| {
+        (
+            c.send_win_l,
+            c.send_win_l_origin,
+            c.send_win_l_lock.is_some(),
+        )
+    };
+
+    // Off unless chosen.
+    let (off, _) = connection(&[], "", Choice::default());
+    assert_eq!(state(&off), (false, Origin::Default, false));
+
+    // A machine's choice turns it on, applies without a reconnect, and is
+    // kept as `send_win_l` in the machine's table.
+    let (on, _) = connection(&[], "", send(true));
+    assert_eq!(state(&on), (true, Origin::Machine, false));
+    assert!(!on.pending(&off.running()), "never waits for a reconnect");
+    let mut choices = Choices::default();
+    choices.set_send_win_l(&host("me@one"), true);
+    let table = choices.to_table();
+    assert_eq!(
+        table,
+        "[\"me@one\"]\nsend_win_l = true\n"
+            .parse::<toml::Table>()
+            .expect("TOML")
+    );
+    let mut notes = Vec::new();
+    let back = Choices::from_table(&table, &mut notes);
+    assert!(notes.is_empty(), "{notes:?}");
+    assert_eq!(back.of(&host("me@one")), send(true));
+
+    // The file's `super_l = "registry"` is the default for machines with no
+    // choice; a machine's own choice beats it.
+    let (c, _) = connection(&[], "super_l = \"registry\"", Choice::default());
+    assert_eq!(state(&c), (true, Origin::File, false));
+    let (c, _) = connection(&[], "super_l = \"registry\"", send(false));
+    assert_eq!(state(&c), (false, Origin::Machine, false));
+
+    // Any `--super-l` flag decides for every machine and greys the row.
+    for (flag, value) in [("registry", true), ("chord", false), ("off", false)] {
+        let (c, _) = connection(&["--super-l", flag], "", send(!value));
+        assert_eq!(state(&c), (value, Origin::Flag, true), "--super-l {flag}");
+        assert_eq!(
+            c.send_win_l_lock.as_deref(),
+            Some("Locked: this window was started with --super-l, which applies to every machine.")
+        );
+    }
+}
+
+#[test]
 fn a_saved_choice_is_remembered_per_machine_without_regard_to_host_case() {
     let mut choices = Choices::default();
     assert_eq!(choices.of(&host("me@One")), Choice::default());
@@ -239,8 +294,7 @@ fn a_saved_choice_is_remembered_per_machine_without_regard_to_host_case() {
         Choice {
             screen: Some(Screen::Own),
             share_clipboard: Some(false),
-            sharp_colour: None,
-            gpu_decode: None,
+            ..Choice::default()
         }
     );
     assert_eq!(choices.of(&host("other@one")), Choice::default());
