@@ -19,6 +19,9 @@ Run the same checks CI runs:
     cargo clippy --workspace --all-targets --locked -- -D warnings
     cargo test --workspace --locked
 
+`scripts/check --host-only` runs these checks and the repository's lints in one go;
+see [docs/development.md](docs/development.md#check).
+
 A change to how keys are held or let go (the hook, the grab, the key ledger,
 the local chords) also runs the model check in
 [formal/held-keys](formal/held-keys/README.md):
