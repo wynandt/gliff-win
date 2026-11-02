@@ -14,14 +14,23 @@ set -euo pipefail
 
 PATTERN='StrictHostKeyChecking|UserKnownHostsFile|PasswordAuthentication|ForwardAgent|"-A"|ssh-keygen|ssh-keyscan|ssh-add\b'
 
-# scan REPO: prints each offending line, fails when there is one.
+# scan REPO: prints each offending line, fails when there is one or when git
+# grep itself fails (exit 1 is "no match", anything above 1 is an error).
 scan() {
-  local repo="$1"
-  if git -C "$repo" grep -n -I -i -E -e "$PATTERN" -- ':(glob)crates/*/src/**' \
-      ':(exclude)*/tests.rs' ':(exclude)*/tests/*'; then
-    echo "lint-ssh: a source names an ssh option or tool the client must not use" >&2
-    return 1
-  fi
+  local repo="$1" rc=0
+  git -C "$repo" grep -n -I -i -E -e "$PATTERN" -- ':(glob)crates/*/src/**' \
+      ':(exclude)*/tests.rs' ':(exclude)*/tests/*' || rc=$?
+  case "$rc" in
+    0)
+      echo "lint-ssh: a source names an ssh option or tool the client must not use" >&2
+      return 1
+      ;;
+    1) return 0 ;;
+    *)
+      echo "lint-ssh: git grep failed (exit $rc)" >&2
+      return 1
+      ;;
+  esac
 }
 
 self_test() {
@@ -42,6 +51,12 @@ self_test() {
       return 1
     fi
   done
+  # A directory that is not a git repository makes git grep fail: not clean.
+  mkdir "$dir/not-a-repo"
+  if GIT_CEILING_DIRECTORIES="$dir" scan "$dir/not-a-repo" >/dev/null 2>&1; then
+    echo "lint-ssh self-test: a git grep error passed as clean" >&2
+    return 1
+  fi
   echo "lint-ssh self-test: ok"
 }
 
@@ -49,4 +64,5 @@ if [[ "${1:-}" == "--self-test" ]]; then
   self_test
 else
   scan "$(cd "$(dirname "$0")/.." && pwd)"
+  echo "lint-ssh: ok"
 fi

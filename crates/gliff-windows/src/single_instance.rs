@@ -5,7 +5,7 @@
 //! Two clients would fight over the keyboard hook and the clipboard, so a
 //! second launch must not start a second client. It forwards what it was asked
 //! for to the first one and exits: a target opens a tab there, and a launch
-//! with no target brings the window back (it may be hidden in the tray).
+//! with no target brings the window back.
 //!
 //! The instance name comes from the configuration folder, so a test with its
 //! own folder runs beside a real client. The mutex is taken by the client

@@ -63,10 +63,13 @@ pub enum DecoderChoice {
 
 #[derive(Debug, Subcommand)]
 enum Check {
-    /// Decode time (p50/p95/max per access unit, fps) and correctness,
-    /// with the client's CPU, GPU or both decoders (see `--decoder`). For
-    /// Dual420 give `--aux-clip` per `--clip`. Exits 0 only when p95, fps and
-    /// picture sizes are in limits and every picture decoded with no error.
+    /// Decode time (p50/p95/max per access unit, fps) and correctness.
+    ///
+    /// Uses the client's CPU decoder, its GPU decoder or both (`--decoder`).
+    /// For Dual420, give one `--aux-clip` per `--clip`. A line fails when p95 or
+    /// fps is past its limit, a picture is missing, has the wrong size or failed
+    /// to decode, the GPU decoder fell back to the CPU, or with `both` a GPU
+    /// picture differs from the CPU one.
     Decode {
         /// `.gwclip` files (repeatable), e.g. from `scripts/make-clips`;
         /// when given, no synthetic clips are encoded.

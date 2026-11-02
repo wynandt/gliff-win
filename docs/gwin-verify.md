@@ -64,11 +64,12 @@ gwin-verify decode --clip F [--clip F ...] | --sizes 1920x1080,2560x1440 [--fram
 ```
 
 - `--decoder` picks the decoder (`cpu` by default). `gpu` is the client's
-  GPU decoder and fails if it cannot start. `both` runs the CPU and the GPU
-  decoder on the same clip, reports each, and fails if any GPU picture differs
-  from the CPU one in any byte (H.264 decoding is exact).
-- `--aux-clip` gives the aux half of a Dual420 stream, unit for unit with the
-  single `--clip`, and decodes the pair as Dual420 (4:4:4).
+  GPU decoder and fails if the GPU decoder does not run to the end. `both`
+  runs the CPU and the GPU decoder on the same clip, reports each, and fails
+  if any GPU picture differs from the CPU one in any byte (H.264 decoding is
+  exact).
+- `--aux-clip` gives the aux half of a Dual420 stream, unit for unit, one aux
+  clip per `--clip`, and decodes the pair as Dual420 (4:4:4).
 - `--pace-fps` feeds the units at that rate instead of back to back, as a
   live stream arrives, so the line's `cpu_pct` (process CPU time over wall time,
   as a share of one core) is the cost at that frame rate. Every line also has
