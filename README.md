@@ -295,7 +295,7 @@ means no document in this repository plans it.
 1. **Sound.** gliff-win plays no audio and sends no microphone. The Linux
    Gliff 0.4.1 has none either, so this is a gap in the protocol, not only in
    this client. Not planned yet.
-2. **Sharp coloured text** ([#9](https://github.com/wynandt/gliff-win/issues/9)). The Linux client asks for
+2. **Sharp coloured text is off by default.** The Linux client asks for
    full-resolution colour (4:4:4) by default. gliff-win asks for it only for a
    machine whose *Sharp colour* choice is on; otherwise it asks for 4:2:0,
    which smears coloured text a little. A server that encodes on the CPU sends
@@ -430,7 +430,8 @@ scripts/check --host-only  # the same without the Windows steps
   recent hosts list.
 - [docs/development.md](docs/development.md): the test suite and `gwin-verify`.
 - [docs/gwin-verify.md](docs/gwin-verify.md): what each check proves.
-- [KNOWN-ISSUES.md](KNOWN-ISSUES.md): what is not built, not tested, or still open.
+- [KNOWN-ISSUES.md](KNOWN-ISSUES.md): what is off by default, not built, not
+  tested, or still open.
 
 ## License
 

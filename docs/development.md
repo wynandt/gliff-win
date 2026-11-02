@@ -89,8 +89,9 @@ In order:
    the files in `.github/workflows` (see [CI and release](#ci-and-release)).
    Needs Python 3 and Go, and the network the first time (it installs two
    pinned tools under `target/`).
-9. Unless `--host-only`: `cargo xwin clippy ... -D warnings` and
-   `cargo xwin build --release` for `x86_64-pc-windows-msvc`.
+9. Unless `--host-only`: `cargo xwin clippy ... -D warnings`, again with
+   `--features test-hooks`, and `cargo xwin build --release` for
+   `x86_64-pc-windows-msvc`.
 
 It prints `check: all green` at the end. A full run takes several minutes;
 `--host-only` skips the Windows steps (use it while editing, run the full gate
@@ -412,14 +413,13 @@ week or two, or sooner for a Rust security fix.
 ## CI and release
 
 `.github/workflows/ci.yml` runs on every pull request and every push to
-`main`. It has four jobs. The names of the first, second and fourth are the names to
-require in a branch ruleset; the Windows test job is new, so add it once it has
-passed on `main`. A release waits for all four.
+`main`. It has four jobs. Their names are the names to require in a branch ruleset.
+A release waits for all four.
 
 | Job (check name) | Runs on | What it does |
 |---|---|---|
 | `lint, fmt, clippy, test (linux)` | ubuntu | `lint-terms`, `cargo fmt --check`, clippy with `-D warnings`, `cargo test` on the default threads |
-| `clippy, build (windows)` | windows | clippy with `-D warnings` and a release build for `x86_64-pc-windows-msvc` |
+| `clippy, build (windows)` | windows | clippy with `-D warnings`, again with `--features test-hooks`, and a release build for `x86_64-pc-windows-msvc` |
 | `test (windows)` | windows | `cargo test -p gliff-windows`: the tests of the Windows-only code that can run without a desktop, such as the registry code in `lockreg.rs`. The hook, window and clipboard glue still need a hand check on Windows |
 | `lint workflows` | ubuntu | `scripts/lint-workflows`: zizmor and actionlint over `.github/workflows` |
 
@@ -498,6 +498,6 @@ with the hashes of its wheels from the
 
 Two settings live in the repository on GitHub, not in this tree: the ruleset
 that protects `main` and who may push `v*` tags. Review both before the
-repository goes public. The ruleset's required checks must match the three
+repository goes public. The ruleset's required checks must match the four
 check names in the table above exactly; a name that never reports blocks every
 merge.

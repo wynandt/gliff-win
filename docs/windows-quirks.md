@@ -339,7 +339,7 @@ on Windows and pasted on Linux). See
   sees it as more smooth deltas.
 
   The client marks the smooth scroll as a finger scroll (`discrete` empty),
-  but the remote does not see it as one today. The server's virtual pointer
+  but the remote does not see it as one. The server's virtual pointer
   sends the axis source before the axis (`crates/hypr-input/src/thread.rs`,
   the `InputCmd::Axis` arm), and Hyprland's virtual pointer starts a new axis
   event, whose source is the wheel, on every axis request

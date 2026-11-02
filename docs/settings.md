@@ -36,7 +36,7 @@ Logs and the clipboard spool stay under `%LOCALAPPDATA%`. The client keeps the n
 
 Each key has the spelling of its flag, with `_` for `-`. A flag can only switch a yes/no setting on (`--forward-media-keys`, `--clipboard-history`) or share the clipboard off (`--no-clipboard`); to turn a yes/no setting off that the file turned on, edit the file.
 
-The class says what a change needs. **Live** takes effect without a restart, **Reconnect** at the next connection, **Restart** at the next start. The client reads every setting once at start today; the class is what the later settings window will act on. That window is a design only; it is not built (the tab menu's connection choices are the first part of it that is), and it would change where these keys live (shared options move to `[defaults]` and `[overrides]`, the Windows-only ones to `[windows]`, and this table is migrated on read).
+The class says what a change needs. **Live** takes effect without a restart, **Reconnect** at the next connection, **Restart** at the next start. The client reads every setting once at start; the class is what the later settings window will act on. That window is a design only; it is not built (the tab menu's connection choices are the first part of it that is), and it would change where these keys live (shared options move to `[defaults]` and `[overrides]`, the Windows-only ones to `[windows]`, and this table is migrated on read).
 
 | Key | Default | Class | Flag |
 |---|---|---|---|

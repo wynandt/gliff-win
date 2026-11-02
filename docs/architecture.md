@@ -631,8 +631,8 @@ so a tab never stays "connecting".
 ### `single_instance`: one client per configuration folder
 
 `decide` says what a launch does from three facts: a client runs under this
-name, the targets given, and `--autostart` (kept for a start at logon; always false today). The
-first launch runs. A second one with targets hands them over, with none it hands
+name, the targets given, and `--autostart` (kept for a start at logon;
+always false until start with Windows is built). The first launch runs. A second one with targets hands them over, with none it hands
 over "show" (it also brings back a window hidden in the tray), and with
 `--autostart` it exits quietly. The name comes from the configuration folder
 (`instance_name`: case, slashes and a trailing separator do not matter), so a
@@ -803,7 +803,8 @@ are in [settings.md](settings.md).
 [--grab-timeout-secs N] [--injected-keys forward|local] [--forward-media-keys]
 [--super-l chord|registry|off] [--super-l-chord CHORD] [--local-chords LIST]
 [--side-buttons upstream|linux-mouse] [--no-clipboard] [--clipboard-history]
-[--config-dir DIR] [--print-settings]`. `--print-settings` replaces the target.
+[--config-dir DIR] [--print-settings]`. The targets are optional, and
+`--print-settings` ignores them.
 A flag is only a value when it is given: the clap fields are optional, with no
 default, so the file can tell a flag from a default.
 Two helper modes of the same exe, `--lock-watchdog` and

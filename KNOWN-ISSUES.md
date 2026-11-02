@@ -39,9 +39,10 @@ settings*.
   [docs/clipboard.md](docs/clipboard.md#known-gaps).
 - **Touch and pen input.**
 - **Choosing the remote scale**
-  ([#3](https://github.com/wynandt/gliff-win/issues/3)). The remote screen
-  always follows the Windows display scale. To change it, change the Windows
-  scale and reconnect.
+  ([#3](https://github.com/wynandt/gliff-win/issues/3)). With *Own screen*,
+  the remote screen follows the Windows display scale. To change it, change
+  the Windows scale and reconnect. *Mirror* keeps the remote screen's own
+  scale.
 - **The reason a session or the client ended, in one log line**
   ([#2](https://github.com/wynandt/gliff-win/issues/2)). Connect failures and
   session ends are logged, but the client's exit and the end of ssh's error
@@ -63,11 +64,13 @@ The client has run on one Windows machine. Not tried yet
   while the client runs.
 - Keyboard layouts other than US and German, and any IME.
 - Other GPUs and drivers, and `--adapter` beyond the default.
-- *Sharp colour* on screen: the 4:4:4 picture is proved on the build machine
-  only (decode, recombine and a CPU model of the shader). On a Windows machine
-  only its decode time was measured.
+- *Sharp colour* on screen. On a Windows machine its decode was checked:
+  the decode time, and GPU pictures against CPU pictures. The recombine and
+  the shader are proved on the build machine only (a CPU model of the
+  shader), not on a Windows screen.
 - Third-party clipboard managers.
-- With *Send Win+L to this machine* on (or `--super-l registry`): whether
+- With *Send Win+L to this machine* on (or `--super-l registry`, or
+  `super_l = "registry"` in `config.toml`): whether
   the inactivity lock and a password-protected screen saver still lock Windows
   while the window has the keyboard. Until this is tested, do not rely on
   either to lock the machine while the window has the keyboard. The default
@@ -84,9 +87,10 @@ The client has run on one Windows machine. Not tried yet
   chord to Windows while it holds a lock, and Windows drops a hook that is too
   slow. Not seen yet; it needs a check under heavy load.
 - **A lone Super key-up after a stall can open the launcher**
-  ([#6](https://github.com/wynandt/gliff-win/issues/6)). After a stalled
-  session recovers, the client lets go of every modifier, Super included, and
-  some Linux desktops open their launcher on a lone Super release.
+  ([#6](https://github.com/wynandt/gliff-win/issues/6)). When the client
+  re-syncs a private screen after a stall, it sends a key-up for every
+  modifier you are not holding, Super included. Some Linux desktops open
+  their launcher on a lone Super release.
 - **The client reconnects when the host ends the session on purpose**
   ([#19](https://github.com/wynandt/gliff-win/issues/19)). Upstream is adding
   an error code for this. Until the client knows it, it treats that end like
