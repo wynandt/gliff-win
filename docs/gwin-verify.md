@@ -22,7 +22,6 @@ check. For how to build it, where it runs and what to do first, read
 | `panel-shot` | The failure panel for each of the thirteen failures at 100, 125, 150 and 200% into PNG files, each judged (no overlap, inside the picture, the buttons in their colours, words drawn). It uses no window, keyboard, mouse or clipboard | Anywhere; on Windows it draws the words with the real fonts, elsewhere shapes only |
 | `strip-shot` | The tab strip's states drawn at 100, 125, 150 and 200% into PNG files, and each picture judged (no overlap, dot size, the Failed dot's red, the chevron only when narrow, names drawn). It uses no window, keyboard, mouse or clipboard | Anywhere; on Windows it draws the text with the real fonts, elsewhere shapes only |
 | `config` | `gliff-windows --print-settings` with a temporary config folder: flag over file over default, and the recent hosts list (a hostile line dropped) | Anywhere the client runs |
-| `gpu` | Not built yet: it prints `{"ok": false, "pending": ...}` and exits 1, so nothing reads as green before it exists | n/a |
 
 Wire framing is proved by `cargo test -p gliff-windows --test framing`, not by
 the command line.

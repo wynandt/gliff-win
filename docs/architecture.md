@@ -632,9 +632,9 @@ so a tab never stays "connecting".
 
 `decide` says what a launch does from three facts: a client runs under this
 name, the targets given, and `--autostart` (kept for a start at logon;
-always false until start with Windows is built). The first launch runs. A second one with targets hands them over, with none it hands
-over "show" (it also brings back a window hidden in the tray), and with
-`--autostart` it exits quietly. The name comes from the configuration folder
+always false until start with Windows is built). The first launch runs. A second one with targets hands them over, and with none it
+exits quietly (it would bring back a hidden window, but the tray is not built yet); with
+`--autostart` it also exits quietly. The name comes from the configuration folder
 (`instance_name`: case, slashes and a trailing separator do not matter), so a
 test with its own folder does not meet a real client.
 
@@ -825,7 +825,7 @@ step sequence behind a harness trait, `lock.rs` is the lock step, `manual.rs`
 asks for the chords only a person can press, and `win32/` drives the real
 window with `SendInput`) and `clip_check` (the `clipboard` check: a
 `Harness` trait, the remote half over ssh, and its own PNG, bitmap, tar and
-SHA-256 code). `gpu` is a stub that fails with `pending`. `gwin-fake-server`
+SHA-256 code). `gwin-fake-server`
 models the upstream server behaviour the checks rest on; see
 [development.md](development.md) and [gwin-verify.md](gwin-verify.md).
 

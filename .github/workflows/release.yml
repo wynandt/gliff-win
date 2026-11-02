@@ -1,7 +1,7 @@
 # Release for gliff-win. A pushed `v*` tag builds the Windows programs and
-# publishes a GitHub release: a zip of both programs with LICENSE and NOTICE,
-# SHA256SUMS, a build-provenance attestation, and the CHANGELOG.md section for
-# the version as the notes.
+# publishes a GitHub release: a zip of both programs with LICENSE, NOTICE,
+# README.md and CHANGELOG.md, SHA256SUMS, a build-provenance attestation, and
+# the CHANGELOG.md section for the version as the notes.
 #
 # `build` has a read-only token and makes the files. `publish` has the only
 # write permission, runs on a tag push only and checks out no code: it

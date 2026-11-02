@@ -51,6 +51,21 @@ jobs:
           scripts/lint-terms --self-test
           scripts/lint-terms
 
+      - name: lint-ssh
+        run: |
+          scripts/lint-ssh --self-test
+          scripts/lint-ssh
+
+      - name: lint-registry
+        run: |
+          scripts/lint-registry --self-test
+          scripts/lint-registry
+
+      - name: lint-clip-log
+        run: |
+          scripts/lint-clip-log --self-test
+          scripts/lint-clip-log
+
       - name: fmt
         run: cargo fmt --all --check
 
