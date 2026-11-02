@@ -8,10 +8,11 @@ reference for the verification tool is [gwin-verify.md](gwin-verify.md).
 
 gliff-win is checked at three levels:
 
-1. **`scripts/check`**: terms lint, format, clippy, host tests, the workflow
-   lint and the Windows cross-build. Everything must pass before a change
-   lands. [CI](#ci-and-release) runs the same checks on every pull request,
-   but the gate is this script, run before you push.
+1. **`scripts/check`**: the terms, ssh, registry and clipboard-log lints,
+   format, clippy, host tests, the workflow lint and the Windows cross-build.
+   Everything must pass before a change lands. [CI](#ci-and-release) runs
+   most of them on every pull request (not the ssh, registry and
+   clipboard-log lints), but the gate is this script, run before you push.
 2. **`gwin-verify`**: a command line that proves one behaviour of the client
    per subcommand and prints one JSON line each. Most subcommands run on Linux
    against stand-ins.
@@ -69,29 +70,33 @@ scripts/check [--host-only]
 In order:
 
 1. `scripts/lint-terms --self-test`, then `scripts/lint-terms`.
-2. `scripts/lint-registry --self-test`, then `scripts/lint-registry`: no source
+2. `scripts/lint-ssh --self-test`, then `scripts/lint-ssh`: no source may
+   weaken ssh (such as `StrictHostKeyChecking` or `ForwardAgent`) or call
+   `ssh-keygen`, `ssh-keyscan` or `ssh-add`.
+3. `scripts/lint-registry --self-test`, then `scripts/lint-registry`: no source
    other than `lockreg.rs` and the future `autostart_reg.rs` may import the
    registry API or call a `Reg*` function. Needs Python 3. Files that git
    lists as tracked but that are deleted in the work tree are skipped. The
    [known limits](#known-limits-of-lint-registry) are below.
-3. `scripts/lint-clip-log --self-test`, then `scripts/lint-clip-log`: the
+4. `scripts/lint-clip-log --self-test`, then `scripts/lint-clip-log`: the
    clipboard log can hold no clipboard contents or file names. Only
    `clip_log.rs` writes clipboard lines, and its types hold no free text (see
    [The log](clipboard.md#the-log)). Needs Python 3.
-4. `cargo fmt --all -- --check`.
-5. `cargo clippy --workspace --all-targets --locked -- -D warnings`.
-6. `cargo test --workspace --locked`.
-7. `scripts/lint-workflows --self-test`, then `scripts/lint-workflows`: lint
+5. `cargo fmt --all -- --check`.
+6. `cargo clippy --workspace --all-targets --locked -- -D warnings`.
+7. `cargo test --workspace --locked`.
+8. `scripts/lint-workflows --self-test`, then `scripts/lint-workflows`: lint
    the files in `.github/workflows` (see [CI and release](#ci-and-release)).
    Needs Python 3 and Go, and the network the first time (it installs two
    pinned tools under `target/`).
-8. Unless `--host-only`: `cargo xwin clippy ... -D warnings` and
-   `cargo xwin build --release` for `x86_64-pc-windows-msvc`.
+9. Unless `--host-only`: `cargo xwin clippy ... -D warnings`, again with
+   `--features test-hooks`, and `cargo xwin build --release` for
+   `x86_64-pc-windows-msvc`.
 
 It prints `check: all green` at the end. A full run takes several minutes;
 `--host-only` skips the Windows steps (use it while editing, run the full gate
-before you push). Win32 code is checked only by step 8 and by hand on a real
-machine.
+before you push). Win32 code is checked only by step 9, the Windows CI jobs
+and by hand on a real machine.
 
 ## Run on one machine
 
@@ -408,14 +413,13 @@ week or two, or sooner for a Rust security fix.
 ## CI and release
 
 `.github/workflows/ci.yml` runs on every pull request and every push to
-`main`. It has four jobs. The names of the first, second and fourth are the names to
-require in a branch ruleset; the Windows test job is new, so add it once it has
-passed on `main`. A release waits for all four.
+`main`. It has four jobs. Their names are the names to require in a branch ruleset.
+A release waits for all four.
 
 | Job (check name) | Runs on | What it does |
 |---|---|---|
 | `lint, fmt, clippy, test (linux)` | ubuntu | `lint-terms`, `cargo fmt --check`, clippy with `-D warnings`, `cargo test` on the default threads |
-| `clippy, build (windows)` | windows | clippy with `-D warnings` and a release build for `x86_64-pc-windows-msvc` |
+| `clippy, build (windows)` | windows | clippy with `-D warnings`, again with `--features test-hooks`, and a release build for `x86_64-pc-windows-msvc` |
 | `test (windows)` | windows | `cargo test -p gliff-windows`: the tests of the Windows-only code that can run without a desktop, such as the registry code in `lockreg.rs`. The hook, window and clipboard glue still need a hand check on Windows |
 | `lint workflows` | ubuntu | `scripts/lint-workflows`: zizmor and actionlint over `.github/workflows` |
 
@@ -494,6 +498,6 @@ with the hashes of its wheels from the
 
 Two settings live in the repository on GitHub, not in this tree: the ruleset
 that protects `main` and who may push `v*` tags. Review both before the
-repository goes public. The ruleset's required checks must match the three
+repository goes public. The ruleset's required checks must match the four
 check names in the table above exactly; a name that never reports blocks every
 merge.

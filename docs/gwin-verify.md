@@ -10,7 +10,7 @@ check. For how to build it, where it runs and what to do first, read
 
 | Check | What it proves | Where it runs |
 |---|---|---|
-| `decode` | CPU decode time (p50/p95/max per access unit, fps) and correctness through the client's `CpuDecoder`, against the decode kill rule (p95 at most 33.3 ms, fps at least 30 at 3840x2400) | Anywhere; the kill rule is judged on the Windows machine |
+| `decode` | Decode time (p50/p95/max per access unit, fps) and correctness through the client's `CpuDecoder`, its GPU decoder, or both (`--decoder`), against the decode kill rule (p95 at most 33.3 ms, fps at least 30 at 3840x2400) | Anywhere with `--decoder cpu`; `gpu` and `both` need Windows. The kill rule is judged on the Windows machine |
 | `ssh` | The server starts over ssh as the client starts it, the handshake completes, Bye ends it cleanly | Anywhere (stand-ins on Linux) |
 | `make-clip`, `render` | Write `.gwclip` test clips and a synthetic desktop | Linux |
 | `stream` | A headless session at the panel size: Resize applied, fps, decode p50/p95, acks equal frames, no stall, SPS level, last picture compared with the test pattern | Anywhere (stand-ins on Linux) |

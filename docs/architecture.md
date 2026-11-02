@@ -631,8 +631,8 @@ so a tab never stays "connecting".
 ### `single_instance`: one client per configuration folder
 
 `decide` says what a launch does from three facts: a client runs under this
-name, the targets given, and `--autostart` (kept for a start at logon; always false today). The
-first launch runs. A second one with targets hands them over, with none it hands
+name, the targets given, and `--autostart` (kept for a start at logon;
+always false until start with Windows is built). The first launch runs. A second one with targets hands them over, with none it hands
 over "show" (it also brings back a window hidden in the tray), and with
 `--autostart` it exits quietly. The name comes from the configuration folder
 (`instance_name`: case, slashes and a trailing separator do not matter), so a
@@ -797,13 +797,14 @@ are in [settings.md](settings.md).
 
 ## Command line
 
-`gliff-windows <TARGET> [--server-path P] [--headless | --output NAME] [--ssh PATH]
+`gliff-windows [TARGET...] [--server-path P] [--headless | --output NAME] [--ssh PATH]
 [--adapter monitor|high-performance|minimum-power] [--stats-out FILE]
 [--log-dir DIR] [--release-chord CHORD] [--grab-follows focus|hover]
 [--grab-timeout-secs N] [--injected-keys forward|local] [--forward-media-keys]
 [--super-l chord|registry|off] [--super-l-chord CHORD] [--local-chords LIST]
 [--side-buttons upstream|linux-mouse] [--no-clipboard] [--clipboard-history]
-[--config-dir DIR] [--print-settings]`. `--print-settings` replaces the target.
+[--config-dir DIR] [--print-settings]`. The targets are optional, and
+`--print-settings` ignores them.
 A flag is only a value when it is given: the clap fields are optional, with no
 default, so the file can tell a flag from a default.
 Two helper modes of the same exe, `--lock-watchdog` and
@@ -1001,17 +1002,18 @@ In rough priority order:
 
 1. **Live resize and scaling hardening**, including a DPI change while
    running and monitors with different DPI.
-3. **More hardware.** Long sessions have run on one set of hardware; a
+2. **More hardware.** Long sessions have run on one set of hardware; a
    recorded session on other machines is still wanted.
-4. **Zero-copy GPU decode.** *GPU decode* copies each picture back to the
+3. **Zero-copy GPU decode.** *GPU decode* copies each picture back to the
    CPU and uploads it again to draw; drawing the decoder's NV12 texture
    directly would skip both copies (see [GPU decode](#gpu-decode)).
-5. **Virtual files on the clipboard, and streaming a big file without a spool**
+4. **Virtual files on the clipboard, and streaming a big file without a spool**
    (an OLE `IDataObject`). The spool covers parity until then.
    HTML and RTF are written and unit-tested, but `gwin-verify clipboard` has no
    case for them yet.
-6. **Release binaries and an installer.** Build from source.
-7. **The tray** and key setup from the window. The tab strip,
+5. **An installer and a code signature.** Releases are a zip built by CI
+   (see [development.md](development.md#ci-and-release)).
+6. **The tray** and key setup from the window. The tab strip,
    its address bar, the ssh error panel and recent hosts are built.
 
 Hardware that has not been tried is listed in [windows-quirks.md](windows-quirks.md#not-tested-anywhere).
