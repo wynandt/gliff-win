@@ -22,7 +22,6 @@ check. For how to build it, where it runs and what to do first, read
 | `panel-shot` | The failure panel for each of the thirteen failures at 100, 125, 150 and 200% into PNG files, each judged (no overlap, inside the picture, the buttons in their colours, words drawn). It uses no window, keyboard, mouse or clipboard | Anywhere; on Windows it draws the words with the real fonts, elsewhere shapes only |
 | `strip-shot` | The tab strip's states drawn at 100, 125, 150 and 200% into PNG files, and each picture judged (no overlap, dot size, the Failed dot's red, the chevron only when narrow, names drawn). It uses no window, keyboard, mouse or clipboard | Anywhere; on Windows it draws the text with the real fonts, elsewhere shapes only |
 | `config` | `gliff-windows --print-settings` with a temporary config folder: flag over file over default, and the recent hosts list (a hostile line dropped) | Anywhere the client runs |
-| `gpu` | Not built yet: it prints `{"ok": false, "pending": ...}` and exits 1, so nothing reads as green before it exists | n/a |
 
 Wire framing is proved by `cargo test -p gliff-windows --test framing`, not by
 the command line.
@@ -65,11 +64,12 @@ gwin-verify decode --clip F [--clip F ...] | --sizes 1920x1080,2560x1440 [--fram
 ```
 
 - `--decoder` picks the decoder (`cpu` by default). `gpu` is the client's
-  GPU decoder and fails if it cannot start. `both` runs the CPU and the GPU
-  decoder on the same clip, reports each, and fails if any GPU picture differs
-  from the CPU one in any byte (H.264 decoding is exact).
-- `--aux-clip` gives the aux half of a Dual420 stream, unit for unit with the
-  single `--clip`, and decodes the pair as Dual420 (4:4:4).
+  GPU decoder and fails if the GPU decoder does not run to the end. `both`
+  runs the CPU and the GPU decoder on the same clip, reports each, and fails
+  if any GPU picture differs from the CPU one in any byte (H.264 decoding is
+  exact).
+- `--aux-clip` gives the aux half of a Dual420 stream, unit for unit, one aux
+  clip per `--clip`, and decodes the pair as Dual420 (4:4:4).
 - `--pace-fps` feeds the units at that rate instead of back to back, as a
   live stream arrives, so the line's `cpu_pct` (process CPU time over wall time,
   as a share of one core) is the cost at that frame rate. Every line also has

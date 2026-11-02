@@ -63,7 +63,13 @@ pub enum DecoderChoice {
 
 #[derive(Debug, Subcommand)]
 enum Check {
-    /// CPU decode p50/p95 and fps per size (Single420).
+    /// Decode time (p50/p95/max per access unit, fps) and correctness.
+    ///
+    /// Uses the client's CPU decoder, its GPU decoder or both (`--decoder`).
+    /// For Dual420, give one `--aux-clip` per `--clip`. A line fails when p95 or
+    /// fps is past its limit, a picture is missing, has the wrong size or failed
+    /// to decode, the GPU decoder fell back to the CPU, or with `both` a GPU
+    /// picture differs from the CPU one.
     Decode {
         /// `.gwclip` files (repeatable), e.g. from `scripts/make-clips`;
         /// when given, no synthetic clips are encoded.
@@ -347,8 +353,6 @@ enum Check {
         #[arg(long, default_value = "gwin-verify-logs")]
         log_dir: PathBuf,
     },
-    /// D3D11 video decoder profiles (not built yet).
-    Gpu,
 }
 
 /// What `keys` and `pointer` share.
@@ -642,10 +646,6 @@ fn tabs(
     Ok(Line::new("tabs", false).with("error", "tabs drives a Win32 window: Windows only"))
 }
 
-fn pending(check: &'static str, what: &'static str) -> Line {
-    Line::new(check, false).with("pending", what)
-}
-
 fn run(check: Check, report: &mut Report) -> anyhow::Result<()> {
     match check {
         Check::Decode {
@@ -903,7 +903,6 @@ fn run(check: Check, report: &mut Report) -> anyhow::Result<()> {
             ssh,
             log_dir,
         } => clipboard(host, client, &only, server_path, ssh, log_dir, report)?,
-        Check::Gpu => report.emit(pending("gpu", "hardware decode")),
     }
     Ok(())
 }

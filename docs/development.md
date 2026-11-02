@@ -418,7 +418,7 @@ A release waits for all four.
 
 | Job (check name) | Runs on | What it does |
 |---|---|---|
-| `lint, fmt, clippy, test (linux)` | ubuntu | `lint-terms`, `cargo fmt --check`, clippy with `-D warnings`, `cargo test` on the default threads |
+| `lint, fmt, clippy, test (linux)` | ubuntu | `lint-terms`, `lint-ssh`, `lint-registry`, `lint-clip-log`, `cargo fmt --check`, clippy with `-D warnings`, `cargo test` on the default threads |
 | `clippy, build (windows)` | windows | clippy with `-D warnings`, again with `--features test-hooks`, and a release build for `x86_64-pc-windows-msvc` |
 | `test (windows)` | windows | `cargo test -p gliff-windows`: the tests of the Windows-only code that can run without a desktop, such as the registry code in `lockreg.rs`. The hook, window and clipboard glue still need a hand check on Windows |
 | `lint workflows` | ubuntu | `scripts/lint-workflows`: zizmor and actionlint over `.github/workflows` |

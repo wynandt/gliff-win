@@ -1,5 +1,6 @@
 # CI for gliff-win. It mirrors the local gate in scripts/check:
-#   host job : lint-terms, fmt, clippy -D warnings, tests (Linux, like `scripts/check --host-only`)
+#   host job : lint-terms, lint-ssh, lint-registry, lint-clip-log, fmt, clippy -D warnings, tests
+#              (Linux, like `scripts/check --host-only`)
 #   msvc job : clippy -D warnings and a release build for x86_64-pc-windows-msvc
 #   windows-test job : the gliff-windows tests on Windows, where the Windows-only code compiles
 #   workflows job : scripts/lint-workflows (zizmor and actionlint) over .github/workflows
@@ -50,6 +51,21 @@ jobs:
         run: |
           scripts/lint-terms --self-test
           scripts/lint-terms
+
+      - name: lint-ssh
+        run: |
+          scripts/lint-ssh --self-test
+          scripts/lint-ssh
+
+      - name: lint-registry
+        run: |
+          scripts/lint-registry --self-test
+          scripts/lint-registry
+
+      - name: lint-clip-log
+        run: |
+          scripts/lint-clip-log --self-test
+          scripts/lint-clip-log
 
       - name: fmt
         run: cargo fmt --all --check
