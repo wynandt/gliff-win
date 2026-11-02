@@ -797,7 +797,7 @@ are in [settings.md](settings.md).
 
 ## Command line
 
-`gliff-windows <TARGET> [--server-path P] [--headless | --output NAME] [--ssh PATH]
+`gliff-windows [TARGET...] [--server-path P] [--headless | --output NAME] [--ssh PATH]
 [--adapter monitor|high-performance|minimum-power] [--stats-out FILE]
 [--log-dir DIR] [--release-chord CHORD] [--grab-follows focus|hover]
 [--grab-timeout-secs N] [--injected-keys forward|local] [--forward-media-keys]
@@ -1001,17 +1001,18 @@ In rough priority order:
 
 1. **Live resize and scaling hardening**, including a DPI change while
    running and monitors with different DPI.
-3. **More hardware.** Long sessions have run on one set of hardware; a
+2. **More hardware.** Long sessions have run on one set of hardware; a
    recorded session on other machines is still wanted.
-4. **Zero-copy GPU decode.** *GPU decode* copies each picture back to the
+3. **Zero-copy GPU decode.** *GPU decode* copies each picture back to the
    CPU and uploads it again to draw; drawing the decoder's NV12 texture
    directly would skip both copies (see [GPU decode](#gpu-decode)).
-5. **Virtual files on the clipboard, and streaming a big file without a spool**
+4. **Virtual files on the clipboard, and streaming a big file without a spool**
    (an OLE `IDataObject`). The spool covers parity until then.
    HTML and RTF are written and unit-tested, but `gwin-verify clipboard` has no
    case for them yet.
-6. **Release binaries and an installer.** Build from source.
-7. **The tray** and key setup from the window. The tab strip,
+5. **An installer and a code signature.** Releases are a zip built by CI
+   (see [development.md](development.md#ci-and-release)).
+6. **The tray** and key setup from the window. The tab strip,
    its address bar, the ssh error panel and recent hosts are built.
 
 Hardware that has not been tried is listed in [windows-quirks.md](windows-quirks.md#not-tested-anywhere).

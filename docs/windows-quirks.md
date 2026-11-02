@@ -606,10 +606,6 @@ To change the scale, change the Windows display scale and reconnect. A client se
   fake Ctrl. The two events come from one keystroke, microseconds apart. Not
   changed: holding the Ctrl back for a click would put a real Ctrl+click out in
   the wrong order. Once the right Alt is in, a click gets no Ctrl (tested).
-- **One wheel notch was dropped once at 150%.** One run of "3 notches down then 3 up"
-  logged 3 down and 2 up; it passed at 200% and on the final build at 150%. It was not
-  diagnosed. `wheel_steps_sent` in `input-stats.json` separates a dropped send
-  from a dropped scroll bind if it recurs.
 - **Ctrl+Alt+Del and UAC** stay with Windows, as above.
 - The other limits of the clipboard are the
   [known gaps](clipboard.md#known-gaps).

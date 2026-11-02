@@ -42,7 +42,8 @@ privately through the Security tab, see [SECURITY.md](SECURITY.md).
   the keyboard) toggles borderless fullscreen.
 - **Keyboard and mouse.** Every key, including Super chords, goes to Hyprland
   while the window has the keyboard. Your Windows layout is sent as an XKB
-  keymap. `Ctrl+Alt+Home` gives the keyboard back to Windows.
+  keymap. A mouse wheel scrolls in notches; a precision touchpad scrolls
+  smoothly. `Ctrl+Alt+Home` gives the keyboard back to Windows.
 - **Clipboard.** Copy and paste text, images and files in both directions.
   Nothing is sent until something pastes. Remote copies stay out of Win+V
   history and cloud sync.
@@ -71,7 +72,8 @@ Download `gliff-win-vX.Y.Z-x86_64-pc-windows-msvc.zip` from the
 [Releases page](https://github.com/wynandt/gliff-win/releases), unzip it
 anywhere and run `gliff-windows.exe`. It needs no installer and no other
 files. The zip also holds `gwin-verify.exe` (the check program, see
-[docs/gwin-verify.md](docs/gwin-verify.md)), `LICENSE` and `NOTICE`.
+[docs/gwin-verify.md](docs/gwin-verify.md)), `LICENSE`, `NOTICE`, `README.md`
+and `CHANGELOG.md`.
 
 To check the download, compare its hash with the line for it in the release's
 `SHA256SUMS` file. In PowerShell:
@@ -154,7 +156,7 @@ Each tab shows the machine's full name and a dot:
   Connection settings and Forget. Forget removes the tab. Copy address puts
   `user@host` on the Windows clipboard. Connection settings is a submenu for
   that machine only: how it is shown (mirror or own screen), whether it shares
-  the clipboard, and whether Win+L goes to it. A row that a flag or `config.toml` has decided for every machine
+  the clipboard, Sharp colour, GPU decode, and whether Win+L goes to it. A row that a flag or `config.toml` has decided for every machine
   is greyed, with a line under it that says which, such as "Locked: this window was
   started with --output, which applies to every machine." See [Options](#options).
 - **Middle-click a tab** to stop it if it has a session or is starting one,
