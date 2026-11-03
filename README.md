@@ -85,17 +85,19 @@ Get-FileHash .\gliff-win-vX.Y.Z-x86_64-pc-windows-msvc.zip
 Each release also carries a build provenance attestation, which the GitHub CLI
 checks with `gh attestation verify <file> --repo wynandt/gliff-win`.
 
-**The programs are signed** with an Azure Artifact Signing certificate. Windows
-verifies the signature when you run the program. To check it yourself, right-click
-the `.exe` file, choose **Properties**, then the **Digital Signatures** tab, and
-select the signature to view its details. You can also verify it with `signtool`:
+**Releases after 0.1.0 are signed** with an Azure Artifact Signing certificate.
+To check the signature, right-click the `.exe` file, choose **Properties**, then
+the **Digital Signatures** tab, and select the signature to view its details. You
+can also verify it with `signtool`:
 
 ```
 signtool verify /pa gliff-windows.exe
 ```
 
-SmartScreen may still prompt on the first run. If the hash matched, choose
-**More info**, then **Run anyway**.
+For older or unsigned builds, the first time you run one, Windows SmartScreen may
+show "Windows protected your PC" with "Unknown publisher". If the hash matched,
+choose **More info**, then **Run anyway**. Ticking **Unblock** in the zip's
+Properties before you unzip it skips the prompt.
 
 ### Build from source
 
@@ -394,10 +396,9 @@ than 4096 pixels (upstream lists the last two as not built).
 
 What is proven, and where. Numbers are from this repository's records.
 
-- **Digital signatures:** Both programs are signed with an Azure Artifact Signing
-  certificate in the release workflow. The signature can be verified with
-  `signtool verify /pa <file>` on Windows, or by checking the Digital Signatures
-  tab in the file's Properties.
+- **Digital signatures:** How to check a signed release: run `signtool verify /pa <file>`
+  on Windows, or right-click the exe, choose Properties, then the Digital Signatures
+  tab. Releases after 0.1.0 are signed with an Azure Artifact Signing certificate.
 - **Unit and integration tests:** `cargo test --workspace --locked` runs about
   1,500 tests with no failures (6 more are ignored). About 1,100 of them are in the
   client's library. The counts are rounded because they change with every fix. They run on Linux against a fake server and need no second machine.

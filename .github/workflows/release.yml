@@ -4,15 +4,19 @@
 # a build-provenance attestation, and the CHANGELOG.md section for the version
 # as the notes.
 #
-# `build` has a read-only token and builds the unsigned binaries. `sign` runs
-# on tags only with the `release` environment, signs them with Azure Artifact
-# Signing (OIDC), verifies the signatures, and packages the release. `publish`
-# has the only write permission, runs on a tag push only and checks out no code:
-# it downloads what `sign` made, checks the sums and creates the release.
+# `build` has a read-only token, checks the release notes early, builds the
+# programs, verifies their version output, packages an unsigned release, and
+# uploads `build-unsigned` (the exes) and `release-unsigned` (the zip and sums).
+# `sign` runs on tags only with the `release` environment, downloads the unsigned
+# exes, signs them with Azure Artifact Signing (OIDC), verifies the signatures,
+# checks they still run, repackages from the signed exes, and uploads
+# `release-signed`. `publish` has the only write permission, runs on a tag push
+# only and checks out no code: it downloads `release-signed`, checks the sums
+# and creates the release.
 #
 # Dry run: a pull request that changes the release files, or a manual run from
-# the Actions tab, builds the unsigned binaries and uploads them as the `build`
-# artifact, and publishes nothing.
+# the Actions tab, builds and packages an unsigned release artifact and publishes
+# nothing. `sign` and `publish` are skipped.
 #
 # Hardening (docs/development.md, "CI and release"): a tagged commit must
 # already be on main, every action is pinned to a commit hash, the build has no
@@ -85,7 +89,6 @@ jobs:
       contents: read
     outputs:
       version: ${{ steps.version.outputs.version }}
-      version-tag: ${{ steps.version.outputs.version-tag }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -109,7 +112,14 @@ jobs:
             exit 1
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "version-tag=gliff-win-v${version}-x86_64-pc-windows-msvc" >> "$GITHUB_OUTPUT"
+
+      # Fails here, before the long build, when CHANGELOG.md has no section for
+      # the version.
+      - name: Write the release notes
+        shell: bash
+        run: |
+          mkdir -p dist
+          scripts/release-notes > dist/RELEASE_NOTES.md
 
       # OpenH264's C and asm sources need nasm; the script installs a pinned
       # version and checks its SHA-256.
@@ -125,13 +135,44 @@ jobs:
       - name: Build
         run: cargo build --release --workspace --locked
 
+      # gliff-windows.exe is a GUI program; piping its output lets it be read.
+      - name: Check the version the program prints
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          $out = (& target/release/gliff-windows.exe --version | Out-String).Trim()
+          Write-Host "gliff-windows.exe --version -> $out"
+          if ($LASTEXITCODE -ne 0 -or $out -ne "gliff-windows $env:VERSION") {
+            throw "expected 'gliff-windows $env:VERSION'"
+          }
+          $out = (& target/release/gwin-verify.exe --version | Out-String).Trim()
+          Write-Host "gwin-verify.exe --version -> $out"
+          if ($LASTEXITCODE -ne 0 -or $out -ne "gwin-verify $env:VERSION") {
+            throw "expected 'gwin-verify $env:VERSION'"
+          }
+
+      - name: Package unsigned release
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: scripts/package-release
+
       - name: Upload the unsigned binaries
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: build
+          name: build-unsigned
           path: |
             target/release/gliff-windows.exe
             target/release/gwin-verify.exe
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload the unsigned release artifact
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-unsigned
+          path: dist/
           if-no-files-found: error
           retention-days: 14
 
@@ -153,7 +194,7 @@ jobs:
       - name: Download the unsigned binaries
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: build
+          name: build-unsigned
           path: target/release
 
       - name: Azure login (OIDC)
@@ -163,12 +204,9 @@ jobs:
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Sign gliff-windows.exe
+      - name: Sign both executables
         uses: Azure/artifact-signing-action@c7ab2a863ab5f9a846ddb8265964877ef296ee82 # v2.0.0
         with:
-          azure-tenant-id: ${{ vars.AZURE_TENANT_ID }}
-          azure-client-id: ${{ vars.AZURE_CLIENT_ID }}
-          azure-subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
           endpoint: https://eus.codesigning.azure.net/
           code-signing-account-name: wynandt-signing
           certificate-profile-name: gliff-win-public
@@ -178,13 +216,43 @@ jobs:
           file-digest: SHA256
           timestamp-rfc3161: http://timestamp.acs.microsoft.com
           timestamp-digest: SHA256
+          exclude-environment-credential: true
+          exclude-workload-identity-credential: true
+          exclude-managed-identity-credential: true
+          exclude-shared-token-cache-credential: true
+          exclude-visual-studio-credential: true
+          exclude-visual-studio-code-credential: true
+          exclude-azure-cli-credential: false
+          exclude-azure-powershell-credential: true
+          exclude-azure-developer-cli-credential: true
+          exclude-interactive-browser-credential: true
+
+      - name: Find signtool.exe
+        id: signtool
+        shell: pwsh
+        run: |
+          $kitsRoot = "${env:ProgramFiles(x86)}\Windows Kits\10\bin"
+          if (-not (Test-Path $kitsRoot)) {
+            throw "Windows Kits 10 bin folder not found at $kitsRoot"
+          }
+          $signtool = Get-ChildItem -Path $kitsRoot -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -match '\\x64\\' } |
+            Sort-Object { [version]($_.Directory.Parent.Name) } -Descending |
+            Select-Object -First 1
+          if (-not $signtool) {
+            throw "signtool.exe not found under $kitsRoot"
+          }
+          Write-Host "Found signtool at: $($signtool.FullName)"
+          "path=$($signtool.FullName)" >> $env:GITHUB_OUTPUT
 
       - name: Verify signatures
         shell: pwsh
+        env:
+          SIGNTOOL: ${{ steps.signtool.outputs.path }}
         run: |
-          signtool verify /pa target/release/gliff-windows.exe
+          & $env:SIGNTOOL verify /pa target/release/gliff-windows.exe
           if ($LASTEXITCODE -ne 0) { throw "gliff-windows.exe signature verification failed" }
-          signtool verify /pa target/release/gwin-verify.exe
+          & $env:SIGNTOOL verify /pa target/release/gwin-verify.exe
           if ($LASTEXITCODE -ne 0) { throw "gwin-verify.exe signature verification failed" }
 
       - name: Check the signed programs run
@@ -203,13 +271,6 @@ jobs:
             throw "expected 'gwin-verify $env:VERSION'"
           }
 
-      # Fails when CHANGELOG.md has no section for the version.
-      - name: Write the release notes
-        shell: bash
-        run: |
-          mkdir -p dist
-          scripts/release-notes > dist/RELEASE_NOTES.md
-
       - name: Package the signed binaries
         shell: bash
         env:
@@ -219,7 +280,7 @@ jobs:
       - name: Upload the signed release
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: release
+          name: release-signed
           path: dist/
           if-no-files-found: error
           retention-days: 14
@@ -236,10 +297,10 @@ jobs:
       id-token: write      # attestation signing
       attestations: write  # store the attestation
     steps:
-      - name: Download the files
+      - name: Download the signed release
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: release
+          name: release-signed
           path: dist
 
       - name: Check the sums

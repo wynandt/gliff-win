@@ -431,19 +431,23 @@ A release waits for all four.
 3. `build (windows)`, with a read-only token, refuses a `Cargo.toml` version
    that is not plain semantic versioning (`1.2.3` or `1.2.3-rc.1`) or that does
    not equal the tag without its `v`, and a `CHANGELOG.md` with no section for
-   it. It builds both programs (unsigned) with no cache, checks that
-   `gliff-windows.exe --version` prints the version, and uploads them as the
-   `build` artifact.
+   it. The release notes check fails fast before the build. It builds both
+   programs with no cache, checks that `gliff-windows.exe --version` and
+   `gwin-verify.exe --version` print the version, packages the unsigned release
+   (zip, `SHA256SUMS`, release notes), and uploads `build-unsigned` (the exes)
+   and `release-unsigned` (the zip and sums).
 4. `sign (windows)` runs on tags only, with access to the `release` GitHub environment
    (required reviewers, environment variables for Azure credentials). It downloads
-   the unsigned binaries, signs them with Azure Artifact Signing using OIDC
-   authentication, verifies the signatures with `signtool verify /pa` and a
-   `--version` run of each exe, then builds the zip, `SHA256SUMS` and release
-   notes from the signed binaries, and uploads them as the `release` artifact.
+   the unsigned binaries from `build-unsigned`, signs them with Azure Artifact
+   Signing using OIDC authentication (after `azure/login`, the action excludes
+   all DefaultAzureCredential types except AzureCliCredential), finds and runs
+   `signtool verify /pa` on both signed exes, checks they still run with
+   `--version`, repackages from the signed exes with the same script, and uploads
+   the signed release as `release-signed`.
 5. `publish release`, the only job that can write, runs on a tag push only and
-   runs no code from the repository. It checks the artifact against
-   `SHA256SUMS`, attests the build provenance and creates the release
-   (a prerelease when the version has a `-suffix`).
+   runs no code from the repository. It downloads `release-signed`, checks the
+   artifact against `SHA256SUMS`, attests the build provenance and creates the
+   release (a prerelease when the version has a `-suffix`).
 
 The same workflow runs as a dry run on a pull request that changes the
 release files, and from the Actions tab (`workflow_dispatch`, any branch).
