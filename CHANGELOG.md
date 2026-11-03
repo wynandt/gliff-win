@@ -10,6 +10,12 @@ release, see [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 - `gwin-verify gpu` has been removed. To check GPU decode, use
   `gwin-verify decode --decoder gpu` or `--decoder both`.
   ([#26](https://github.com/wynandt/gliff-win/issues/26))
+
+## [0.2.1-rc.1]
+
+First signed prerelease: the programs are code-signed with Azure Artifact
+Signing, so SmartScreen no longer shows "Unknown publisher".
+
 - *Send Win+L to this machine*, a switch per machine in a tab's *Connection
   settings*, off by default. With it on, a real Win+L goes to that machine:
   Windows lock shortcuts are off while the window shows that tab and has the
