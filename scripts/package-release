@@ -1,0 +1,32 @@
+#!/bin/bash
+# Package gliff-win release: build the zip and SHA256SUMS from signed binaries.
+# Called by the release workflow after signing. Takes VERSION from the environment.
+# Expects gliff-windows.exe and gwin-verify.exe in target/release/.
+
+set -euo pipefail
+
+if [[ -z "${VERSION:-}" ]]; then
+  echo "VERSION must be set" >&2
+  exit 1
+fi
+
+if [[ ! -f target/release/gliff-windows.exe ]] || [[ ! -f target/release/gwin-verify.exe ]]; then
+  echo "Both programs must exist in target/release/" >&2
+  exit 1
+fi
+
+name="gliff-win-v${VERSION}-x86_64-pc-windows-msvc"
+mkdir -p dist
+mkdir "$name"
+cp target/release/gliff-windows.exe target/release/gwin-verify.exe \
+  LICENSE NOTICE README.md CHANGELOG.md "$name/"
+
+7z a "dist/$name.zip" "$name" > /dev/null
+
+echo "Programs' hashes (for comparison with unzipped files):"
+(cd "$name" && sha256sum ./*.exe)
+
+cd dist
+sha256sum "$name.zip" > SHA256SUMS
+echo "Release SHA256SUMS:"
+cat SHA256SUMS
