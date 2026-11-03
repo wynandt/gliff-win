@@ -208,7 +208,7 @@ jobs:
         uses: Azure/artifact-signing-action@c7ab2a863ab5f9a846ddb8265964877ef296ee82 # v2.0.0
         with:
           endpoint: https://eus.codesigning.azure.net/
-          code-signing-account-name: wynandt-signing
+          signing-account-name: wynandt-signing
           certificate-profile-name: gliff-win-public
           files-folder: target/release
           files-folder-filter: exe
