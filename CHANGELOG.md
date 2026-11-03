@@ -13,8 +13,9 @@ release, see [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
 ## [0.2.1-rc.1]
 
-First signed prerelease: the programs are code-signed with Azure Artifact
-Signing, so SmartScreen no longer shows "Unknown publisher".
+First signed prerelease: the programs are now code-signed with Azure Artifact
+Signing, so Windows shows a verified publisher. SmartScreen may still warn
+until the signature builds reputation.
 
 - *Send Win+L to this machine*, a switch per machine in a tab's *Connection
   settings*, off by default. With it on, a real Win+L goes to that machine:
