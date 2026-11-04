@@ -47,8 +47,8 @@ settings*.
   ([#2](https://github.com/wynandt/gliff-win/issues/2)). Connect failures and
   session ends are logged, but the client's exit and the end of ssh's error
   output are not.
-- **An installer.** Releases are a zip of the programs, with no installer
-  and no code signature.
+- **An installer.** Releases are a zip of the programs, with no installer.
+  Releases after 0.2.0 are code-signed.
 
 ## Not tested
 

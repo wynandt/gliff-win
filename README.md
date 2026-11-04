@@ -351,7 +351,7 @@ means no document in this repository plans it.
     ignored and logged. Not planned yet.
 12. **A package or installer.** The Linux client ships as a package.
     gliff-win ships as a zip of the programs on the Releases page, with no
-    installer and no code signature.
+    installer. Releases after 0.2.0 are code-signed.
 
 The full list of limits and open issues is in [KNOWN-ISSUES.md](KNOWN-ISSUES.md).
 

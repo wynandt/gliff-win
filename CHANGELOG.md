@@ -5,8 +5,25 @@ body of its GitHub release: the release workflow prints it with
 `scripts/release-notes` and refuses a version that has no section. To cut a
 release, see [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
-## [Unreleased]
+## [0.2.1]
 
+The first signed release: the programs are code-signed with Azure Artifact
+Signing, so Windows shows a verified publisher. SmartScreen may still warn
+until the signature builds reputation.
+
+- *Send Win+L to this machine*, a switch per machine in a tab's *Connection
+  settings*, off by default. With it on, a real Win+L goes to that machine:
+  Windows lock shortcuts are off while the window shows that tab and has the
+  keyboard, back at once when the switch goes off or another tab is shown,
+  and 300 ms after the window loses the keyboard. It applies at once and is saved as
+  `send_win_l` in `config.toml`. `--super-l registry` now turns it on for
+  every machine, and `--super-l chord` or `off` turns it off for every
+  machine. ([#21](https://github.com/wynandt/gliff-win/issues/21))
+- A precision touchpad scrolls the remote smoothly, as on the Linux client.
+  Before, small finger movements did nothing until they added up to a whole
+  wheel notch, and then the remote jumped a step. A mouse wheel still scrolls
+  one step per notch.
+  ([#18](https://github.com/wynandt/gliff-win/issues/18))
 - `gwin-verify gpu` has been removed. To check GPU decode, use
   `gwin-verify decode --decoder gpu` or `--decoder both`.
   ([#26](https://github.com/wynandt/gliff-win/issues/26))
