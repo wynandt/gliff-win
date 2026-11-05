@@ -7,6 +7,8 @@ release, see [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
 ## [Unreleased]
 
+## [0.2.2]
+
 - *GPU decode* is now on by default for every machine. If the GPU cannot
   decode, the client still falls back to the CPU (OpenH264) on its own, at
   the start or during a session. To decode on the CPU, untick *GPU decode* in
