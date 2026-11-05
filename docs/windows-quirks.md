@@ -255,7 +255,24 @@ the keyboard (so a quick focus flicker does not write the registry twice), and
 at once when the switch is turned off, the window shows a tab whose switch is
 off or no tab, or the computer goes to sleep. A Win tap that the swallowed
 `L` would leave behind is masked with a tagged tap of the unassigned `VK_E8`, so
-Start does not open. Every way the value could be left on has a way back:
+Start does not open.
+
+With the value set, Windows still takes Win as down for its own Win+L
+handling before the low-level hook runs, and only an Up that reaches Windows
+takes it back. `GetAsyncKeyState` is updated after the hook, so it never shows
+a key the hook swallowed: a Win whose Down and Up the grab sent to the remote
+reads as up there, while Windows acts as if Win were held (`F` opens Feedback
+Hub, `D` shows the desktop) until a Win key is pressed again. So the hook
+records each Win key whose Down or Up it swallowed (`win_owed`), and when it
+swallows a Win Up it sends Windows a tagged `VK_E8` tap and that Win key's Up
+at once, ahead of the remote's copy of the key. The grab end, a hook
+reinstall and the exit release an owed Win key the user no longer holds too,
+whatever `GetAsyncKeyState` says. An Up for a key that is already up does
+nothing, and the mask keeps Start shut. The `Windows: … keys down` part of
+the reinstall log line is `GetAsyncKeyState`, and the next part,
+`Win Up kept from Windows`, names the Win keys still owed. The helper process
+cannot see what is owed, so after a kill a Win key can still need one press.
+Every way the value could be left on has a way back:
 
 - a marker `HKCU\Software\gliff-windows\LockPolicy`, written before the value,
   keeps the prior state (absent, or its exact value) and the owner process;

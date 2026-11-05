@@ -19,6 +19,16 @@ release, see [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
   `keyboard hook silent` log line now says whether the key that showed it was
   a Win, Ctrl, Alt or Shift key, and Down or Up, and still names no other key.
   ([#35](https://github.com/wynandt/gliff-win/issues/35))
+- With *Send Win+L to this machine* on, Win+L or another Win chord in a grab
+  could leave Windows acting as if Win were held after the keyboard came back
+  (a plain `F` opened Feedback Hub). Windows takes a Win key as down before
+  the keyboard hook runs, and the grab kept the Up from it; the release at
+  the grab end only looked at `GetAsyncKeyState`, which never showed that Win
+  as down. When the hook keeps a Win key's Up for the remote machine, it now
+  gives Windows an Up for that key as well (with the masked tap, so Start
+  does not open), and the grab end, a hook reinstall and the exit release an
+  owed Win key the user no longer holds. The reinstall log line names the
+  Win keys still owed. ([#35](https://github.com/wynandt/gliff-win/issues/35))
 
 ## [0.2.1]
 

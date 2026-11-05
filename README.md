@@ -388,7 +388,10 @@ than 4096 pixels (upstream lists the last two as not built).
   settings* and tick *Send Win+L to this machine*: Windows lock shortcuts are
   then off while the window shows that tab and has the keyboard, and back
   300 ms after it loses the keyboard (at once if you untick it or show
-  another tab). See
+  another tab). Windows takes a Win key as down before the client sees it,
+  so each time the client keeps a Win key's Up for the remote machine it also
+  gives Windows an Up for that key; otherwise a plain key could act as a Win
+  shortcut after the keyboard comes back. See
   [docs/windows-quirks.md](docs/windows-quirks.md#winl-and-the-lock-setting).
 - **A paste does not arrive.** The log records each offer, request and
   transfer with its serial; see [docs/clipboard.md](docs/clipboard.md).
