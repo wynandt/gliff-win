@@ -515,7 +515,8 @@ impl Grab {
             if !released.is_empty() {
                 crate::logging::line(&format!(
                     "back from the lock screen or a secure prompt: {} modifier key(s) \
-                     Windows still counted as down were released ({})",
+                     Windows still counted as down, or whose Up it was owed, were \
+                     released ({})",
                     released.len(),
                     crate::modifiers::names(&released)
                 ));
@@ -568,7 +569,8 @@ impl Grab {
         self.counters.modifiers_released_on_exit += released.len() as u32;
         if !released.is_empty() {
             crate::logging::line(&format!(
-                "exit: {} modifier key(s) Windows still counted as down were released ({})",
+                "exit: {} modifier key(s) Windows still counted as down, or whose Up it was \
+                 owed, were released ({})",
                 released.len(),
                 crate::modifiers::names(&released)
             ));
@@ -655,8 +657,8 @@ impl Grab {
             self.counters.modifiers_released += released.len() as u32;
             if !released.is_empty() {
                 crate::logging::line(&format!(
-                    "grab ended: {} modifier key(s) Windows still counted as down were \
-                     released ({})",
+                    "grab ended: {} modifier key(s) Windows still counted as down, or whose Up \
+                     it was owed, were released ({})",
                     released.len(),
                     crate::modifiers::names(&released)
                 ));
