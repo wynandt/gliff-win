@@ -34,11 +34,11 @@ privately through the Security tab, see [SECURITY.md](SECURITY.md).
   the picture keeps its shape. `--headless` asks the server for a private
   screen that follows your window instead, and `--output` mirrors a named
   screen.
-- **Sharp video.** H.264 decoded on the CPU by default and presented with Direct3D 11 at
+- **Sharp video.** H.264 decoded on the GPU by default and presented with Direct3D 11 at
   vsync. *Sharp colour*, a choice per machine, asks for full-resolution
   colour (4:4:4), so coloured text stays crisp. *GPU decode*, another choice
-  per machine, decodes on the GPU and falls back to the CPU on its
-  own ([details](docs/settings.md#gpu-decode)). The strip's fullscreen button, the window menu or `F11` (while Windows has
+  per machine, is on by default and falls back to the CPU (OpenH264) on its
+  own; untick it to decode on the CPU ([details](docs/settings.md#gpu-decode)). The strip's fullscreen button, the window menu or `F11` (while Windows has
   the keyboard) toggles borderless fullscreen.
 - **Keyboard and mouse.** Every key, including Super chords, goes to Hyprland
   while the window has the keyboard. Your Windows layout is sent as an XKB
@@ -263,7 +263,7 @@ The keys, the defaults and the chord rules are in
 **Connection choices for one machine.** Right-click a tab and open
 *Connection settings* to choose, for that machine only, *Show as* (mirror the
 remote screen, or its own screen), *Share clipboard*, *Sharp colour*
-(full-resolution colour, off by default), *GPU decode* and *Send Win+L to
+(full-resolution colour, off by default), *GPU decode* (on by default) and *Send Win+L to
 this machine* (off by default; it applies at once). The choice is saved in
 `config.toml` at once; the screen, the colour and the decoder apply the next
 time the tab connects. When a tab
@@ -310,10 +310,11 @@ means no document in this repository plans it.
    which smears coloured text a little. A server that encodes on the CPU sends
    4:2:0 unless it runs with `--full-chroma`
    ([details](docs/settings.md#sharp-colour)).
-3. **GPU video decode is off by default.** The Linux client chooses with
-   `--video cpu|gpu`. gliff-win decodes on the CPU (OpenH264) unless a
-   machine's *GPU decode* choice is on, and each decoded picture is copied
-   back from the GPU before it is drawn
+3. **GPU decoded pictures are copied back before drawing.** The Linux client
+   chooses with `--video cpu|gpu`. gliff-win decodes on the GPU by default,
+   per machine, and falls back to the CPU (OpenH264) on its own; each decoded
+   picture is copied back from the GPU before it is drawn. If the picture
+   glitches, untick *GPU decode* for that machine and reconnect
    ([details](docs/settings.md#gpu-decode)).
 4. **System tray and start with Windows.** Not in the Linux client 0.4.1
    either. Here the tray is designed, not built. Planned for a

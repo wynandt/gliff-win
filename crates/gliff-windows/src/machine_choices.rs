@@ -378,7 +378,7 @@ impl Connection {
         };
         let (gpu_decode, gpu_origin) = match choice.gpu_decode {
             Some(gpu) => (gpu, Origin::Machine),
-            None => (false, Origin::Default),
+            None => (true, Origin::Default),
         };
         let (send_win_l, send_win_l_origin, send_win_l_lock) =
             match (&locks.send_win_l, choice.send_win_l) {

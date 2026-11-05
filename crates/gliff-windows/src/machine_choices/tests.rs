@@ -367,7 +367,7 @@ fn started(screen: Screen, share_clipboard: bool) -> Running {
         screen,
         share_clipboard,
         sharp_colour: false,
-        gpu_decode: false,
+        gpu_decode: true,
     }
 }
 

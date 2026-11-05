@@ -7,6 +7,11 @@ release, see [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
 ## [Unreleased]
 
+- *GPU decode* is now on by default for every machine. If the GPU cannot
+  decode, the client still falls back to the CPU (OpenH264) on its own, at
+  the start or during a session. To decode on the CPU, untick *GPU decode* in
+  a tab's *Connection settings* or set `gpu_decode = false` in that machine's
+  table in `config.toml`. If the picture glitches, untick it and reconnect.
 - A Win or Ctrl key could stay down after the keyboard hook was put back,
   most often with *Send Win+L to this machine* on: on the remote machine
   (Super held, so plain keys acted as shortcuts) or in Windows (Ctrl held
