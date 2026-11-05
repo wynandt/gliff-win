@@ -213,6 +213,28 @@ impl KeyPipeline {
             .collect()
     }
 
+    /// An Up for every modifier the user does not hold, as the keyboard
+    /// hook saw it (`user_holds`), after the hook was installed again: the
+    /// remote may have missed an Up, and so may this pipeline. A modifier the
+    /// pipeline still holds although the user let go of it (its Up never
+    /// reached a hook or the window: Windows took it for a shortcut such as
+    /// Win+L) is released here, with the remote; otherwise the remote holds
+    /// it until the user presses that key again.
+    pub fn release_modifiers_not_held(&mut self, user_holds: &[Evdev]) -> Vec<KeyEvent> {
+        MODIFIERS
+            .into_iter()
+            .filter(|key| !user_holds.contains(key))
+            .map(|key| {
+                let up = KeyEvent {
+                    key,
+                    press: Press::Up,
+                };
+                let _ = self.keys.apply(up);
+                up
+            })
+            .collect()
+    }
+
     fn run(&mut self, raw: Vec<RawKey>) -> KeyOutcome {
         let mut sent = Vec::new();
         for key in raw {

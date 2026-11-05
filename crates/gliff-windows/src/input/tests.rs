@@ -63,6 +63,69 @@ fn a_plain_key_goes_through() {
     );
 }
 
+fn lwin(press: Press, t: u32) -> RawKey {
+    raw(0x5b, 0x5b, Prefix::E0, press, t)
+}
+
+const LEFT_META: u16 = 125;
+const EVERY_MODIFIER: [u16; 8] = [29, 97, 42, 54, 56, 100, 125, 126];
+
+#[test]
+fn a_win_the_user_let_go_of_unseen_is_released_after_a_reinstall() {
+    // Win went to the remote; Windows took its Up for a shortcut (Win+L)
+    // and the hook never saw it, so it saw the user let go of nothing but
+    // the remote still holds Super. The reinstall must release it.
+    let mut p = pipeline();
+    assert_eq!(
+        p.push(lwin(Press::Down, 1)),
+        KeyOutcome::Send(vec![ev(LEFT_META, Press::Down)])
+    );
+    let ups = p.release_modifiers_not_held(&[]);
+    assert!(
+        ups.contains(&ev(LEFT_META, Press::Up)),
+        "the remote is told Super is up: {ups:?}"
+    );
+    assert_eq!(
+        p.release_all(),
+        Vec::new(),
+        "and the pipeline no longer holds it"
+    );
+    assert_eq!(
+        p.push(lwin(Press::Down, 2)),
+        KeyOutcome::Send(vec![ev(LEFT_META, Press::Down)]),
+        "the next Win press reaches the remote again"
+    );
+}
+
+#[test]
+fn a_modifier_the_user_holds_is_kept_after_a_reinstall() {
+    let mut p = pipeline();
+    p.push(lwin(Press::Down, 1));
+    p.push(raw(0xa0, 0x2a, Prefix::None, Press::Down, 2));
+    let ups = p.release_modifiers_not_held(&[Evdev::LEFT_META, Evdev::LEFT_SHIFT]);
+    let expected: Vec<KeyEvent> = EVERY_MODIFIER
+        .into_iter()
+        .filter(|code| ![LEFT_META, 42].contains(code))
+        .map(|code| ev(code, Press::Up))
+        .collect();
+    assert_eq!(ups, expected);
+    assert_eq!(
+        p.push(a(Press::Down, 3)),
+        KeyOutcome::Send(vec![ev(30, Press::Down)])
+    );
+    let mut held = p.release_all();
+    held.sort_by_key(|e| e.key);
+    assert_eq!(
+        held,
+        vec![
+            ev(30, Press::Up),
+            ev(42, Press::Up),
+            ev(LEFT_META, Press::Up)
+        ],
+        "Win and Shift are still held, for the user holds them"
+    );
+}
+
 #[test]
 fn auto_repeat_is_not_sent_twice() {
     let mut p = pipeline();

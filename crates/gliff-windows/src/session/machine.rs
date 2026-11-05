@@ -28,6 +28,7 @@ use crate::decode::DecodeError;
 use crate::input::KeyPipeline;
 use crate::input::KeyPolicy;
 use crate::keymap::Chord;
+use crate::keymap::Evdev;
 use crate::keymap::KeyEvent;
 use crate::pointer::PointerEvent;
 use crate::session::Colour;
@@ -192,8 +193,12 @@ pub enum UiCmd {
     ReleaseGrab,
     /// The keyboard hook was installed again in the middle of a grab: an Up
     /// for every modifier the user is not holding, in case the remote missed
-    /// one.
-    ClearModifiers,
+    /// one. `user_holds`: the modifiers the hook saw the user press and not
+    /// let go of. A modifier the session still holds but the user does not
+    /// is released too.
+    ClearModifiers {
+        user_holds: Vec<Evdev>,
+    },
 }
 
 /// What the driver must do, in the order given.
@@ -647,7 +652,9 @@ impl Core {
             UiCmd::ScrollEnd => self.input.scroll_end(),
             UiCmd::ReleaseInput => self.input.release_all(),
             UiCmd::Keymap(keymap) => vec![ClientMsg::Keymap { keymap }],
-            UiCmd::ClearModifiers => self.input.clear_modifiers(),
+            UiCmd::ClearModifiers { user_holds } => {
+                self.input.release_modifiers_not_held(&user_holds)
+            }
             // Handled by `on_ui`.
             UiCmd::Resize(_) | UiCmd::Bye | UiCmd::ReleaseGrab => Vec::new(),
         };

@@ -5,6 +5,31 @@ body of its GitHub release: the release workflow prints it with
 `scripts/release-notes` and refuses a version that has no section. To cut a
 release, see [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
+## [Unreleased]
+
+- A Win or Ctrl key could stay down after the keyboard hook was put back,
+  most often with *Send Win+L to this machine* on: on the remote machine
+  (Super held, so plain keys acted as shortcuts) or in Windows (Ctrl held
+  after the keyboard came back). The client now files a Shift, Ctrl or Alt
+  that reached the window as a key message under its left or right key, as
+  the hook does, so its Up is not lost; tells the remote machine at every hook
+  reinstall that each Win, Ctrl, Alt and Shift key the user does not hold is
+  up, including one it still counted as down; and forgets what an old hook
+  saw when a new one comes back after a time with no grab. The
+  `keyboard hook silent` log line now says whether the key that showed it was
+  a Win, Ctrl, Alt or Shift key, and Down or Up, and still names no other key.
+  ([#35](https://github.com/wynandt/gliff-win/issues/35))
+- With *Send Win+L to this machine* on, Win+L or another Win chord in a grab
+  could leave Windows acting as if Win were held after the keyboard came back
+  (a plain `F` opened Feedback Hub). Windows takes a Win key as down before
+  the keyboard hook runs, and the grab kept the Up from it; the release at
+  the grab end only looked at `GetAsyncKeyState`, which never showed that Win
+  as down. When the hook keeps a Win key's Up for the remote machine, it now
+  gives Windows an Up for that key as well (with the masked tap, so Start
+  does not open), and the grab end, a hook reinstall and the exit release an
+  owed Win key the user no longer holds. The reinstall log line names the
+  Win keys still owed. ([#35](https://github.com/wynandt/gliff-win/issues/35))
+
 ## [0.2.1]
 
 The first signed release: the programs are code-signed with Azure Artifact

@@ -283,7 +283,8 @@ perform, in order: `Send`, `Decode`, `ResetDecoder`, `Present` and `Ui`.
   After the Resizes, `Core::resync` also sends an Up for every Win, Ctrl, Alt and Shift
   key (both sides) the key pipeline does not hold, so a modifier the remote kept after a
   missed Up is cleared. `UiCmd::ClearModifiers` does the same when the keyboard hook is
-  installed again in the middle of a grab.
+  installed again in the middle of a grab, with the modifiers the hook saw the user hold
+  as the only exceptions: one the pipeline holds but the user does not is released too.
 
 `session::driver` owns the I/O: a writer task fed by a channel, a reader task
 that reads whole messages, the decoder, the 150 ms idle drain, and the Bye

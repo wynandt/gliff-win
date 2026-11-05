@@ -73,6 +73,7 @@ use crate::key_ledger::KeyId;
 use crate::key_ledger::KeyLedger;
 use crate::key_ledger::Physical;
 use crate::key_ledger::Route;
+use crate::key_ledger::Seen;
 use crate::key_ledger::describe_down;
 use crate::keymap::Chord;
 use crate::keymap::Prefix;
@@ -91,6 +92,7 @@ use crate::super_l::SuperLTracker;
 use crate::tabs::SwitchTo;
 use crate::test_hooks::TestHooks;
 use crate::waker::WM_APP_SWITCH;
+use crate::win_owed::WinOwed;
 
 /// A virtual key no program binds (`VK_E8` is unassigned): tapped between
 /// the Win key's Down and Up so Start does not open.
@@ -233,6 +235,74 @@ fn physical_saw(vk: u16, press: Press) {
         .saw(vk, press);
 }
 
+/// The Win keys whose Up the hook kept from Windows (see
+/// [`crate::win_owed`]). Never held while another lock is taken.
+static WIN_OWED: Mutex<WinOwed> = Mutex::new(WinOwed::new());
+
+fn win_owed() -> std::sync::MutexGuard<'static, WinOwed> {
+    WIN_OWED.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+/// Every Win key whose Up Windows is still owed, for the exit's release. A
+/// `try_lock`, because the exit's release also runs from the panic hook.
+pub fn owed_wins() -> Vec<u16> {
+    match WIN_OWED.try_lock() {
+        Ok(owed) => owed.owed(),
+        Err(std::sync::TryLockError::Poisoned(e)) => e.into_inner().owed(),
+        Err(std::sync::TryLockError::WouldBlock) => Vec::new(),
+    }
+}
+
+/// After the callback: a Win key event the hook swallowed leaves Windows
+/// owed its Up, and a Win Up that reached Windows pays it. When the
+/// swallowed event is the Up itself, Windows gets an Up of its own now (the
+/// Start-menu mask first), so a Win key Windows took as down ahead of the
+/// hook (Win+L) does not stay down.
+fn note_win(vk: u16, press: Press, swallowed: bool, time_ms: u32) {
+    if !matches!(vk, crate::modifiers::VK_LWIN | crate::modifiers::VK_RWIN) {
+        return;
+    }
+    if !swallowed {
+        if press == Press::Up {
+            win_owed().windows_saw_up(vk);
+        }
+        return;
+    }
+    win_owed().swallowed(vk);
+    if press == Press::Up {
+        give_win_up(vk, time_ms);
+    }
+}
+
+/// Injects the Start-menu mask and an Up of this Win key, both this client's
+/// own: noted in the pass log first, so the key messages they make are not
+/// taken for a silent hook.
+fn give_win_up(vk: u16, time_ms: u32) {
+    {
+        let mut passed = PASSED.lock().unwrap_or_else(PoisonError::into_inner);
+        passed.record(VK_MASK, Press::Down, time_ms);
+        passed.record(VK_MASK, Press::Up, time_ms);
+        passed.record(vk, Press::Up, time_ms);
+    }
+    let inputs = [
+        key_input(VK_MASK, KEYBD_EVENT_FLAGS(0)),
+        key_input(VK_MASK, KEYEVENTF_KEYUP),
+        key_input(vk, KEYEVENTF_KEYUP | KEYEVENTF_EXTENDEDKEY),
+    ];
+    // SAFETY: `inputs` is a valid slice of INPUT and the size is that of
+    // one INPUT, as SendInput requires.
+    let _ = unsafe { SendInput(&inputs, std::mem::size_of::<INPUT>() as i32) };
+    win_owed().settle(&[vk]);
+}
+
+/// What the hook has seen so far, as a copy.
+fn physical_now() -> Physical {
+    PHYSICAL
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .clone()
+}
+
 /// True if the hook has handled an event of this key later than a key
 /// message from `time_ms` (see [`Physical::saw_later`]).
 pub fn saw_later(key: KeyId, time_ms: u32) -> bool {
@@ -247,8 +317,10 @@ pub fn saw_later(key: KeyId, time_ms: u32) -> bool {
 /// hook reinstall, which is where a stuck modifier shows.
 fn state_line() -> String {
     format!(
-        "Windows: {}; ledger (Windows saw go down): {}; user holds (hook's view): {}",
+        "Windows: {}; Win Up kept from Windows, so Windows may count it as down: {}; \
+         ledger (Windows saw go down): {}; user holds (hook's view): {}",
         describe_down(held_keys()),
+        describe_down(win_owed().owed()),
         describe_down(
             LEDGER
                 .lock()
@@ -268,15 +340,28 @@ fn state_line() -> String {
 /// those the hook saw the user press and not let go of (the user's own Up
 /// reaches Windows). Returns what it released.
 pub fn release_at_grab_end() -> Vec<crate::modifiers::Modifier> {
-    let real = PHYSICAL.lock().unwrap_or_else(PoisonError::into_inner);
-    crate::modifiers::release_held_where(|down, vk| real.stuck_at_grab_end(down, vk))
+    // A copy: the lock is not held across `SendInput`, which runs this
+    // client's own hook.
+    let real = physical_now();
+    // A Win key the user still holds gets its own Up after the grab.
+    let due = win_owed().due(|vk| real.seen(vk) == Seen::Down);
+    let released =
+        crate::modifiers::release_held_where(|down, vk| real.stuck_at_grab_end(down, vk), &due);
+    win_owed().clear();
+    released
 }
 
 /// The hook was installed again: releases the modifiers Windows counts as
 /// down although the hook saw them come up.
 fn release_at_reinstall() -> Vec<crate::modifiers::Modifier> {
-    let real = PHYSICAL.lock().unwrap_or_else(PoisonError::into_inner);
-    crate::modifiers::release_held_where(|down, vk| real.stuck_at_reinstall(down, vk))
+    // A copy: the lock is not held across `SendInput`, which runs this
+    // client's own hook.
+    let real = physical_now();
+    let due = win_owed().due(|vk| real.seen(vk) == Seen::Down);
+    let released =
+        crate::modifiers::release_held_where(|down, vk| real.stuck_at_reinstall(down, vk), &due);
+    win_owed().settle(&due);
+    released
 }
 
 /// The mode the hook is in, which is not always the mode the UI thread
@@ -288,14 +373,16 @@ pub fn mode() -> HookMode {
 
 /// A key message reached the window while the hook looked silent, and `sent`
 /// says whether the window passed it on to the remote. Windows saw it either
-/// way.
-pub fn note_legacy(vk: u16, press: Press, sent: bool) {
+/// way. `key` names the key as the hook does (see [`KeyId::of_message`]),
+/// so its Up meets the Down the hook saw.
+pub fn note_legacy(key: KeyId, press: Press, sent: bool) {
+    let vk = key.vk();
     physical_saw(vk, press);
     let _gate = GATE.lock().unwrap_or_else(PoisonError::into_inner);
     LEDGER
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
-        .legacy(vk, press, sent);
+        .legacy(key, press, sent);
 }
 
 /// The virtual keys Windows has down now, for [`crate::pass_log::silent_line`],
@@ -314,6 +401,14 @@ pub fn set_mode(mode: HookMode) {
     let was = gate.mode();
     let now = gate.request(mode);
     let ended = (was == HookMode::Grab && now != HookMode::Grab).then(state_line);
+    if was == HookMode::Off && now != HookMode::Off {
+        // No hook ran while Off: a Down it saw before may have come up
+        // unseen, and would read as a key the user still holds.
+        PHYSICAL
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .forget();
+    }
     let mut ledger = LEDGER.lock().unwrap_or_else(PoisonError::into_inner);
     if now != HookMode::Grab {
         // What the remote still holds stays, until the hook has made sure
@@ -472,8 +567,14 @@ impl HookThread {
                         state_line()
                     ));
                     if let Some(remote) = remote {
-                        // The remote may have missed an Up while no hook looked.
-                        remote.send(UiCmd::ClearModifiers);
+                        // The remote may have missed an Up while no hook looked,
+                        // and so may the session: both let go of every
+                        // modifier the hook did not see the user hold.
+                        let user_holds = PHYSICAL
+                            .lock()
+                            .unwrap_or_else(PoisonError::into_inner)
+                            .held_modifiers();
+                        remote.send(UiCmd::ClearModifiers { user_holds });
                         crate::logging::line(
                             "hook installed again: told the remote Win, Ctrl, Alt and Shift are \
                              up, except the keys the user holds",
@@ -570,6 +671,10 @@ unsafe extern "system" fn hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -
         if info.flags.0 & LLKHF_INJECTED.0 != 0 && info.dwExtraInfo != OWN_TAG {
             INJECTED.fetch_add(1, Ordering::Relaxed);
         }
+        let press = match wparam.0 as u32 {
+            WM_KEYUP | WM_SYSKEYUP => Press::Up,
+            _ => Press::Down,
+        };
         let swallow = CTX.with(|c| {
             // try_borrow_mut: SendInput inside the callback can call it
             // again; the nested call passes the key.
@@ -578,6 +683,7 @@ unsafe extern "system" fn hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -
                 .and_then(|mut ctx| ctx.as_mut().map(|ctx| ctx.handle(wparam.0 as u32, info)))
                 .unwrap_or(false)
         });
+        note_win(info.vkCode as u16, press, swallow, info.time);
         note_call(started);
         if swallow {
             return LRESULT(1);

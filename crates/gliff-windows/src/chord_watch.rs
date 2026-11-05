@@ -37,7 +37,7 @@ const SCAN_CTRL: u16 = 0x1d;
 const SCAN_ALT: u16 = 0x38;
 
 /// The modifier keys `GetAsyncKeyState` can seed, by virtual key.
-const SEEDABLE: [(u16, Evdev); 8] = [
+pub(crate) const SEEDABLE: [(u16, Evdev); 8] = [
     (0xa0, Evdev::LEFT_SHIFT),
     (0xa1, Evdev::RIGHT_SHIFT),
     (0xa2, Evdev::LEFT_CTRL),

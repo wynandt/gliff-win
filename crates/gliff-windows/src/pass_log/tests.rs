@@ -131,6 +131,7 @@ fn a_note_too_old_to_cover_a_key_still_shows_in_the_wider_look() {
 
 mod silent {
     use crate::grab_state::HookMode;
+    use crate::keymap::Press;
     use crate::pass_log::HookTiming;
     use crate::pass_log::SilentDetail;
     use crate::pass_log::silent_hook_judge;
@@ -185,12 +186,13 @@ mod silent {
                 ago_ms: Some(412),
             },
             noted_near: false,
+            key: (0x5b, Press::Down),
         };
         let base = silent_line(1, [0xa2u16, 0x5b], detail);
         assert_eq!(
             base,
             "keyboard hook silent: key sent from the window (1 so far), hook installed again; \
-             2 keys down (Win, Ctrl); message extra info: set; hook calls 12, last 85 us, \
+             the key: Win Down; 2 keys down (Win, Ctrl); message extra info: set; hook calls 12, last 85 us, \
              slowest 310 us, last ran 412 ms ago, injected keys seen 1; \
              hook noted this key within 5 s: no"
         );
@@ -198,6 +200,7 @@ mod silent {
             extra_info: false,
             hook: HookTiming::default(),
             noted_near: true,
+            key: (0x11, Press::Up),
         };
         assert!(silent_line(1, [], quiet).ends_with(
             "0 keys down; message extra info: none; hook never called since installed; \
@@ -216,5 +219,32 @@ mod silent {
             );
         }
         assert!(one.contains("; 1 key down; "));
+        // The key itself: its modifier group, or the same words for any
+        // other key.
+        assert!(silent_line(1, [], quiet).contains("; the key: Ctrl Up; "));
+        let other = |vk| {
+            silent_line(
+                1,
+                [],
+                SilentDetail {
+                    key: (vk, Press::Up),
+                    ..quiet
+                },
+            )
+        };
+        let a_key = other(0x41);
+        assert!(a_key.contains("; the key: another key Up; "));
+        for vk in (0u16..=0xff)
+            .filter(|vk| crate::key_ledger::describe_key(*vk, Press::Up) == "another key Up")
+        {
+            assert_eq!(other(vk), a_key, "vk {vk:#04x} shows in the line");
+        }
+        assert_eq!(
+            (0u16..=0xff)
+                .filter(|vk| crate::key_ledger::describe_key(*vk, Press::Up) != "another key Up")
+                .count(),
+            11,
+            "only the generic and left/right modifiers have a name"
+        );
     }
 }

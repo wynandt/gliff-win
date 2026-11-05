@@ -74,6 +74,22 @@ pub fn to_release(is_down: impl Fn(u16) -> bool) -> Vec<Modifier> {
         .collect()
 }
 
+/// The modifiers to release: each one `is_down` says Windows holds and
+/// `stuck(down, vk)` says is stuck, and each Win key in `owed` whatever
+/// `is_down` says. Windows can count a Win key as down where `is_down`
+/// (`GetAsyncKeyState`) cannot see it; see [`crate::win_owed`]. In
+/// [`MODIFIERS`] order.
+pub fn to_release_where(
+    is_down: impl Fn(u16) -> bool,
+    stuck: impl Fn(bool, u16) -> bool,
+    owed: &[u16],
+) -> Vec<Modifier> {
+    to_release(|vk| {
+        let down = is_down(vk);
+        (down && stuck(down, vk)) || owed.contains(&vk)
+    })
+}
+
 /// The names of `mods` for a log line, such as `LWin, LCtrl`.
 pub fn names(mods: &[Modifier]) -> String {
     let name = |vk| match vk {
@@ -142,7 +158,7 @@ mod win {
 
     use super::Modifier;
     use super::needs_start_mask;
-    use super::to_release;
+    use super::to_release_where;
 
     /// Injects an Up for every modifier Windows thinks is down; returns how
     /// many. The injected events carry the client's own tag, so the hook lets
@@ -153,18 +169,20 @@ mod win {
 
     /// As [`release_local`], and says which modifiers it released.
     pub fn release_held() -> Vec<Modifier> {
-        release_held_where(|_, _| true)
+        release_held_where(|_, _| true, &crate::hook::owed_wins())
     }
 
     /// As [`release_held`], but only the modifiers `stuck(down, vk)` says are
-    /// stuck: `down` is what Windows says, so a modifier it does not count as
-    /// down is never touched.
-    pub fn release_held_where(stuck: impl Fn(bool, u16) -> bool) -> Vec<Modifier> {
-        let mods = to_release(|vk| {
+    /// stuck (`down` is what `GetAsyncKeyState` says), and every Win key in
+    /// `owed` even where `GetAsyncKeyState` says it is up (see
+    /// [`crate::win_owed`]).
+    pub fn release_held_where(stuck: impl Fn(bool, u16) -> bool, owed: &[u16]) -> Vec<Modifier> {
+        let mods = to_release_where(
             // SAFETY: GetAsyncKeyState has no preconditions.
-            let down = unsafe { GetAsyncKeyState(i32::from(vk)) } < 0;
-            down && stuck(down, vk)
-        });
+            |vk| unsafe { GetAsyncKeyState(i32::from(vk)) } < 0,
+            stuck,
+            owed,
+        );
         if mods.is_empty() {
             return mods;
         }
@@ -290,6 +308,39 @@ mod tests {
             |vk| vk != VK_LWIN && vk != VK_RWIN
         )));
         assert!(!needs_start_mask(&[]));
+    }
+
+    #[test]
+    fn an_owed_win_key_is_released_though_windows_says_it_is_up() {
+        // Issue #35, after Win+L with the lock switched off: Windows acts as
+        // if Win were held, but GetAsyncKeyState says no key is down. A
+        // release gated on GetAsyncKeyState let it be.
+        let none_down = |_| false;
+        assert!(to_release_where(none_down, |_, _| true, &[]).is_empty());
+        assert_eq!(
+            to_release_where(none_down, |_, _| true, &[VK_LWIN]),
+            [Modifier {
+                vk: VK_LWIN,
+                extended: true
+            }]
+        );
+        assert!(needs_start_mask(&to_release_where(
+            none_down,
+            |_, _| false,
+            &[VK_RWIN]
+        )));
+    }
+
+    #[test]
+    fn what_windows_holds_and_what_is_owed_are_released_once_each() {
+        let held = to_release_where(
+            |vk| vk == VK_LWIN || vk == VK_LCONTROL,
+            |down, _| down,
+            &[VK_LWIN],
+        );
+        assert_eq!(names(&held), "LCtrl, LWin");
+        let not_stuck = to_release_where(|vk| vk == VK_LCONTROL, |_, _| false, &[]);
+        assert!(not_stuck.is_empty(), "a modifier `stuck` keeps is kept");
     }
 
     #[test]
