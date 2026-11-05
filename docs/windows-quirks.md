@@ -66,8 +66,15 @@ otherwise.
   works even if Ctrl and Alt went down in the gap. A key the hook lets through
   because no session is there, or because the session could not take it, is
   recorded the same way. When the grab ends, the hook asks the session to let go
-  of every key it still holds. At a reinstall the client tells the remote that
-  Win, Ctrl, Alt and Shift are up, except the keys the user holds, and presses
+  of every key it still holds. A key message names the generic Shift, Ctrl or
+  Alt, the hook the left or right one, so the ledger files a message's key
+  under the left or right key first: otherwise the Up the hook sees later
+  finds no Down, and Windows keeps that Ctrl down. At a reinstall the client
+  tells the remote that Win, Ctrl, Alt and Shift are up, except the keys the
+  hook saw the user press and not let go of, and the session forgets any of
+  them it still counted as down: a key whose Up no hook and no window saw
+  (Windows took it for a shortcut, say) would otherwise stay down on the
+  remote until that key is pressed again. It presses
   an Up on Windows only for a modifier Windows counts as down although the hook
   saw it come up. It presses no Up for a key the hook never saw move: Windows
   cannot tell a key that is held from one that is stuck, and a release would
@@ -76,23 +83,29 @@ otherwise.
   go of every modifier Windows counts as down except one the hook saw go down
   and not come up, so a Ctrl+click or Shift+click on the window you switch to is
   not cut: the person's own Up reaches Windows. A modifier whose Down the hook
-  never saw is still released at a grab end. When the client exits it lets go of
-  every modifier Windows counts as down, held or not.
+  never saw is still released at a grab end. With no grab there is no hook, so
+  when a hook comes back after that, the client forgets what the old one saw:
+  a key it saw go down may have come up unseen. When the client exits it lets
+  go of every modifier Windows counts as down, held or not.
 - **What counts as a silent hook.** A key message that reaches the window
   while the window grabs and the hook is also in grab mode, and that the hook
   did not note passing. A key the hook passes after the release chord, or with no
   session to send it to, is not a sign of a silent hook.
 - **The log holds no keystrokes.** The line written when the hook was lost
   says how many keys were down and which of Win, Ctrl, Alt and Shift were among
-  them, in that fixed order. It never names another key. A test checks that
+  them, in that fixed order, and whether the key message that showed the
+  silent hook was a Win, Ctrl, Alt or Shift key going down or up. It never
+  names another key: every other key reads `another key`. A test checks that
   no other key can change that line.
 - **Why the hook looked silent.** The same line adds facts that tell the causes
   apart, none of them a key:
 
   ```text
-  keyboard hook silent: key sent from the window (1 so far), hook installed again; 0 keys down; message extra info: none; hook calls 12, last 85 us, slowest 310 us, last ran 412 ms ago, injected keys seen 0; hook noted this key within 5 s: no
+  keyboard hook silent: key sent from the window (1 so far), hook installed again; the key: another key Down; 0 keys down; message extra info: none; hook calls 12, last 85 us, slowest 310 us, last ran 412 ms ago, injected keys seen 0; hook noted this key within 5 s: no
   ```
 
+  - `the key`: the key message the window got, as its modifier group (Win,
+    Ctrl, Alt, Shift) or `another key`, and `Down` or `Up`.
   - `message extra info`: `set` when the key message carried extra info. A
     program that sends keys (an on-screen keyboard or an input method) usually
     sets it; a keyboard does not. Windows tells a window nothing more about

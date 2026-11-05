@@ -5,6 +5,21 @@ body of its GitHub release: the release workflow prints it with
 `scripts/release-notes` and refuses a version that has no section. To cut a
 release, see [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
+## [Unreleased]
+
+- A Win or Ctrl key could stay down after the keyboard hook was put back,
+  most often with *Send Win+L to this machine* on: on the remote machine
+  (Super held, so plain keys acted as shortcuts) or in Windows (Ctrl held
+  after the keyboard came back). The client now files a Shift, Ctrl or Alt
+  that reached the window as a key message under its left or right key, as
+  the hook does, so its Up is not lost; tells the remote machine at every hook
+  reinstall that each Win, Ctrl, Alt and Shift key the user does not hold is
+  up, including one it still counted as down; and forgets what an old hook
+  saw when a new one comes back after a time with no grab. The
+  `keyboard hook silent` log line now says whether the key that showed it was
+  a Win, Ctrl, Alt or Shift key, and Down or Up, and still names no other key.
+  ([#35](https://github.com/wynandt/gliff-win/issues/35))
+
 ## [0.2.1]
 
 The first signed release: the programs are code-signed with Azure Artifact

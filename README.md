@@ -373,8 +373,13 @@ than 4096 pixels (upstream lists the last two as not built).
 - **A Win, Ctrl, Alt or Shift key seems to stay down in Windows after the
   keyboard comes back** (a plain key acts as a shortcut). Press and release
   the key once. If it keeps happening, the log line
-  `keyboard hook silent` says when the keyboard hook was lost and put back;
-  see [docs/windows-quirks.md](docs/windows-quirks.md).
+  `keyboard hook silent` says when the keyboard hook was lost and put back,
+  and whether the key that showed it was a Win, Ctrl, Alt or Shift key (any
+  other key is just "another key"); see
+  [docs/windows-quirks.md](docs/windows-quirks.md). Each time the hook is put
+  back, the client tells the remote machine that every Win, Ctrl, Alt and
+  Shift key you are not holding is up, including one it still counted as
+  down, so the remote machine does not keep a modifier down either.
 - **Win+L locks Windows, not the remote machine.** By default the client
   changes no Windows lock setting, so Win+L locks Windows even while the window
   has the keyboard. Press `Ctrl+Alt+L` to send Super+L to the remote machine
