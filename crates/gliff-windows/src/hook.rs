@@ -233,6 +233,14 @@ fn physical_saw(vk: u16, press: Press) {
         .saw(vk, press);
 }
 
+/// What the hook has seen so far, as a copy.
+fn physical_now() -> Physical {
+    PHYSICAL
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .clone()
+}
+
 /// True if the hook has handled an event of this key later than a key
 /// message from `time_ms` (see [`Physical::saw_later`]).
 pub fn saw_later(key: KeyId, time_ms: u32) -> bool {
@@ -268,14 +276,18 @@ fn state_line() -> String {
 /// those the hook saw the user press and not let go of (the user's own Up
 /// reaches Windows). Returns what it released.
 pub fn release_at_grab_end() -> Vec<crate::modifiers::Modifier> {
-    let real = PHYSICAL.lock().unwrap_or_else(PoisonError::into_inner);
+    // A copy: the lock is not held across `SendInput`, which runs this
+    // client's own hook.
+    let real = physical_now();
     crate::modifiers::release_held_where(|down, vk| real.stuck_at_grab_end(down, vk))
 }
 
 /// The hook was installed again: releases the modifiers Windows counts as
 /// down although the hook saw them come up.
 fn release_at_reinstall() -> Vec<crate::modifiers::Modifier> {
-    let real = PHYSICAL.lock().unwrap_or_else(PoisonError::into_inner);
+    // A copy: the lock is not held across `SendInput`, which runs this
+    // client's own hook.
+    let real = physical_now();
     crate::modifiers::release_held_where(|down, vk| real.stuck_at_reinstall(down, vk))
 }
 
@@ -288,14 +300,16 @@ pub fn mode() -> HookMode {
 
 /// A key message reached the window while the hook looked silent, and `sent`
 /// says whether the window passed it on to the remote. Windows saw it either
-/// way.
-pub fn note_legacy(vk: u16, press: Press, sent: bool) {
+/// way. `key` names the key as the hook does (see [`KeyId::of_message`]),
+/// so its Up meets the Down the hook saw.
+pub fn note_legacy(key: KeyId, press: Press, sent: bool) {
+    let vk = key.vk();
     physical_saw(vk, press);
     let _gate = GATE.lock().unwrap_or_else(PoisonError::into_inner);
     LEDGER
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
-        .legacy(vk, press, sent);
+        .legacy(key, press, sent);
 }
 
 /// The virtual keys Windows has down now, for [`crate::pass_log::silent_line`],
@@ -314,6 +328,14 @@ pub fn set_mode(mode: HookMode) {
     let was = gate.mode();
     let now = gate.request(mode);
     let ended = (was == HookMode::Grab && now != HookMode::Grab).then(state_line);
+    if was == HookMode::Off && now != HookMode::Off {
+        // No hook ran while Off: a Down it saw before may have come up
+        // unseen, and would read as a key the user still holds.
+        PHYSICAL
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .forget();
+    }
     let mut ledger = LEDGER.lock().unwrap_or_else(PoisonError::into_inner);
     if now != HookMode::Grab {
         // What the remote still holds stays, until the hook has made sure
@@ -472,8 +494,14 @@ impl HookThread {
                         state_line()
                     ));
                     if let Some(remote) = remote {
-                        // The remote may have missed an Up while no hook looked.
-                        remote.send(UiCmd::ClearModifiers);
+                        // The remote may have missed an Up while no hook looked,
+                        // and so may the session: both let go of every
+                        // modifier the hook did not see the user hold.
+                        let user_holds = PHYSICAL
+                            .lock()
+                            .unwrap_or_else(PoisonError::into_inner)
+                            .held_modifiers();
+                        remote.send(UiCmd::ClearModifiers { user_holds });
                         crate::logging::line(
                             "hook installed again: told the remote Win, Ctrl, Alt and Shift are \
                              up, except the keys the user holds",

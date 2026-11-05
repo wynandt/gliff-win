@@ -191,16 +191,61 @@ fn a_key_sent_from_the_window_then_reinstall_sends_its_up_to_both() {
     keys.seed([]);
     // The window got the Down and sent it to the remote; then the hook was
     // installed again.
-    keys.legacy(LWIN, Press::Down, true);
+    keys.legacy(KeyId::of_hook(LWIN, false), Press::Down, true);
     keys.reinstall([LWIN]);
     assert_eq!(keys.route(LWIN, Press::Up), Route::Windows { remote: true });
     assert_eq!(keys.take_remote_held(), Vec::<u16>::new(), "Up ended it");
 
     // The window could not send it: only Windows saw the Down.
-    keys.legacy(LCTRL, Press::Down, false);
+    keys.legacy(KeyId::of_hook(LCTRL, false), Press::Down, false);
     assert_eq!(
         keys.route(LCTRL, Press::Up),
         Route::Windows { remote: false }
+    );
+}
+
+/// A key message's `lparam` for the left Ctrl: scan code 0x1d, not extended.
+const LCTRL_MESSAGE: isize = 0x1d << 16;
+
+#[test]
+fn a_generic_ctrl_down_from_the_window_meets_the_left_ctrl_up_from_the_hook() {
+    // The hook was silent: the window got the Ctrl Down as a key message,
+    // which names the generic Ctrl. The hook is back for the Up, which names
+    // the left one. The Up must go to Windows, or Windows holds Ctrl for good.
+    let mut keys = KeyLedger::new();
+    keys.seed([]);
+    keys.legacy(KeyId::of_message(0x11, LCTRL_MESSAGE), Press::Down, true);
+    assert_eq!(keys.windows_held(), vec![LCTRL]);
+    assert_eq!(
+        keys.route(LCTRL, Press::Up),
+        Route::Windows { remote: true }
+    );
+    assert_eq!(keys.windows_held(), Vec::<u16>::new());
+    assert_eq!(keys.take_remote_held(), Vec::<u16>::new());
+}
+
+#[test]
+fn a_generic_ctrl_up_from_the_window_ends_the_left_ctrl_the_hook_saw() {
+    let mut real = Physical::new();
+    real.saw(LCTRL, Press::Down);
+    real.saw(KeyId::of_message(0x11, LCTRL_MESSAGE).vk(), Press::Up);
+    assert_eq!(real.down_keys(), Vec::<u16>::new());
+    assert_eq!(real.seen(LCTRL), Seen::Up);
+}
+
+#[test]
+fn a_hook_back_after_a_time_without_one_forgets_what_it_saw() {
+    // Win went down under a hook; the hook was taken out (no grab), and the
+    // user let go of Win with nothing looking. The next grab must not take
+    // Win for a key the user holds.
+    let mut real = Physical::new();
+    real.saw(LWIN, Press::Down);
+    real.forget();
+    assert_eq!(real.down_keys(), Vec::<u16>::new());
+    assert_eq!(real.seen(LWIN), Seen::Unknown);
+    assert!(
+        real.stuck_at_grab_end(true, LWIN),
+        "a stuck Win is let go of"
     );
 }
 

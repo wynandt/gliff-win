@@ -11,6 +11,7 @@ use gliff_proto::msg::ClientMsg;
 use crate::altgr::RawKey;
 use crate::input::KeyOutcome;
 use crate::input::KeyPipeline;
+use crate::keymap::Evdev;
 use crate::keymap::KeyEvent;
 use crate::keymap::Press;
 use crate::pointer::ButtonState;
@@ -116,6 +117,16 @@ impl InputSide {
     pub fn clear_modifiers(&self) -> Vec<ClientMsg> {
         self.pipeline
             .unheld_modifier_ups()
+            .into_iter()
+            .map(key_msg)
+            .collect()
+    }
+
+    /// An Up for every modifier the user does not hold, after a hook
+    /// reinstall (see [`KeyPipeline::release_modifiers_not_held`]).
+    pub fn release_modifiers_not_held(&mut self, user_holds: &[Evdev]) -> Vec<ClientMsg> {
+        self.pipeline
+            .release_modifiers_not_held(user_holds)
             .into_iter()
             .map(key_msg)
             .collect()

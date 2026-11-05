@@ -147,12 +147,15 @@ pub struct SilentDetail {
     pub hook: HookTiming,
     /// The pass log held a note of this key's family within [`KEEP_MS`].
     pub noted_near: bool,
+    /// The key message itself, as [`crate::key_ledger::describe_key`] may
+    /// name it: a modifier group or "another key", and Down or Up.
+    pub key: (u16, Press),
 }
 
 /// The log line for a silent hook: how many times so far, how many keys are
 /// down with which modifier groups among them (see
 /// [`crate::key_ledger::describe_down`]), and the [`SilentDetail`]. It names
-/// no key.
+/// no key but a modifier group.
 pub fn silent_line(
     so_far: u32,
     held: impl IntoIterator<Item = u16>,
@@ -168,7 +171,8 @@ pub fn silent_line(
     };
     format!(
         "keyboard hook silent: key sent from the window ({so_far} so far), hook installed again; \
-         {}; message extra info: {}; {hook}; hook noted this key within {} s: {}",
+         the key: {}; {}; message extra info: {}; {hook}; hook noted this key within {} s: {}",
+        crate::key_ledger::describe_key(detail.key.0, detail.key.1),
         crate::key_ledger::describe_down(held),
         if detail.extra_info { "set" } else { "none" },
         KEEP_MS / 1000,

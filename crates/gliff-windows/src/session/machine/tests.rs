@@ -681,9 +681,22 @@ fn a_resync_sends_new_sizes_and_clears_modifiers_the_user_does_not_hold() {
         "the real size is still the one on record, so a window re-send is deduped"
     );
     assert_eq!(
-        core.on_ui(UiCmd::ClearModifiers),
+        core.on_ui(UiCmd::ClearModifiers {
+            user_holds: vec![crate::keymap::Evdev::LEFT_SHIFT]
+        }),
         ups(),
-        "the same Ups after a hook reinstall; the held Left Shift gets none"
+        "the same Ups after a hook reinstall; the Left Shift the user holds gets none"
+    );
+    let mut all = vec![up(42)];
+    all.extend(ups());
+    all.sort_by_key(|action| format!("{action:?}"));
+    let mut cleared = core.on_ui(UiCmd::ClearModifiers {
+        user_holds: Vec::new(),
+    });
+    cleared.sort_by_key(|action| format!("{action:?}"));
+    assert_eq!(
+        cleared, all,
+        "a Left Shift the session holds but the hook saw come up is released"
     );
 }
 

@@ -424,7 +424,8 @@ impl Grab {
         // again, and that event decided where the key's life goes. It is a
         // key of the grab, so `DefWindowProc` does not see it either (a late
         // Alt+F4 would close the window).
-        if crate::hook::saw_later(crate::key_ledger::KeyId::of_message(vk, lparam), time_ms) {
+        let key = crate::key_ledger::KeyId::of_message(vk, lparam);
+        if crate::hook::saw_later(key, time_ms) {
             return Some(());
         }
         self.counters.legacy_keys += 1;
@@ -442,7 +443,7 @@ impl Grab {
             injected: false,
         };
         let sent = self.config.policy.forwards(&raw) && self.cmds.send(UiCmd::Key(raw));
-        crate::hook::note_legacy(vk, press, sent);
+        crate::hook::note_legacy(key, press, sent);
         if self.counters.legacy_keys == 1 || self.counters.legacy_keys.is_multiple_of(100) {
             // How many keys are down and which modifier groups, and how the
             // hook has been running: no key is named.
@@ -453,6 +454,7 @@ impl Grab {
                     extra_info,
                     hook: crate::hook::timing(),
                     noted_near: crate::hook::noted_near(vk, time_ms),
+                    key: (vk, press),
                 },
             ));
         }

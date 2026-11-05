@@ -16,6 +16,8 @@
 //! way it is written to the log, and it writes a count and the names of the
 //! four modifier groups, never which other keys are down.
 
+use crate::chord_watch::SEEDABLE;
+use crate::keymap::Evdev;
 use crate::keymap::Press;
 
 /// Virtual-key codes are one byte.
@@ -101,7 +103,11 @@ impl KeyLedger {
 
     /// A key message reached the window while the hook was thought silent, and
     /// the window sent it to the remote (`sent`). Windows saw it either way.
-    pub fn legacy(&mut self, vk: u16, press: Press, sent: bool) {
+    /// A [`KeyId`], not the message's own virtual key: the message names the
+    /// generic Shift, Ctrl or Alt, the hook the left or right one, and both
+    /// must land on the same slot or the Up the hook sees later finds no Down.
+    pub fn legacy(&mut self, key: KeyId, press: Press, sent: bool) {
+        let vk = key.vk();
         self.windows_saw(vk, press);
         if sent || press == Press::Up {
             self.remote_saw(vk, press);
@@ -204,6 +210,14 @@ impl KeyId {
         Self::of_hook(vk, extended)
     }
 
+    /// The virtual key, left and right apart: what the hook would have
+    /// named this key. [`Physical`] and [`KeyLedger`] count keys by it, so a
+    /// key message's generic Shift, Ctrl or Alt must go through
+    /// [`KeyId::of_message`] first, or its Up never meets the hook's Down.
+    pub fn vk(self) -> u16 {
+        self.vk
+    }
+
     fn index(self) -> usize {
         usize::from(self.vk) + if self.extended { KEYS } else { 0 }
     }
@@ -224,7 +238,7 @@ pub enum Seen {
 /// injected ones, in every mode and whether or not the hook swallowed it.
 /// Windows' own state (`GetAsyncKeyState`) cannot say whether a modifier is
 /// held or stuck; this can, for what the hook saw. Pure, memory only.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Physical {
     keys: [Seen; KEYS],
     /// The time of each key's last event, by [`KeyId`]. In memory only,
@@ -265,10 +279,28 @@ impl Physical {
         last.is_some_and(|last| (1..LATER_MS).contains(&(last.wrapping_sub(time_ms) as i32)))
     }
 
+    /// Forgets every key, for a hook installed after a time with no hook at
+    /// all: what the hook saw before then is out of date (the user may have
+    /// let go of keys it never saw come up). Each key is as if never seen,
+    /// which is what a key the hook has not met since it came back is.
+    pub fn forget(&mut self) {
+        self.keys = [Seen::Unknown; KEYS];
+    }
+
     /// The keys the hook saw go down and not come up, for the log.
     pub fn down_keys(&self) -> Vec<u16> {
         (0..KEYS as u16)
             .filter(|&vk| self.seen(vk) == Seen::Down)
+            .collect()
+    }
+
+    /// The modifiers the hook saw go down and not come up, as the remote
+    /// names them: what the session must not release after a reinstall.
+    pub fn held_modifiers(&self) -> Vec<Evdev> {
+        SEEDABLE
+            .into_iter()
+            .filter(|&(vk, _)| self.seen(vk) == Seen::Down)
+            .map(|(_, key)| key)
             .collect()
     }
 
@@ -305,6 +337,31 @@ impl Default for KeyLedger {
     }
 }
 
+/// The four modifier groups, in the order the log names them.
+const GROUPS: [&str; 4] = ["Win", "Ctrl", "Alt", "Shift"];
+
+/// Which of [`GROUPS`] a virtual key belongs to, generic or left/right.
+fn group_of(vk: u16) -> Option<usize> {
+    match vk {
+        0x5b | 0x5c => Some(0),
+        0x11 | 0xa2 | 0xa3 => Some(1),
+        0x12 | 0xa4 | 0xa5 => Some(2),
+        0x10 | 0xa0 | 0xa1 => Some(3),
+        _ => None,
+    }
+}
+
+/// What the client may write to its log about one key: its modifier group,
+/// or "another key" for every other key, and whether it went down or up.
+/// No other key is ever named.
+pub fn describe_key(vk: u16, press: Press) -> String {
+    let name = group_of(vk)
+        .and_then(|group| GROUPS.get(group).copied())
+        .unwrap_or("another key");
+    let press = if press == Press::Down { "Down" } else { "Up" };
+    format!("{name} {press}")
+}
+
 /// What the client may write to its log about the keys that are down: how
 /// many, and which of the four modifier groups (Win, Ctrl, Alt, Shift) are
 /// among them. Never any other key, and never an order: the groups come in
@@ -316,21 +373,14 @@ pub fn describe_down(held: impl IntoIterator<Item = u16>) -> String {
     let mut count = 0usize;
     let mut groups = [false; 4];
     for vk in held {
-        let group = match vk {
-            0x5b | 0x5c => Some(0),
-            0x11 | 0xa2 | 0xa3 => Some(1),
-            0x12 | 0xa4 | 0xa5 => Some(2),
-            0x10 | 0xa0 | 0xa1 => Some(3),
-            _ => None,
-        };
-        if let Some(group) = group {
+        if let Some(group) = group_of(vk) {
             groups[group] = true;
         }
         if !matches!(vk, 0x10..=0x12) {
             count += 1;
         }
     }
-    let names: Vec<&str> = ["Win", "Ctrl", "Alt", "Shift"]
+    let names: Vec<&str> = GROUPS
         .into_iter()
         .zip(groups)
         .filter_map(|(name, held)| held.then_some(name))
