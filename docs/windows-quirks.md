@@ -434,14 +434,15 @@ behaviour:
 
 ## Video
 
-- **Decode is on the CPU by default.** OpenH264 decodes the 4:2:0 stream; a D3D11
-  shader converts to RGB. H.264 levels up to 5.2 decode; a level above that makes
+- **Decode is on the GPU by default.** The Windows H.264 decoder decodes on the
+  GPU and falls back to OpenH264 on the CPU on its own; a D3D11 shader converts
+  to RGB. H.264 levels up to 5.2 decode; a level above that makes
   every access unit fail, and `gwin-verify` reads the SPS to say so.
 - **The swap chain is flip-model,** two buffers, with `Present(1, 0)`; a lost device
   makes a new presenter on the same window.
-- **GPU decode is a choice per machine.** It uses the Windows H.264 decoder
-  (Media Foundation) with D3D11 video and falls back to OpenH264 on its own; see
-  [settings.md](settings.md#gpu-decode).
+- **GPU decode is a choice per machine, on by default.** It uses the Windows H.264 decoder
+  (Media Foundation) with D3D11 video and falls back to OpenH264 on its own. Untick it for a machine to decode on the
+  CPU; see [settings.md](settings.md#gpu-decode).
 
 ### Measured on the Windows machine
 

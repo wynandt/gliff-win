@@ -5,18 +5,18 @@ tested, and what is still open. Each item links to its issue or to the page
 with the details. If you hit something that is not listed here, please open an
 issue with a way to reproduce it.
 
-## Off by default
+## Choices per machine
 
-These are built and can be turned on per machine in the tab's *Connection
-settings*.
+These are built and can be switched per machine in the tab's *Connection
+settings*. All are off by default except *GPU decode*, which is on.
 
 - **Sharp colour.** Without it the client asks for a 4:2:0 stream, so coloured
   text is a little soft. A server that encodes on the CPU still sends 4:2:0
   unless it runs with `--full-chroma`; see
   [docs/settings.md](docs/settings.md#sharp-colour).
-- **GPU decode.** Without it the client decodes H.264 on the CPU, and with
-  *Sharp colour* it decodes two streams, so the decode work at least doubles.
-  With it on, each picture is still copied back from the GPU and uploaded
+- **GPU decode** is on by default. Unticked, the client decodes H.264 on the
+  CPU, and with *Sharp colour* it decodes two streams, so the decode work at
+  least doubles. With it on, each picture is still copied back from the GPU and uploaded
   again to draw; see [docs/settings.md](docs/settings.md#gpu-decode).
 - **Send Win+L to this machine.** Without it Win+L locks Windows and
   `Ctrl+Alt+L` sends Super+L. With it on, Windows lock shortcuts are off while

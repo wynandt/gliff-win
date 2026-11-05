@@ -116,9 +116,10 @@ Each choice names the alternative that was rejected.
 - **The protocol is not changed.** The stock `gliff-server` is the server. A
   feature the stock server cannot do, such as streaming virtual files, waits for
   upstream or for a client-side design that needs no wire change.
-- **CPU decode by default, GPU conversion.** OpenH264 decodes the 4:2:0 stream the
-  client asks for (two of them for Dual420); a D3D11 shader converts the planes
-  to RGB. GPU decode is a choice per machine, off by default (see
+- **GPU decode by default, CPU fallback, GPU conversion.** The Windows H.264
+  decoder decodes on the GPU; OpenH264 decodes on the CPU when it is off or
+  unavailable (two decoders for Dual420); a D3D11 shader converts the planes
+  to RGB. GPU decode is a choice per machine, on by default (see
   [GPU decode](#gpu-decode)). Rejected: converting to BGRA on the CPU the way `gliff_sw::Decoder`
   does. `to_bgra` is kept, and its output is checked byte for byte against
   upstream's, as the oracle for the shader.

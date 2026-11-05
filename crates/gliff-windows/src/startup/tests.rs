@@ -197,7 +197,7 @@ fn the_report_shows_each_machines_saved_choice_and_where_it_came_from() {
             "screen": {"value": "mirror", "source": "default", "locked": false},
             "share_clipboard": {"value": true, "source": "default", "locked": false},
             "sharp_colour": {"value": false, "source": "default", "locked": false},
-            "gpu_decode": {"value": false, "source": "default", "locked": false},
+            "gpu_decode": {"value": true, "source": "default", "locked": false},
             "send_win_l": {"value": false, "source": "default", "locked": false},
         })
     );
