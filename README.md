@@ -442,6 +442,8 @@ scripts/check --host-only  # the same without the Windows steps
 
 - [docs/architecture.md](docs/architecture.md): crates, threads, data flow, and
   how it differs from upstream Gliff.
+- [docs/state-machines.md](docs/state-machines.md): lifecycle states, transitions,
+  ownership, and coupling in the client and verification tools.
 - [docs/windows-quirks.md](docs/windows-quirks.md): what Windows does that the
   client works around, and where each thing was tested.
 - [docs/clipboard.md](docs/clipboard.md): what copies, how, and the limits.

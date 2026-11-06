@@ -7,6 +7,9 @@ video and session, keyboard, layout and pointer input, and the clipboard
 [windows-quirks.md](windows-quirks.md); known limits and open issues are in
 [KNOWN-ISSUES.md](../KNOWN-ISSUES.md).
 
+[State machines](state-machines.md) records explicit and implicit lifecycles,
+including their state fields, transitions, ownership rules, and coupling.
+
 gliff-win shows one remote Hyprland desktop in one Windows window. The client
 starts `gliff-server --stdio` on the remote machine through `ssh.exe` and speaks
 the stock [gliff](https://github.com/omacom/gliff) protocol over the ssh
@@ -355,9 +358,16 @@ keeps its own instrumented copy of this loop.
 
 `window.rs` has one method per message arm of the window procedure. State is in
 a thread-local `RefCell`. Of the messages that arrive while it is borrowed, only
-`WM_SIZE`, `WM_DESTROY` and an ending `WM_ENDSESSION` are queued and handled right
-after; any other goes to `DefWindowProc` and is dropped. `AppState` is `Connecting`, `Streaming`, `Closing` or
-`Ended` for the shown session (see [the window with several sessions](#the-window-with-several-sessions)). Timers: settle, modal (16 ms), close (3 s) and stats (1 s).
+`WM_SIZE`, `WM_DESTROY`, an ending `WM_ENDSESSION`, and suspend/resume
+`WM_POWERBROADCAST` notifications are queued for replay. Other reentrant messages
+receive default handling. The lock setting is restored immediately for an ending
+`WM_ENDSESSION`, before the remaining shutdown is replayed. There is no window
+`AppState` enum. The lifecycle is distributed across `App.closing`,
+`App.modal`, `App.presenter`, `App.ready`, the per-session `SessionView`s,
+`Tabs`, and `SessionSet`. Protocol `Core.phase` and tab `Status` describe
+different parts of that state. See [window lifecycle](state-machines.md#window-ui-and-geometry)
+and [the window with several sessions](#the-window-with-several-sessions).
+Timers: settle, modal (16 ms), close (3 s), and stats (1 s).
 
 - **Modal loops.** The main loop presents when the swap chain's waitable is
   signalled. A window drag or resize, or an open menu, runs Windows' own
