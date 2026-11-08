@@ -20,6 +20,7 @@ fn entries(shown: usize, acks: u64) -> Vec<SessionEntry> {
         .into_iter()
         .enumerate()
         .map(|(i, target)| SessionEntry {
+            stream: None,
             id: i as u32 + 1,
             target,
             shown: i == shown,

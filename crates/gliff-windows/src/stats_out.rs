@@ -50,6 +50,9 @@ pub struct ClientStats {
 /// One live session's line: what it has done whether or not it is shown.
 #[derive(Debug, Clone, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct SessionEntry {
+    /// The same completed interval displayed over this session, if any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stream: Option<crate::stream_stats::StreamSample>,
     /// The session's number in this run (the id the tab model gave it).
     pub id: u32,
     pub target: String,
@@ -102,13 +105,18 @@ impl ChordsInfo {
 /// The per-session lines: one for each live session, in session order. A
 /// session the model does not know (it ended and was forgotten between the
 /// two reads) is left out.
-pub fn session_entries(reports: &[Report], tabs: &Tabs) -> Vec<SessionEntry> {
+pub fn session_entries(
+    reports: &[Report],
+    tabs: &Tabs,
+    sample: impl Fn(crate::tabs::SessionId) -> Option<crate::stream_stats::StreamSample>,
+) -> Vec<SessionEntry> {
     let shown = tabs.shown_session();
     reports
         .iter()
         .filter_map(|report| {
             let tab = tabs.tab_of(report.session)?;
             Some(SessionEntry {
+                stream: sample(report.session),
                 id: report.session.get(),
                 target: report.target.to_string(),
                 shown: shown == Some(report.session),

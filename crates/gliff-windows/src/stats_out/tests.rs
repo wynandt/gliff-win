@@ -92,6 +92,7 @@ fn sample() -> ClientStats {
             button_presses_sent: BTreeMap::new(),
         },
         sessions: vec![SessionEntry {
+            stream: None,
             id: 1,
             target: "user@host".into(),
             shown: true,
@@ -300,7 +301,7 @@ mod entries {
         let ids: Vec<_> = tabs.iter().filter_map(|t| t.session()).collect();
         tabs.connected(ids[1], std::time::Instant::now());
         let reports = [report(&tabs, "a@one", 5, 0), report(&tabs, "b@two", 7, 0)];
-        let lines = session_entries(&reports, &tabs);
+        let lines = session_entries(&reports, &tabs, |_| None);
         assert_eq!(lines.len(), 2);
         assert_eq!(
             lines.iter().map(|l| l.shown).collect::<Vec<_>>(),
@@ -319,7 +320,7 @@ mod entries {
     fn a_hidden_session_still_reports_its_held_keys() {
         let (tabs, _) = Tabs::start_up(&TabSet::default(), &[host("a@one"), host("b@two")]);
         let reports = [report(&tabs, "a@one", 1, 2), report(&tabs, "b@two", 1, 0)];
-        let lines = session_entries(&reports, &tabs);
+        let lines = session_entries(&reports, &tabs, |_| None);
         assert_eq!(lines[0].keys_down, 2);
         assert_eq!(lines[1].keys_down, 0);
     }
@@ -331,11 +332,11 @@ mod entries {
         let id = reports[0].session;
         tabs.ended(id, End::Error("gone".into()), std::time::Instant::now());
         assert!(
-            session_entries(&reports, &tabs).is_empty(),
+            session_entries(&reports, &tabs, |_| None).is_empty(),
             "the tab has no session now"
         );
         let (other, _) = Tabs::start_up(&TabSet::default(), &[]);
-        assert!(session_entries(&reports, &other).is_empty());
+        assert!(session_entries(&reports, &other, |_| None).is_empty());
     }
 
     #[test]
@@ -350,4 +351,34 @@ mod entries {
             "one text per local chord"
         );
     }
+}
+
+#[test]
+fn stream_samples_are_optional_for_old_json_and_round_trip_the_visible_values() {
+    let mut stats = sample();
+    let old = stats.to_json();
+    assert!(!old.contains("received_fps"));
+    assert!(
+        ClientStats::from_json(&old).expect("old file").sessions[0]
+            .stream
+            .is_none()
+    );
+    let stream = crate::stream_stats::StreamSample {
+        sequence: 7,
+        elapsed_secs: 1.25,
+        received_fps: 48.0,
+        video_mbit: 8.0,
+        decode_ms: 3.5,
+        video: "GPU→CPU".into(),
+        stream: (1920, 1080),
+        view: (3840, 2160),
+        fps_cap: 60,
+    };
+    let visible = stream.text();
+    stats.sessions[0].stream = Some(stream.clone());
+    let read = ClientStats::from_json(&stats.to_json()).expect("new file");
+    let exported = read.sessions[0].stream.as_ref().expect("sample");
+    assert_eq!(exported, &stream);
+    assert_eq!(exported.text(), visible);
+    assert_eq!(exported.sequence, 7);
 }

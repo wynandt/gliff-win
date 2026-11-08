@@ -230,6 +230,7 @@ pub struct Files {
 /// What the window keeps for one session: everything that must not leak from
 /// one session into the next.
 struct SessionView {
+    stream: crate::stream_stats::StreamSampler,
     waker: Arc<PostWaker>,
     gate: ResizeGate,
     cursor: RemoteCursor,
@@ -260,6 +261,7 @@ struct SessionView {
 impl SessionView {
     fn new(launched: Launched) -> Self {
         Self {
+            stream: crate::stream_stats::StreamSampler::new(Instant::now()),
             waker: launched.waker,
             gate: ResizeGate::new(launched.initial),
             cursor: RemoteCursor::new(),
@@ -1370,6 +1372,12 @@ impl App {
             // The new swap chain's waitable restarts presenting.
             self.recreate();
         }
+        let now = Instant::now();
+        for report in self.set.reports() {
+            if let Some(view) = self.views.get_mut(&report.session) {
+                view.stream.observe(now, &report.stats);
+            }
+        }
         self.write_stats(Completion::Running);
     }
 
@@ -1469,7 +1477,9 @@ impl App {
             end,
             ssh_exit,
             input,
-            sessions: session_entries(&self.set.reports(), &self.tabs),
+            sessions: session_entries(&self.set.reports(), &self.tabs, |id| {
+                self.views.get(&id).and_then(|v| v.stream.latest()).cloned()
+            }),
             chords: self.chords.clone(),
         }
     }
@@ -1489,7 +1499,9 @@ impl App {
     /// ssh exit 0, and none failed to start).
     pub fn finish(mut self) -> std::process::ExitCode {
         self.begin_closing();
-        let sessions = session_entries(&self.set.reports(), &self.tabs);
+        let sessions = session_entries(&self.set.reports(), &self.tabs, |id| {
+            self.views.get(&id).and_then(|v| v.stream.latest()).cloned()
+        });
         for (session, end) in self.set.shutdown() {
             self.on_session_over(session, end);
         }
