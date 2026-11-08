@@ -170,6 +170,7 @@ pub enum Hit {
     Add,
     Chevron,
     Fullscreen,
+    Stats,
     /// The address bar's recent-hosts button.
     List,
     /// The address bar's go button.
@@ -202,6 +203,7 @@ pub struct Layout {
     /// Present only when the tabs do not fit.
     pub chevron: Option<Rect>,
     pub fullscreen: Rect,
+    pub stats: Rect,
     /// Where tabs are visible; a tab outside it is clipped.
     pub viewport: Rect,
     /// The height of the font the names are drawn in (device pixels).
@@ -238,6 +240,7 @@ pub fn layout(
         bottom,
     };
     let fullscreen = button(width - m.pad);
+    let stats = button(fullscreen.left - m.gap);
     // The add button, or the open address bar in its place.
     let add_width = if bar {
         m.bar_field + m.bar_list + m.bar_go
@@ -259,7 +262,7 @@ pub fn layout(
     };
     // Room for the tabs and the add button between the two paddings and the
     // full-screen button.
-    let room = width - 2 * m.pad - m.button - m.gap;
+    let room = width - 2 * m.pad - 2 * m.button - 2 * m.gap;
     let fits = |natural: &[i32]| natural.iter().sum::<i32>() + count * m.gap + add_width <= room;
     let sizes = m.text_sizes();
     let fitting = sizes.iter().find_map(|size| {
@@ -291,7 +294,7 @@ pub fn layout(
             (widths, add, None, viewport)
         }
         false => {
-            let chevron = button(fullscreen.left - m.gap);
+            let chevron = button(stats.left - m.gap);
             // The bar gives up field width before it gives up its buttons, and
             // leaves the tabs about one tab of room.
             let right = chevron.left - m.gap;
@@ -358,6 +361,7 @@ pub fn layout(
         bar: bar.then(|| bar_of(m, add)),
         chevron,
         fullscreen,
+        stats,
         viewport,
         text,
         scroll,
@@ -433,6 +437,9 @@ impl Layout {
         }
         if self.chevron.is_some_and(|chevron| chevron.contains(x, y)) {
             return Hit::Chevron;
+        }
+        if self.stats.contains(x, y) {
+            return Hit::Stats;
         }
         if self.fullscreen.contains(x, y) {
             return Hit::Fullscreen;

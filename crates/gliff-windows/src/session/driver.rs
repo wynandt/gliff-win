@@ -816,6 +816,9 @@ impl Session {
                     self.out.waker.frame();
                 }
                 Action::Ui(event) => {
+                    if matches!(&event, UiEvent::StreamConfig(_)) {
+                        self.out.publish(self.core.stats(), self.decoder.kind());
+                    }
                     if let UiEvent::Ended(reason) = &event {
                         self.reason.get_or_insert_with(|| reason.clone());
                     }

@@ -351,6 +351,7 @@ impl Built {
     /// The draw list, the one the window runs.
     pub fn ops(&self, palette: &Palette) -> Vec<Op> {
         draw(&Paint {
+            stats_visible: false,
             metrics: &self.metrics,
             palette,
             layout: &self.layout,

@@ -104,6 +104,7 @@ pub const PLACEHOLDER: &str = "user@host";
 
 /// Everything the strip is drawn from.
 pub struct Paint<'a> {
+    pub stats_visible: bool,
     pub metrics: &'a Metrics,
     pub palette: &'a Palette,
     pub layout: &'a Layout,
@@ -203,6 +204,20 @@ pub fn draw(p: &Paint<'_>) -> Vec<Op> {
             pal,
         ));
     }
+    if p.stats_visible {
+        ops.push(Op::Rect {
+            rect: p.layout.stats,
+            radius: m.radius,
+            fill: pal.tab_shown,
+        });
+    }
+    ops.extend(button(
+        p.layout.stats,
+        p.hover == Hit::Stats,
+        Glyph::Stats,
+        m,
+        pal,
+    ));
     ops.extend(button(
         p.layout.fullscreen,
         p.hover == Hit::Fullscreen,
@@ -335,6 +350,7 @@ enum Glyph {
     Plus,
     Chevron,
     Fullscreen,
+    Stats,
     /// The address bar's go arrow.
     Go,
 }
@@ -488,6 +504,17 @@ fn glyph_in(rect: Rect, glyph: Glyph, m: &Metrics, pal: &Palette) -> Vec<Op> {
             let w = arm / 2 + 1;
             ops.push(line((cx - w, cy - h), (cx + w, cy)));
             ops.push(line((cx + w, cy), (cx - w, cy + h)));
+        }
+        Glyph::Stats => {
+            let points = [
+                (cx - arm, cy + arm),
+                (cx - arm / 3, cy - arm / 3),
+                (cx + arm / 3, cy + arm / 3),
+                (cx + arm, cy - arm),
+            ];
+            for pair in points.windows(2) {
+                ops.push(line(pair[0], pair[1]));
+            }
         }
         Glyph::Fullscreen => {
             // Four corners of a square, each an L.
