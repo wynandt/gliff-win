@@ -174,6 +174,24 @@ Each tab shows the machine's full name and a dot:
 - **Fullscreen** hides the strip. Move the pointer to the top edge and it
   slides in; move away and it slides out.
 
+### Stream statistics
+
+Click the graph button beside fullscreen to show or hide statistics over the
+active tab's picture. Statistics are off at startup. Switching tabs shows that
+session's statistics. The readout never takes the keyboard or pointer.
+
+The readout shows the server and actual client decoder tiers, received FPS,
+video payload Mbit/s, mean decode-call time, stream and remote view dimensions,
+and the server FPS cap. Values update about once a second, including when the
+stream is idle. Bandwidth counts both video payloads, not SSH overhead or
+clipboard traffic. Decode time includes buffered and failed decode calls, not
+idle drains. Linux counts successful immediate pictures instead, so its FPS and
+decode mean can differ on buffering or error paths.
+
+With `--stats-out`, each session's optional `stream` object contains the same
+sample used by the readout. Match the session ID and sample sequence when
+comparing values. Existing top-level diagnostic fields retain their behavior.
+
 ### When a connection fails
 
 The panel names the problem in plain words, for example "The machine did not
