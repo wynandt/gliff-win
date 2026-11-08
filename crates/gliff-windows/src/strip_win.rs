@@ -679,7 +679,7 @@ impl StripWin {
 
     /// Paints the strip: the draw list on an off-screen bitmap, then one
     /// copy, so nothing flickers.
-    pub fn paint(&self) {
+    pub fn paint(&self, stats_visible: bool) {
         let mut ps = PAINTSTRUCT::default();
         // SAFETY: our window, paired with EndPaint; every GDI object made
         // here is deleted before return.
@@ -692,6 +692,7 @@ impl StripWin {
                 0
             };
             let ops = draw(&Paint {
+                stats_visible,
                 metrics: &self.metrics,
                 palette: &self.palette,
                 layout: &self.layout,
@@ -799,7 +800,7 @@ extern "system" fn proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) ->
     let (x, y) = signed(lparam);
     let input = match msg {
         WM_PAINT => {
-            if with_app(|app| app.strip.paint()).is_none() {
+            if with_app(|app| app.strip.paint(app.stats_visible())).is_none() {
                 // The state is busy: a plain validation, drawn at the next
                 // change.
                 let mut ps = PAINTSTRUCT::default();

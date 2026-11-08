@@ -500,3 +500,21 @@ mod bar {
         assert_eq!(closed.hit(bar.go.left + 1, y), Hit::Nothing);
     }
 }
+
+#[test]
+fn stats_stays_before_fullscreen_and_clear_of_overflow_at_every_scale() {
+    for dpi in DPIS {
+        let m = Metrics::at(dpi);
+        for width in [360, 600, 1200] {
+            for count in [0, 2, 12] {
+                let l = lay(&m, width * dpi as i32 / 96, &many(count), 0);
+                assert_eq!(l.stats.right + m.gap, l.fullscreen.left);
+                assert_eq!(l.hit(l.stats.left + 1, l.stats.top + 1), Hit::Stats);
+                assert!(l.add.right <= l.stats.left);
+                if let Some(chevron) = l.chevron {
+                    assert!(chevron.right <= l.stats.left);
+                }
+            }
+        }
+    }
+}

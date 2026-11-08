@@ -230,6 +230,7 @@ pub struct Files {
 /// What the window keeps for one session: everything that must not leak from
 /// one session into the next.
 struct SessionView {
+    stream: crate::stream_stats::StreamSampler,
     waker: Arc<PostWaker>,
     gate: ResizeGate,
     cursor: RemoteCursor,
@@ -260,6 +261,7 @@ struct SessionView {
 impl SessionView {
     fn new(launched: Launched) -> Self {
         Self {
+            stream: crate::stream_stats::StreamSampler::new(Instant::now()),
             waker: launched.waker,
             gate: ResizeGate::new(launched.initial),
             cursor: RemoteCursor::new(),
@@ -348,6 +350,7 @@ pub struct App {
     typing_sent: Last<bool>,
     retry_armed: Last<Option<Instant>>,
     stats_out: Option<PathBuf>,
+    show_stats: bool,
 }
 
 /// What `App::new` needs.
@@ -406,6 +409,7 @@ impl App {
             typing_sent: Last::new(),
             retry_armed: Last::new(),
             stats_out: parts.stats_out,
+            show_stats: false,
             screen: RefCell::new((MonitorInfo::default(), (0, 0, 0, 0))),
         }
     }
@@ -525,6 +529,7 @@ impl App {
         let now = Instant::now();
         let ms = self.ms(now);
         let shown = self.shown == Some(session);
+        let config_changed = matches!(&event, UiEvent::StreamConfig(_));
         let Some(view) = self.views.get_mut(&session) else {
             return;
         };
@@ -583,6 +588,9 @@ impl App {
             // tab's new state.
             UiEvent::Ended(_) => {}
         }
+        if shown && config_changed && self.sync_overlay() {
+            self.redraw();
+        }
     }
 
     /// A session is over and joined: keep how it ended, drop its view.
@@ -621,6 +629,7 @@ impl App {
                 self.set_timer(TIMER_SETTLE, delay);
             }
         }
+        self.sync_overlay();
         let drawn = self.present_due();
         if !drawn && !has_last {
             // Nothing to show of this session yet: black, not the last
@@ -833,6 +842,7 @@ impl App {
             Ok(presenter) => self.presenter = Some(presenter),
             Err(e) => crate::logging::line(&format!("presenter recreate failed: {e}")),
         }
+        self.sync_overlay();
     }
 
     fn send_resize(&mut self, req: ResizeReq) {
@@ -866,6 +876,7 @@ impl App {
             crate::logging::line(&format!("ResizeBuffers failed: {e}"));
             self.recreate();
         }
+        self.sync_overlay();
         self.redraw();
         if changed {
             self.stages.on_resize(request_for(client, self.dpi), now);
@@ -1116,6 +1127,12 @@ impl App {
                 }
                 StripAction::Chevron => popups.push(Popup::List),
                 StripAction::Fullscreen => self.toggle_fullscreen(),
+                StripAction::Stats => {
+                    self.show_stats = !self.show_stats;
+                    self.strip.invalidate();
+                    self.sync_overlay();
+                    self.redraw();
+                }
                 StripAction::Scroll(px) => self.strip.scroll_by(px),
             }
         }
@@ -1370,7 +1387,47 @@ impl App {
             // The new swap chain's waitable restarts presenting.
             self.recreate();
         }
+        let now = Instant::now();
+        for report in self.set.reports() {
+            if let Some(view) = self.views.get_mut(&report.session) {
+                view.stream.observe(now, &report.stats);
+            }
+        }
+        if self.sync_overlay() {
+            self.redraw();
+        }
         self.write_stats(Completion::Running);
+    }
+
+    pub(crate) fn stats_visible(&self) -> bool {
+        self.show_stats
+    }
+
+    fn sync_overlay(&mut self) -> bool {
+        let text = self
+            .show_stats
+            .then(|| {
+                let id = self.shown?;
+                let view = self.views.get(&id)?;
+                if let Some(sample) = view.stream.latest() {
+                    return Some(sample.text());
+                }
+                let stats = self.set.get(id)?.stats();
+                stats.stream_info?;
+                Some(crate::stream_stats::video_label(&stats))
+            })
+            .flatten();
+        let top = self.top();
+        let Some(presenter) = self.presenter.as_mut() else {
+            return false;
+        };
+        match presenter.set_overlay(text.as_deref(), self.dpi, top) {
+            Ok(changed) => changed,
+            Err(e) => {
+                crate::logging::line(&format!("stats overlay unavailable: {e}"));
+                true
+            }
+        }
     }
 
     /// The stats file now; errors are logged, never fatal.
@@ -1469,7 +1526,9 @@ impl App {
             end,
             ssh_exit,
             input,
-            sessions: session_entries(&self.set.reports(), &self.tabs),
+            sessions: session_entries(&self.set.reports(), &self.tabs, |id| {
+                self.views.get(&id).and_then(|v| v.stream.latest()).cloned()
+            }),
             chords: self.chords.clone(),
         }
     }
@@ -1489,7 +1548,9 @@ impl App {
     /// ssh exit 0, and none failed to start).
     pub fn finish(mut self) -> std::process::ExitCode {
         self.begin_closing();
-        let sessions = session_entries(&self.set.reports(), &self.tabs);
+        let sessions = session_entries(&self.set.reports(), &self.tabs, |id| {
+            self.views.get(&id).and_then(|v| v.stream.latest()).cloned()
+        });
         for (session, end) in self.set.shutdown() {
             self.on_session_over(session, end);
         }

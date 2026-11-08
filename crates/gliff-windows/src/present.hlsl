@@ -53,3 +53,8 @@ float4 ps_yuv(VsOut i) : SV_Target {
 float4 ps_blit(VsOut i) : SV_Target {
     return float4(picture.Sample(blit_sampler, i.uv).rgb, 1.0);
 }
+
+// Cached stats pixels already contain premultiplied RGB and per-pixel alpha.
+float4 ps_stats(VsOut i) : SV_Target {
+    return picture.Sample(blit_sampler, i.uv);
+}

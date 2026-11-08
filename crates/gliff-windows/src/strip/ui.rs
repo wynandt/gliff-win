@@ -60,6 +60,7 @@ pub enum Action {
     /// Show the list of every tab.
     Chevron,
     Fullscreen,
+    Stats,
     /// Scroll the tabs by this many pixels (positive: later tabs come into
     /// view).
     Scroll(i32),
@@ -205,6 +206,7 @@ fn released(button: Button, down: Hit, up: Hit, at: (i32, i32)) -> Option<Action
             Hit::Add => Some(Action::Add),
             Hit::Chevron => Some(Action::Chevron),
             Hit::Fullscreen => Some(Action::Fullscreen),
+            Hit::Stats => Some(Action::Stats),
             Hit::Go => Some(Action::Go),
             Hit::List => Some(Action::List),
             Hit::Nothing => None,

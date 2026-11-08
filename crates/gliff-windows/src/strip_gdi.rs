@@ -10,6 +10,7 @@ use std::cell::RefCell;
 use windows::Win32::Foundation::COLORREF;
 use windows::Win32::Foundation::RECT;
 use windows::Win32::Foundation::SIZE;
+use windows::Win32::Graphics::Gdi::ANTIALIASED_QUALITY;
 use windows::Win32::Graphics::Gdi::BI_RGB;
 use windows::Win32::Graphics::Gdi::BITMAPINFO;
 use windows::Win32::Graphics::Gdi::BITMAPINFOHEADER;
@@ -26,6 +27,7 @@ use windows::Win32::Graphics::Gdi::DT_VCENTER;
 use windows::Win32::Graphics::Gdi::DeleteDC;
 use windows::Win32::Graphics::Gdi::DeleteObject;
 use windows::Win32::Graphics::Gdi::DrawTextW;
+use windows::Win32::Graphics::Gdi::FONT_QUALITY;
 use windows::Win32::Graphics::Gdi::FW_BOLD;
 use windows::Win32::Graphics::Gdi::FW_NORMAL;
 use windows::Win32::Graphics::Gdi::GdiFlush;
@@ -55,17 +57,36 @@ fn colour(c: Rgb) -> COLORREF {
 /// The names' fonts: one regular and one bold per size asked for, made when
 /// first used and kept until the cache is dropped. A size is in device
 /// pixels, so the cache stays valid when the scale changes.
-#[derive(Default)]
 pub struct Fonts {
+    face: windows::core::PCWSTR,
+    quality: FONT_QUALITY,
     made: RefCell<Vec<(i32, HFONT, HFONT)>>,
 }
 
+impl Default for Fonts {
+    fn default() -> Self {
+        Self {
+            face: w!("Segoe UI"),
+            quality: CLEARTYPE_QUALITY,
+            made: RefCell::new(Vec::new()),
+        }
+    }
+}
+
 impl Fonts {
+    pub fn monospace() -> Self {
+        Self {
+            face: w!("Consolas"),
+            quality: ANTIALIASED_QUALITY,
+            made: RefCell::new(Vec::new()),
+        }
+    }
+
     pub fn new() -> Self {
         Self::default()
     }
 
-    fn make(size: i32, weight: i32) -> HFONT {
+    fn make(&self, size: i32, weight: i32) -> HFONT {
         // SAFETY: a plain font request; the name is a static string.
         unsafe {
             CreateFontW(
@@ -80,9 +101,9 @@ impl Fonts {
                 DEFAULT_CHARSET,
                 Default::default(),
                 Default::default(),
-                CLEARTYPE_QUALITY,
+                self.quality,
                 0,
-                w!("Segoe UI"),
+                self.face,
             )
         }
     }
@@ -95,8 +116,8 @@ impl Fonts {
             None => {
                 made.push((
                     size,
-                    Self::make(size, FW_NORMAL.0 as i32),
-                    Self::make(size, FW_BOLD.0 as i32),
+                    self.make(size, FW_NORMAL.0 as i32),
+                    self.make(size, FW_BOLD.0 as i32),
                 ));
                 made.len() - 1
             }

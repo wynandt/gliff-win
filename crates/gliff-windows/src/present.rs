@@ -24,11 +24,17 @@ use windows::Win32::Graphics::Direct3D::Fxc::D3DCompile;
 use windows::Win32::Graphics::Direct3D::ID3DBlob;
 use windows::Win32::Graphics::Direct3D11::D3D11_BIND_RENDER_TARGET;
 use windows::Win32::Graphics::Direct3D11::D3D11_BIND_SHADER_RESOURCE;
+use windows::Win32::Graphics::Direct3D11::D3D11_BLEND_DESC;
+use windows::Win32::Graphics::Direct3D11::D3D11_BLEND_INV_SRC_ALPHA;
+use windows::Win32::Graphics::Direct3D11::D3D11_BLEND_ONE;
+use windows::Win32::Graphics::Direct3D11::D3D11_BLEND_OP_ADD;
+use windows::Win32::Graphics::Direct3D11::D3D11_COLOR_WRITE_ENABLE_ALL;
 use windows::Win32::Graphics::Direct3D11::D3D11_COMPARISON_NEVER;
 use windows::Win32::Graphics::Direct3D11::D3D11_CREATE_DEVICE_FLAG;
 use windows::Win32::Graphics::Direct3D11::D3D11_FILTER;
 use windows::Win32::Graphics::Direct3D11::D3D11_FILTER_MIN_MAG_MIP_LINEAR;
 use windows::Win32::Graphics::Direct3D11::D3D11_FILTER_MIN_MAG_MIP_POINT;
+use windows::Win32::Graphics::Direct3D11::D3D11_RENDER_TARGET_BLEND_DESC;
 use windows::Win32::Graphics::Direct3D11::D3D11_SAMPLER_DESC;
 use windows::Win32::Graphics::Direct3D11::D3D11_SDK_VERSION;
 use windows::Win32::Graphics::Direct3D11::D3D11_TEXTURE_ADDRESS_CLAMP;
@@ -36,6 +42,7 @@ use windows::Win32::Graphics::Direct3D11::D3D11_TEXTURE2D_DESC;
 use windows::Win32::Graphics::Direct3D11::D3D11_USAGE_DEFAULT;
 use windows::Win32::Graphics::Direct3D11::D3D11_VIEWPORT;
 use windows::Win32::Graphics::Direct3D11::D3D11CreateDevice;
+use windows::Win32::Graphics::Direct3D11::ID3D11BlendState;
 use windows::Win32::Graphics::Direct3D11::ID3D11Device;
 use windows::Win32::Graphics::Direct3D11::ID3D11DeviceContext;
 use windows::Win32::Graphics::Direct3D11::ID3D11PixelShader;
@@ -110,8 +117,18 @@ struct Planes {
     rgb_srv: Option<ID3D11ShaderResourceView>,
 }
 
+struct StatsTexture {
+    text: String,
+    dpi: u32,
+    top: u32,
+    client: (u32, u32),
+    srv: Option<ID3D11ShaderResourceView>,
+    viewport: Viewport,
+}
+
 /// The device, swap chain and pipeline for one window.
 pub struct Presenter {
+    overlay: Option<StatsTexture>,
     device: ID3D11Device,
     context: ID3D11DeviceContext,
     swap_chain: IDXGISwapChain2,
@@ -124,6 +141,8 @@ pub struct Presenter {
     vs: ID3D11VertexShader,
     ps_yuv: ID3D11PixelShader,
     ps_blit: ID3D11PixelShader,
+    ps_stats: ID3D11PixelShader,
+    stats_blend: ID3D11BlendState,
     point: Option<ID3D11SamplerState>,
     linear: Option<ID3D11SamplerState>,
     adapter: AdapterInfo,
@@ -199,11 +218,27 @@ impl Presenter {
         let vs_code = compile(s!("vs_full"), s!("vs_5_0"))?;
         let yuv_code = compile(s!("ps_yuv"), s!("ps_5_0"))?;
         let blit_code = compile(s!("ps_blit"), s!("ps_5_0"))?;
+        let stats_code = compile(s!("ps_stats"), s!("ps_5_0"))?;
+        let mut ps_stats = None;
+        let mut stats_blend = None;
+        let mut blend = D3D11_BLEND_DESC::default();
+        blend.RenderTarget[0] = D3D11_RENDER_TARGET_BLEND_DESC {
+            BlendEnable: true.into(),
+            SrcBlend: D3D11_BLEND_ONE,
+            DestBlend: D3D11_BLEND_INV_SRC_ALPHA,
+            BlendOp: D3D11_BLEND_OP_ADD,
+            SrcBlendAlpha: D3D11_BLEND_ONE,
+            DestBlendAlpha: D3D11_BLEND_INV_SRC_ALPHA,
+            BlendOpAlpha: D3D11_BLEND_OP_ADD,
+            RenderTargetWriteMask: D3D11_COLOR_WRITE_ENABLE_ALL.0 as u8,
+        };
         let mut vs = None;
         let mut ps_yuv = None;
         let mut ps_blit = None;
         // SAFETY: the byte code slices are live blobs from D3DCompile.
         unsafe {
+            device.CreatePixelShader(blob_bytes(&stats_code), None, Some(&mut ps_stats))?;
+            device.CreateBlendState(&blend, Some(&mut stats_blend))?;
             device.CreateVertexShader(blob_bytes(&vs_code), None, Some(&mut vs))?;
             device.CreatePixelShader(blob_bytes(&yuv_code), None, Some(&mut ps_yuv))?;
             device.CreatePixelShader(blob_bytes(&blit_code), None, Some(&mut ps_blit))?;
@@ -212,6 +247,7 @@ impl Presenter {
         let linear = sampler(&device, D3D11_FILTER_MIN_MAG_MIP_LINEAR)?;
 
         let mut presenter = Self {
+            overlay: None,
             device,
             context,
             swap_chain,
@@ -223,6 +259,8 @@ impl Presenter {
             vs: vs.expect("CreateVertexShader succeeded without a shader"),
             ps_yuv: ps_yuv.expect("CreatePixelShader succeeded without ps_yuv"),
             ps_blit: ps_blit.expect("CreatePixelShader succeeded without ps_blit"),
+            ps_stats: ps_stats.expect("CreatePixelShader succeeded without ps_stats"),
+            stats_blend: stats_blend.expect("CreateBlendState succeeded without stats_blend"),
             point,
             linear,
             adapter: info,
@@ -307,6 +345,7 @@ impl Presenter {
             ctx.UpdateSubresource(&planes.y, 0, None, frame.y().as_ptr().cast(), w, 0);
             ctx.UpdateSubresource(&planes.u, 0, None, frame.u().as_ptr().cast(), cw, 0);
             ctx.UpdateSubresource(&planes.v, 0, None, frame.v().as_ptr().cast(), cw, 0);
+            ctx.OMSetBlendState(None, None, u32::MAX);
             // Pass 1: planes -> stream-sized RGB.
             ctx.PSSetShaderResources(3, Some(&[None]));
             ctx.OMSetRenderTargets(Some(&[Some(planes.rgb_rtv.clone())]), None);
@@ -348,6 +387,7 @@ impl Presenter {
         let hr = unsafe {
             let ctx = &self.context;
             ctx.OMSetRenderTargets(Some(&[Some(back.clone())]), None);
+            ctx.OMSetBlendState(None, None, u32::MAX);
             ctx.ClearRenderTargetView(&back, &[0.0, 0.0, 0.0, 1.0]);
             if let (true, Some(planes)) = (self.has_picture, self.planes.as_ref())
                 && viewport.width > 0
@@ -361,6 +401,17 @@ impl Presenter {
                 ctx.PSSetSamplers(0, Some(&[sampler]));
                 ctx.Draw(3, 0);
             }
+            if let Some(overlay) = &self.overlay {
+                ctx.RSSetViewports(Some(&[d3d_viewport(overlay.viewport)]));
+                ctx.IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+                ctx.VSSetShader(&self.vs, None);
+                ctx.PSSetShader(&self.ps_stats, None);
+                ctx.OMSetBlendState(&self.stats_blend, None, u32::MAX);
+                ctx.PSSetShaderResources(3, Some(std::slice::from_ref(&overlay.srv)));
+                ctx.PSSetSamplers(0, Some(std::slice::from_ref(&self.point)));
+                ctx.Draw(3, 0);
+                ctx.OMSetBlendState(None, None, u32::MAX);
+            }
             self.swap_chain.Present(SYNC_INTERVAL, DXGI_PRESENT(0))
         };
         if hr == DXGI_STATUS_OCCLUDED {
@@ -371,6 +422,57 @@ impl Presenter {
         }
         hr.ok()?;
         Ok(PresentOutcome::Shown)
+    }
+
+    /// Rebuild the small text texture only when content or placement changes.
+    pub fn set_overlay(
+        &mut self,
+        text: Option<&str>,
+        dpi: u32,
+        top: u32,
+    ) -> windows::core::Result<bool> {
+        let Some(text) = text else {
+            return Ok(self.overlay.take().is_some());
+        };
+        if self.overlay.as_ref().is_some_and(|o| {
+            o.text == text && o.dpi == dpi && o.top == top && o.client == self.size
+        }) {
+            return Ok(false);
+        }
+        self.overlay = None;
+        let Some(bitmap) =
+            crate::stats_overlay::raster(text, dpi, (self.size.0, self.size.1.saturating_sub(top)))
+        else {
+            return Ok(true);
+        };
+        let (width, height) = bitmap.size;
+        let texture = self.texture((width, height), BACK_FORMAT, Bind::Read)?;
+        // SAFETY: the bitmap contains width*height premultiplied BGRA pixels and is
+        // alive until the immediate-context upload has copied them.
+        unsafe {
+            self.context.UpdateSubresource(
+                &texture,
+                0,
+                None,
+                bitmap.premultiplied_bgra.as_ptr().cast(),
+                width * 4,
+                0,
+            );
+        }
+        self.overlay = Some(StatsTexture {
+            text: text.to_owned(),
+            dpi,
+            top,
+            client: self.size,
+            srv: Some(self.srv(&texture)?),
+            viewport: Viewport {
+                x: 0,
+                y: i32::try_from(top).unwrap_or(i32::MAX),
+                width,
+                height,
+            },
+        });
+        Ok(true)
     }
 
     fn back_view(&self) -> windows::core::Result<ID3D11RenderTargetView> {

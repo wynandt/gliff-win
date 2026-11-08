@@ -722,6 +722,18 @@ grab and pointer input (both on the route), and then runs the start effects.
   per frame). The cost is linear: a hidden session decodes every frame, so ten
   tabs cost about ten times one.
 
+### On-video statistics
+
+Each `SessionView` owns a `StreamSampler`, fed from the existing driver snapshot
+on the window heartbeat. It retains one immutable interval for both the shown
+readout and `sessions[].stream` in diagnostic JSON. `App.show_stats` is a
+window-wide default-off choice, not a connection setting. The presenter caches
+a premultiplied GDI mask texture and blends white text over 60%-black after video
+in the existing swap chain. The visible FPS and decode mean count only successful
+immediate decode outputs, excluding drains and actual presentations. No
+child HWND or grab policy is added. [Metric definitions and verification
+boundary](stats-overlay.md).
+
 ## Input
 
 Input is a pure core (tested on Linux) under a thin Win32 shell. Keys go from

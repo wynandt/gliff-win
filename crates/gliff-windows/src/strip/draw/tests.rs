@@ -174,6 +174,7 @@ fn ops(
     phase: u32,
 ) -> Vec<Op> {
     draw(&Paint {
+        stats_visible: false,
         metrics: &f.metrics,
         palette: &PAL,
         layout: &f.layout,
@@ -328,11 +329,9 @@ fn under_the_pointer_the_dot_becomes_a_cross_button() {
     assert!(pad.top >= slot.top && pad.bottom <= slot.bottom);
     let crosses = over
         .iter()
-        .filter(|o| matches!(o, Op::Line { color, .. } if *color == PAL.text))
+        .filter(|o| matches!(o, Op::Line { from, to, color, .. } if *color == PAL.text && slot.contains(from.0,from.1) && slot.contains(to.0,to.1)))
         .count();
-    // Two strokes of the cross, plus the two glyph strokes of the add button
-    // and the four strokes... the full-screen glyph has eight.
-    assert_eq!(crosses, 2 + 2 + 8);
+    assert_eq!(crosses, 2);
 }
 
 #[test]
@@ -398,16 +397,21 @@ fn the_drop_marker_sits_in_the_gap_it_would_drop_into() {
 fn the_chevron_is_drawn_only_when_the_tabs_do_not_fit() {
     let few = scene(&[DotState::Live, DotState::Live]);
     let many = scene(&[DotState::Live; 12]);
-    let glyph_lines = |s: &Scene, width| {
-        let f = frame(s, 96, width, 0);
-        ops(s, &f, None, Hit::Nothing, None, 0)
-            .iter()
-            .filter(|o| matches!(o, Op::Line { color, .. } if *color == PAL.text))
-            .count()
+    let count_chevron = |s: &Scene| {
+        let f = frame(s, 96, 800, 0);
+        let right = f.layout.stats.left - f.metrics.gap;
+        let rect = Rect {
+            left: right - f.metrics.button,
+            right,
+            top: 0,
+            bottom: f.metrics.strip_height,
+        };
+        ops(s,&f,None,Hit::Nothing,None,0).iter().filter(|op| {
+            matches!(op,Op::Line {from,to,..} if rect.contains(from.0,from.1) && rect.contains(to.0,to.1))
+        }).count()
     };
-    // Add (2) and full screen (8); with the chevron, 2 more.
-    assert_eq!(glyph_lines(&few, 800), 10);
-    assert_eq!(glyph_lines(&many, 800), 12);
+    assert_eq!(count_chevron(&few), 0);
+    assert_eq!(count_chevron(&many), 2);
 }
 
 #[test]
@@ -507,6 +511,7 @@ mod bar {
             width,
         };
         let list = draw(&Paint {
+            stats_visible: false,
             metrics: &f.metrics,
             palette: &PAL,
             layout: &f.layout,
@@ -757,4 +762,40 @@ fn a_name_is_drawn_at_the_font_the_layout_chose_and_in_a_rect_that_holds_it() {
             }
         }
     }
+}
+
+#[test]
+fn stats_button_draws_a_graph_and_a_selected_background() {
+    let s = scene(&[]);
+    let f = frame(&s, 96, 800, 0);
+    let paint = |visible| {
+        draw(&Paint {
+            stats_visible: visible,
+            metrics: &f.metrics,
+            palette: &PAL,
+            layout: &f.layout,
+            width: f.width,
+            tabs: &s.paint,
+            shown: None,
+            hover: Hit::Nothing,
+            drag: None,
+            bar: None,
+            phase: 0,
+        })
+    };
+    let selected = Op::Rect {
+        rect: f.layout.stats,
+        radius: f.metrics.radius,
+        fill: PAL.tab_shown,
+    };
+    assert!(!paint(false).contains(&selected));
+    assert!(paint(true).contains(&selected));
+    assert_eq!(
+        paint(false)
+            .iter()
+            .filter(|op| matches!(op,Op::Line {from,to,..}
+        if f.layout.stats.contains(from.0,from.1) && f.layout.stats.contains(to.0,to.1)))
+            .count(),
+        3
+    );
 }

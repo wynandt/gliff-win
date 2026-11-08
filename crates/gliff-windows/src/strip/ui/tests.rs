@@ -372,3 +372,25 @@ mod bar {
         );
     }
 }
+
+#[test]
+fn stats_toggle_acts_only_on_a_matching_left_release() {
+    for bar in [false, true] {
+        let s = build(12, 800, bar);
+        let (x, y) = (s.layout.stats.left + 5, s.layout.stats.top + 5);
+        assert_eq!(s.layout.hit(x, y), Hit::Stats);
+        let mut ui = Ui::default();
+        assert!(s.send(&mut ui, Input::Down(Button::Left, x, y)).is_empty());
+        assert_eq!(
+            s.send(&mut ui, Input::Up(Button::Left, x, y)),
+            vec![Action::Stats]
+        );
+        s.send(&mut ui, Input::Down(Button::Left, x, y));
+        assert!(s.send(&mut ui, Input::Up(Button::Left, 0, 0)).is_empty());
+        s.send(&mut ui, Input::Down(Button::Left, x, y));
+        s.send(&mut ui, Input::Cancel);
+        assert!(s.send(&mut ui, Input::Up(Button::Left, x, y)).is_empty());
+        s.send(&mut ui, Input::Down(Button::Right, x, y));
+        assert!(s.send(&mut ui, Input::Up(Button::Right, x, y)).is_empty());
+    }
+}
