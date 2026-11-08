@@ -516,3 +516,69 @@ fn what_three_busy_sessions_cost_the_client_in_cpu() {
         "three sessions decode more frames per second than one"
     );
 }
+
+#[test]
+fn stream_samples_follow_session_ids_through_tab_switches() {
+    let _shared = CPU_CLOCK.shared();
+    let (mut set, _) = window("stream-stats");
+    let (mut tabs, effects) = Tabs::start_up(&TabSet::default(), &targets());
+    let now = Instant::now();
+    set.run(&mut tabs, effects);
+    pump(
+        &mut set,
+        &mut tabs,
+        None,
+        Duration::from_secs(15),
+        |_, set| set.reports().len() == 3 && set.reports().iter().all(|r| r.stats.frames >= 5),
+    );
+    let reports = set.reports();
+    assert_eq!(reports.len(), 3);
+    let mut samples = std::collections::BTreeMap::new();
+    for (index, report) in reports.iter().enumerate() {
+        let secs = 2 + index as u64;
+        let tick = now + Duration::from_secs(secs);
+        assert!(report.stats.frames >= 5 && report.stats.video_bytes > 0);
+        assert!(report.stats.decode_ms.count() > 0 && report.stats.decode_total_ms > 0.0);
+        assert_eq!(
+            report.stats.decoder,
+            Some(gliff_windows::decode::DecoderKind::Cpu)
+        );
+        let mut sampler = gliff_windows::stream_stats::StreamSampler::new(now);
+        sampler.observe(tick, &report.stats);
+        let sample = sampler.latest().expect("real driver sample").clone();
+        assert_eq!(
+            sample.received_fps,
+            report.stats.frames as f64 / secs as f64
+        );
+        assert_eq!(sample.stream, (SIZE.width, SIZE.height));
+        samples.insert(report.session, sample);
+    }
+    let before =
+        gliff_windows::stats_out::session_entries(&reports, &tabs, |id| samples.get(&id).cloned());
+    let effects = tabs.switch(SwitchTo::Next);
+    set.run(&mut tabs, effects);
+    let after =
+        gliff_windows::stats_out::session_entries(&reports, &tabs, |id| samples.get(&id).cloned());
+    assert_ne!(
+        before.iter().find(|e| e.shown).expect("before").id,
+        after.iter().find(|e| e.shown).expect("after").id
+    );
+    for (a, b) in before.iter().zip(&after) {
+        assert_eq!(a.id, b.id);
+        assert_eq!(a.stream, b.stream);
+        let report = reports
+            .iter()
+            .find(|r| r.session.get() == b.id)
+            .expect("session identity");
+        assert_eq!(b.stream, samples.get(&report.session).cloned());
+        let json = serde_json::to_string(b).expect("export");
+        let read: gliff_windows::stats_out::SessionEntry =
+            serde_json::from_str(&json).expect("read");
+        assert_eq!(
+            read.stream.as_ref().expect("exported sample").text(),
+            b.stream.as_ref().expect("visible sample").text()
+        );
+        assert_eq!(read.stream.as_ref().expect("sample sequence").sequence, 1);
+    }
+    assert_eq!(set.shutdown().len(), 3);
+}

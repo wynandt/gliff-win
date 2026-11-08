@@ -110,7 +110,6 @@ struct Planes {
     rgb_srv: Option<ID3D11ShaderResourceView>,
 }
 
-/// The device, swap chain and pipeline for one window.
 struct StatsTexture {
     text: String,
     dpi: u32,
@@ -120,6 +119,7 @@ struct StatsTexture {
     viewport: Viewport,
 }
 
+/// The device, swap chain and pipeline for one window.
 pub struct Presenter {
     overlay: Option<StatsTexture>,
     device: ID3D11Device,

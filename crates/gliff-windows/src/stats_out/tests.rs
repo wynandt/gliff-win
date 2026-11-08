@@ -376,6 +376,15 @@ fn stream_samples_are_optional_for_old_json_and_round_trip_the_visible_values() 
     };
     let visible = stream.text();
     stats.sessions[0].stream = Some(stream.clone());
+    let mut additive: serde_json::Value = serde_json::from_str(&stats.to_json()).expect("new JSON");
+    additive["sessions"][0]
+        .as_object_mut()
+        .expect("session object")
+        .remove("stream");
+    assert_eq!(
+        additive,
+        serde_json::from_str::<serde_json::Value>(&old).expect("old JSON")
+    );
     let read = ClientStats::from_json(&stats.to_json()).expect("new file");
     let exported = read.sessions[0].stream.as_ref().expect("sample");
     assert_eq!(exported, &stream);

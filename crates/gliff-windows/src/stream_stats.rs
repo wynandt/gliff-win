@@ -198,15 +198,17 @@ mod tests {
         second.frames = 10;
         second.decoder = Some(DecoderKind::Gpu);
         second.stream_info.as_mut().expect("config").fps_cap = 30;
+        second.stream_info.as_mut().expect("config").pipeline =
+            Some(gliff_proto::msg::VideoPipeline::Gpu);
         a.observe(now + Duration::from_secs(1), &stats());
         b.observe(now + Duration::from_secs(1), &second);
         assert_eq!(a.latest().expect("a").received_fps, 60.0);
         assert_eq!(b.latest().expect("b").received_fps, 10.0);
         assert_eq!(b.latest().expect("b").fps_cap, 30);
-        assert_eq!(b.latest().expect("b").video, "?→GPU");
+        assert_eq!(b.latest().expect("b").video, "GPU→GPU");
         second.decoder = Some(DecoderKind::Cpu);
         b.observe(now + Duration::from_secs(2), &second);
-        assert_eq!(b.latest().expect("fallback").video, "?→CPU");
+        assert_eq!(b.latest().expect("fallback").video, "GPU→CPU");
     }
 
     #[test]

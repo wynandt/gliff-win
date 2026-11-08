@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+cargo test -p gliff-windows --lib --locked stream_telemetry
+cargo test -p gliff-windows --lib --locked stream_stats
+cargo test -p gliff-windows --lib --locked stats_out
+cargo test -p gliff-windows --lib --locked stats_overlay
+cargo test -p gliff-windows --lib --locked strip
+cargo test -p gwin-verify --bin gwin-verify --locked strip_shot
+cargo test -p gwin-verify --test multi_session --locked stream_samples_follow_session_ids
+printf '\nStats logic checks passed. Windows drawing and input are not verified by this script.\n'

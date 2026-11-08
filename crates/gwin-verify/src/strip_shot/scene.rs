@@ -191,13 +191,14 @@ pub fn scenes() -> Vec<Scene> {
             hover: Hover::Chevron,
             ..scene("narrow-hover-chevron", 480, &ten)
         },
+        // Keep these non-overflow scenes wide enough for the graph button.
         Scene {
             bar: Some(BarScene {
                 text: "",
                 focused: true,
                 error: false,
             }),
-            ..scene("bar-empty", 640, &three)
+            ..scene("bar-empty", 680, &three)
         },
         Scene {
             bar: Some(BarScene {
@@ -205,7 +206,7 @@ pub fn scenes() -> Vec<Scene> {
                 focused: true,
                 error: false,
             }),
-            ..scene("bar-typed", 640, &three)
+            ..scene("bar-typed", 680, &three)
         },
         Scene {
             bar: Some(BarScene {
@@ -213,7 +214,7 @@ pub fn scenes() -> Vec<Scene> {
                 focused: false,
                 error: false,
             }),
-            ..scene("bar-unfocused", 640, &three)
+            ..scene("bar-unfocused", 680, &three)
         },
         Scene {
             bar: Some(BarScene {
@@ -221,7 +222,7 @@ pub fn scenes() -> Vec<Scene> {
                 focused: true,
                 error: true,
             }),
-            ..scene("bar-error", 640, &three)
+            ..scene("bar-error", 680, &three)
         },
         Scene {
             hover: Hover::Go,
@@ -230,7 +231,7 @@ pub fn scenes() -> Vec<Scene> {
                 focused: true,
                 error: false,
             }),
-            ..scene("bar-hover-go", 640, &three)
+            ..scene("bar-hover-go", 680, &three)
         },
         Scene {
             hover: Hover::List,
@@ -239,7 +240,7 @@ pub fn scenes() -> Vec<Scene> {
                 focused: true,
                 error: false,
             }),
-            ..scene("bar-hover-list", 640, &three)
+            ..scene("bar-hover-list", 680, &three)
         },
         Scene {
             chevron: true,

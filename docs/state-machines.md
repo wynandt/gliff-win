@@ -612,6 +612,24 @@ present` supplies a real-window gate and pure judge tests, not proof of this nat
 recovery path. [Window present loop][panel]; [presenter resource
 transitions][presenter].
 
+### Statistics intervals and readout cache
+
+Implicit. Each `SessionView.stream` owns its counter baseline, sampling instant,
+and latest immutable `StreamSample`. The heartbeat observes all live sessions;
+less than one second leaves the sample unchanged, a full idle interval yields
+zero rates, and a new session ID gets a fresh sampler. The shown session alone
+supplies text. The same sample, including sequence, is copied into optional
+`sessions[].stream` without changing legacy primary-session fields.
+
+`App.show_stats` starts false and toggles only from the existing strip action.
+The presenter's optional bitmap texture is derived cache state: text, DPI,
+client bounds or device recreation invalidate it. Stats-only redraws do not
+record a new decode-to-present latency sample. There is no overlay HWND or new
+input transition. Host tests cover accounting, sampling, export and strip
+press/release; native drawing/input remain unverified. See
+[the decision record](stats-overlay.md) and
+[the project-local verification map](../.cursor/skills/verify-gliff-win/features/README.md).
+
 ## Window, UI, and geometry
 
 ### Resize settlement and DPI propagation

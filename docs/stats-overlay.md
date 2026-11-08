@@ -47,3 +47,13 @@ that the real Windows window draws correctly or preserves grab behavior.
 Native checks must cover clicks and scrolls through the readout, focus and
 hover grab, tab changes, idle refresh, fullscreen reveal, DPI, and device
 recovery. No native proof is claimed until those checks run on Windows.
+
+
+## Repeatable checks
+
+Run `scripts/verify-stats` for focused host logic and real-driver/fake-server
+session identity tests. The integration clock is synthetic: it verifies identity
+and export, not throughput. Run `scripts/check` for repository gates. The
+[project-local verification skill](../.cursor/skills/verify-gliff-win/SKILL.md)
+and its feature map describe the native journeys; they remain draft until a
+Windows run captures their action and outcome.

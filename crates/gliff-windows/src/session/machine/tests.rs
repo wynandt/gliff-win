@@ -1540,3 +1540,23 @@ fn stream_telemetry_includes_buffered_and_failed_decode_calls() {
         (2, 2, 0)
     );
 }
+
+#[test]
+fn stream_telemetry_excludes_non_video_payloads() {
+    let mut core = streaming();
+    let _ = core.on_server(
+        ServerMsg::CursorShape {
+            id: 7,
+            width: 2,
+            height: 1,
+            hot_x: 1,
+            hot_y: 0,
+            argb_len: 8,
+        },
+        Bytes::from_static(&[0; 8]),
+        Bytes::new(),
+    );
+    assert_eq!((core.stats().frames, core.stats().video_bytes), (0, 0));
+    let _ = core.on_server(frame(1), au(), Bytes::new());
+    assert_eq!((core.stats().frames, core.stats().video_bytes), (1, 4));
+}
