@@ -180,13 +180,16 @@ Click the graph button beside fullscreen to show or hide statistics over the
 active tab's picture. Statistics are off at startup. Switching tabs shows that
 session's statistics. The readout never takes the keyboard or pointer.
 
-The readout shows the server and actual client decoder tiers, received FPS,
-video payload Mbit/s, mean decode-call time, stream and remote view dimensions,
-and the server FPS cap. Values update about once a second, including when the
-stream is idle. Bandwidth counts both video payloads, not SSH overhead or
-clipboard traffic. Decode time includes buffered and failed decode calls, not
-idle drains. Linux counts successful immediate pictures instead, so its FPS and
-decode mean can differ on buffering or error paths.
+The readout shows white monospace text over 60% black, composited over the
+video. It shows server and actual client decoder tiers, FPS, video payload
+Mbit/s, mean decode time, stream and remote view dimensions, and the server cap.
+Like Linux, FPS counts successful immediate decode outputs, not received packets,
+idle-drained pictures, or actual presentations. Decode time averages only those
+successful calls. Backend work differs, so timings need not match numerically.
+Values update about once a second, including idle intervals. Bandwidth counts
+both video payloads, not SSH overhead or clipboard traffic. Diagnostic
+`received_fps` and `decode_call_ms` retain received-packet FPS and the mean of
+all measured decode calls, including buffering and errors but not idle drains.
 
 With `--stats-out`, each session's optional `stream` object contains the same
 sample used by the readout. Match the session ID and sample sequence when
