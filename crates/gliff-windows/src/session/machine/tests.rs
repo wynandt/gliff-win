@@ -1609,3 +1609,18 @@ fn stream_telemetry_readout_counts_immediate_success_not_packets_drains_or_prese
         (0.0, 0.0, 0.0, 0.0)
     );
 }
+
+#[test]
+fn stream_telemetry_buffer_and_drain_only_readout_is_zero() {
+    let now = std::time::Instant::now();
+    let mut core = streaming();
+    let _ = core.on_server(frame(1), au(), Bytes::new());
+    let _ = core.decoded(done(1, Ok(None)));
+    let _ = core.drained(Ok(Some(picture(2))));
+    assert_eq!((core.stats().frames, core.stats().presented), (1, 1));
+    let mut sampler = crate::stream_stats::StreamSampler::new(now);
+    sampler.observe(now + std::time::Duration::from_secs(1), core.stats());
+    let sample = sampler.latest().expect("sample");
+    assert_eq!((sample.fps, sample.decode_ms), (0.0, 0.0));
+    assert_eq!((sample.received_fps, sample.decode_call_ms), (1.0, 2.0));
+}

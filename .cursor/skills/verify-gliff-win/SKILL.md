@@ -5,8 +5,9 @@ description: Verify the Windows desktop client, stream statistics, tabs and inpu
 
 # Verify the client
 
-**Draft: native launch/doctor/drive/cleanup has not run.** Linux logic checks
-and MSVC cross-builds do not prove Windows drawing, focus, or input routing.
+**Draft: the corrected native journey has not run.** Linux logic checks
+and MSVC cross-builds do not prove corrected transparency, native blend-state
+restoration, focus, or input routing.
 Read [the feature map](features/README.md) before choosing an entry point.
 
 ## Launch
@@ -98,7 +99,8 @@ never run it on an existing user instance.
 ## Helpers
 
 `scripts/verify-stats` is an executable, host-only test selector. It covers
-payload/decode accounting, interval sampling, optional JSON compatibility,
+received versus successful-immediate decode accounting, separate call means,
+interval sampling, premultiplied alpha/source-over math, optional JSON compatibility,
 narrow/DPI layout, strip actions, and real fake-server session identity. The
 integration test uses a synthetic sampling clock, not a throughput benchmark.
 Run `scripts/check` separately for full gates; report failures without skipping

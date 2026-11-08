@@ -6,8 +6,8 @@ The choice belongs to the window, starts off, and is not saved.
 
 ## Ownership
 
-The protocol core counts received frames and video payload bytes. The driver
-already measures decode calls and knows the decoder actually in use, including
+The protocol core counts received frames, immediate successful decode outputs,
+and video payload bytes. The driver already measures decode calls and knows the decoder actually in use, including
 CPU fallback. Its existing snapshot carries those values to the UI thread.
 Each session view samples cumulative counters on the existing one-second
 heartbeat. The immutable sample supplies both the readout and the additive
@@ -15,8 +15,8 @@ per-session `stream` field in the diagnostic JSON. Existing top-level fields
 are unchanged.
 
 The presenter caches a premultiplied BGRA text bitmap as a small texture and
-blends it after video with a dedicated alpha-preserving shader. It creates no child window. This
-matters because the grab's pointer poll treats child windows as outside the
+blends it after video with a dedicated alpha-preserving shader. It creates no
+child window. This matters because the grab's pointer poll treats child windows as outside the
 picture. A child readout would need new input policy. Rasterization and upload
 happen only when content, bounds, or DPI change. Device recreation rebuilds
 the cache. A stats-only redraw is not a new decoded-frame latency sample.
@@ -62,8 +62,8 @@ No new HWND, input policy, protocol, or pointer geometry is introduced.
 
 ## Verification boundary
 
-Host tests can prove counter arithmetic, sampling, JSON compatibility, layout,
-and toggle actions. Cross-compilation checks the Windows code. Neither proves
+Host tests can prove counter arithmetic, sampling, alpha math, JSON
+compatibility, layout, and toggle actions. Cross-compilation checks the Windows code. Neither proves
 that the real Windows window draws correctly or preserves grab behavior.
 Native checks must cover clicks and scrolls through the readout, focus and
 hover grab, tab changes, idle refresh, fullscreen reveal, DPI, and device

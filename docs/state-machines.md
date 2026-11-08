@@ -617,7 +617,9 @@ transitions][presenter].
 Implicit. Each `SessionView.stream` owns its counter baseline, sampling instant,
 and latest immutable `StreamSample`. The heartbeat observes all live sessions;
 less than one second leaves the sample unchanged, a full idle interval yields
-zero rates, and a new session ID gets a fresh sampler. The shown session alone
+zero rates, and a new session ID gets a fresh sampler. Immediate successful
+decode outputs and their mean are distinct from received packets, all-call mean,
+drains, and presentations. The shown session alone
 supplies text. The same sample, including sequence, is copied into optional
 `sessions[].stream` without changing legacy primary-session fields.
 
@@ -625,7 +627,9 @@ supplies text. The same sample, including sequence, is copied into optional
 The presenter's optional bitmap texture is derived cache state: text, DPI,
 client bounds or device recreation invalidate it. Stats-only redraws do not
 record a new decode-to-present latency sample. There is no overlay HWND or new
-input transition. Host tests cover accounting, sampling, export and strip
+input transition. The stats draw uses premultiplied source-over blending and
+restores opaque state before later video work. Host tests cover accounting,
+alpha conversion, source-over math, sampling, export and strip
 press/release; native drawing/input remain unverified. See
 [the decision record](stats-overlay.md) and
 [the project-local verification map](../.cursor/skills/verify-gliff-win/features/README.md).
