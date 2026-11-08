@@ -550,6 +550,11 @@ fn stream_samples_follow_session_ids_through_tab_switches() {
             sample.received_fps,
             report.stats.frames as f64 / secs as f64
         );
+        assert_eq!(
+            sample.fps,
+            report.stats.immediate_frames as f64 / secs as f64
+        );
+        assert!(sample.fps > 0.0 && sample.fps <= sample.received_fps);
         assert_eq!(sample.stream, (SIZE.width, SIZE.height));
         samples.insert(report.session, sample);
     }

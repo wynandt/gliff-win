@@ -241,6 +241,9 @@ pub struct Decoded {
 pub struct SessionStats {
     pub video_bytes: u64,
     pub decode_total_ms: f64,
+    /// Decode calls returning a picture immediately, excluding idle drains.
+    pub immediate_frames: u64,
+    pub immediate_decode_total_ms: f64,
     pub stream_info: Option<StreamInfo>,
     pub decoder: Option<crate::decode::DecoderKind>,
     /// VideoFrames received.
@@ -554,7 +557,11 @@ impl Core {
         self.stats.decode_total_ms += f64::from(done.decode_ms);
         let mut actions = vec![self.ack(done.frame_id, done.now_ms)];
         match done.result {
-            Ok(Some(frame)) => actions.push(self.present(frame, done.frame_id)),
+            Ok(Some(frame)) => {
+                self.stats.immediate_frames += 1;
+                self.stats.immediate_decode_total_ms += f64::from(done.decode_ms);
+                actions.push(self.present(frame, done.frame_id));
+            }
             // The CPU decoder holds the picture; its geometry stays queued.
             Ok(None) => {}
             Err(e) => {

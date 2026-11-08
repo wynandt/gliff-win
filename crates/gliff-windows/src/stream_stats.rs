@@ -10,8 +10,12 @@ pub struct StreamSample {
     pub sequence: u64,
     pub elapsed_secs: f64,
     pub received_fps: f64,
+    #[serde(default)]
+    pub fps: f64,
     pub video_mbit: f64,
     pub decode_ms: f64,
+    #[serde(default)]
+    pub decode_call_ms: f64,
     pub video: String,
     pub stream: (u32, u32),
     pub view: (u32, u32),
@@ -29,8 +33,8 @@ impl StreamSample {
             )
         };
         format!(
-            "{}  {:.0} received fps  {:.1} Mbit/s  decode {:.1} ms  {stream} @{}",
-            self.video, self.received_fps, self.video_mbit, self.decode_ms, self.fps_cap
+            "{}  {:.0} fps  {:.1} Mbit/s  decode {:.1} ms  {stream} @{}",
+            self.video, self.fps, self.video_mbit, self.decode_ms, self.fps_cap
         )
     }
 }
@@ -56,6 +60,8 @@ struct Counts {
     frames: u64,
     bytes: u64,
     calls: u64,
+    immediate: u64,
+    immediate_ms: f64,
     ms: f64,
 }
 
@@ -65,6 +71,8 @@ impl Counts {
             frames: stats.frames,
             bytes: stats.video_bytes,
             calls: stats.decode_ms.count(),
+            immediate: stats.immediate_frames,
+            immediate_ms: stats.immediate_decode_total_ms,
             ms: stats.decode_total_ms,
         }
     }
@@ -103,12 +111,19 @@ impl StreamSampler {
             return;
         };
         let calls = counts.calls.saturating_sub(old.calls);
+        let immediate = counts.immediate.saturating_sub(old.immediate);
         self.latest = Some(StreamSample {
             sequence: self.latest.as_ref().map_or(1, |s| s.sequence + 1),
             elapsed_secs: secs,
             received_fps: counts.frames.saturating_sub(old.frames) as f64 / secs,
+            fps: immediate as f64 / secs,
             video_mbit: counts.bytes.saturating_sub(old.bytes) as f64 * 8.0 / 1_000_000.0 / secs,
-            decode_ms: if calls == 0 {
+            decode_ms: if immediate == 0 {
+                0.0
+            } else {
+                (counts.immediate_ms - old.immediate_ms).max(0.0) / immediate as f64
+            },
+            decode_call_ms: if calls == 0 {
                 0.0
             } else {
                 (counts.ms - old.ms).max(0.0) / calls as f64
@@ -136,6 +151,8 @@ mod tests {
             frames: 60,
             video_bytes: 1_000_000,
             decode_total_ms: 10.0,
+            immediate_frames: 2,
+            immediate_decode_total_ms: 10.0,
             decoder: Some(DecoderKind::Cpu),
             stream_info: Some(StreamInfo {
                 geometry: Geometry {
@@ -170,7 +187,7 @@ mod tests {
         );
         assert_eq!(
             sample.text(),
-            "?→CPU  30 received fps  4.0 Mbit/s  decode 5.0 ms  1920x1080 → 3840x2160 @60"
+            "?→CPU  1 fps  4.0 Mbit/s  decode 5.0 ms  1920x1080 → 3840x2160 @60"
         );
     }
 
@@ -182,8 +199,14 @@ mod tests {
         sampler.observe(now + Duration::from_secs(2), &stats());
         let sample = sampler.latest().expect("idle sample");
         assert_eq!(
-            (sample.received_fps, sample.video_mbit, sample.decode_ms),
-            (0.0, 0.0, 0.0)
+            (
+                sample.received_fps,
+                sample.fps,
+                sample.video_mbit,
+                sample.decode_ms,
+                sample.decode_call_ms
+            ),
+            (0.0, 0.0, 0.0, 0.0, 0.0)
         );
         assert_eq!(sample.sequence, 2);
         assert!(StreamSampler::new(now).latest().is_none());
@@ -196,6 +219,7 @@ mod tests {
         let mut b = StreamSampler::new(now);
         let mut second = stats();
         second.frames = 10;
+        second.immediate_frames = 7;
         second.decoder = Some(DecoderKind::Gpu);
         second.stream_info.as_mut().expect("config").fps_cap = 30;
         second.stream_info.as_mut().expect("config").pipeline =
@@ -204,6 +228,8 @@ mod tests {
         b.observe(now + Duration::from_secs(1), &second);
         assert_eq!(a.latest().expect("a").received_fps, 60.0);
         assert_eq!(b.latest().expect("b").received_fps, 10.0);
+        assert_eq!(a.latest().expect("a").fps, 2.0);
+        assert_eq!(b.latest().expect("b").fps, 7.0);
         assert_eq!(b.latest().expect("b").fps_cap, 30);
         assert_eq!(b.latest().expect("b").video, "GPU→GPU");
         second.decoder = Some(DecoderKind::Cpu);

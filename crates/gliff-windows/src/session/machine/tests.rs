@@ -1560,3 +1560,52 @@ fn stream_telemetry_excludes_non_video_payloads() {
     let _ = core.on_server(frame(1), au(), Bytes::new());
     assert_eq!((core.stats().frames, core.stats().video_bytes), (1, 4));
 }
+
+#[test]
+fn stream_telemetry_readout_counts_immediate_success_not_packets_drains_or_presentations() {
+    let now = std::time::Instant::now();
+    let mut core = streaming();
+    for (id, result, ms) in [(1, Ok(Some(picture(2))), 5.0), (2, Ok(None), 20.0)] {
+        let _ = core.on_server(frame(id), au(), Bytes::new());
+        let mut decoded = done(id, result);
+        decoded.decode_ms = ms;
+        let _ = core.decoded(decoded);
+    }
+    let _ = core.drained(Ok(Some(picture(2))));
+    let _ = core.on_server(frame(3), au(), Bytes::new());
+    let mut failed = done(3, Err(sw_error()));
+    failed.decode_ms = 50.0;
+    let _ = core.decoded(failed);
+    let _ = core.drained(Err(sw_error()));
+    let _ = core.drained(Ok(None));
+    assert_eq!(
+        (
+            core.stats().frames,
+            core.stats().acks,
+            core.stats().presented
+        ),
+        (3, 3, 2)
+    );
+    let mut sampler = crate::stream_stats::StreamSampler::new(now);
+    sampler.observe(now + std::time::Duration::from_secs(1), core.stats());
+    let sample = sampler.latest().expect("sample");
+    assert_eq!(sample.received_fps, 3.0);
+    assert_eq!(sample.decode_ms, 5.0);
+    assert_eq!(sample.fps, 1.0);
+    assert_eq!(sample.decode_call_ms, 25.0);
+    assert_eq!(
+        sample.text(),
+        "GPU→?  1 fps  0.0 Mbit/s  decode 5.0 ms  1920x1080 @30"
+    );
+    sampler.observe(now + std::time::Duration::from_secs(2), core.stats());
+    let idle = sampler.latest().expect("idle");
+    assert_eq!(
+        (
+            idle.fps,
+            idle.received_fps,
+            idle.decode_ms,
+            idle.decode_call_ms
+        ),
+        (0.0, 0.0, 0.0, 0.0)
+    );
+}

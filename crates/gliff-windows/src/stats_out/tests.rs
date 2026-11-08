@@ -367,6 +367,8 @@ fn stream_samples_are_optional_for_old_json_and_round_trip_the_visible_values() 
         sequence: 7,
         elapsed_secs: 1.25,
         received_fps: 48.0,
+        fps: 45.0,
+        decode_call_ms: 4.0,
         video_mbit: 8.0,
         decode_ms: 3.5,
         video: "GPU→CPU".into(),
