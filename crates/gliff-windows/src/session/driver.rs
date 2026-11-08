@@ -268,11 +268,13 @@ impl Out {
         self.waker.event();
     }
 
-    fn publish(&self, stats: &SessionStats) {
+    fn publish(&self, stats: &SessionStats, decoder: DecoderKind) {
+        let mut stats = stats.clone();
+        stats.decoder = Some(decoder);
         *self
             .stats
             .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) = stats.clone();
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = stats;
     }
 
     /// A session that never reached the protocol: tell the UI it ended.
@@ -369,6 +371,9 @@ async fn run(
         colour_since: Instant::now(),
         decode_window: opts.gpu_decode.then(Vec::new),
     };
+    session
+        .out
+        .publish(session.core.stats(), session.decoder.kind());
     session.send(
         hello(
             client_caps(opts.panel, opts.colour),
@@ -393,7 +398,7 @@ async fn run(
     let ssh_exit = finish(&mut child, &mut in_rx, &mut session.errors).await;
     reader.abort();
     let stats = session.core.stats().clone();
-    session.out.publish(&stats);
+    session.out.publish(&stats, session.decoder.kind());
     // The UI learns of the end only after ssh is gone, so it may exit.
     session.out.waker.event();
     SessionEnd {
@@ -587,7 +592,7 @@ impl Session {
                     last_frame = Instant::now();
                 }
             }
-            self.out.publish(self.core.stats());
+            self.out.publish(self.core.stats(), self.decoder.kind());
             if self.colour_since.elapsed() >= COLOUR_REPORT {
                 let secs = self.colour_since.elapsed().as_secs_f64();
                 self.report_colour();

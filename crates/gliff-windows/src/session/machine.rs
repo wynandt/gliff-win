@@ -239,6 +239,10 @@ pub struct Decoded {
 /// Counters for the session.
 #[derive(Debug, Clone, Default)]
 pub struct SessionStats {
+    pub video_bytes: u64,
+    pub decode_total_ms: f64,
+    pub stream_info: Option<StreamInfo>,
+    pub decoder: Option<crate::decode::DecoderKind>,
     /// VideoFrames received.
     pub frames: u64,
     /// FrameAcks emitted.
@@ -547,6 +551,7 @@ impl Core {
             return Vec::new();
         }
         self.stats.decode_ms.record(done.decode_ms);
+        self.stats.decode_total_ms += f64::from(done.decode_ms);
         let mut actions = vec![self.ack(done.frame_id, done.now_ms)];
         match done.result {
             Ok(Some(frame)) => actions.push(self.present(frame, done.frame_id)),
@@ -722,18 +727,21 @@ impl Core {
             actions.push(Action::ResetDecoder(chroma));
             DecoderChange::Reset
         };
-        actions.push(Action::Ui(UiEvent::StreamConfig(StreamInfo {
+        let info = StreamInfo {
             geometry,
             fps_cap,
             chroma,
             pipeline,
             decoder,
-        })));
+        };
+        self.stats.stream_info = Some(info);
+        actions.push(Action::Ui(UiEvent::StreamConfig(info)));
         actions
     }
 
     fn on_video_frame(&mut self, frame_id: u64, main: Bytes, aux: Bytes) -> Vec<Action> {
         self.stats.frames += 1;
+        self.stats.video_bytes += (main.len() + aux.len()) as u64;
         self.colour_counts.frames += 1;
         let dual = self.coded.is_some_and(|c| c.chroma == ChromaMode::Dual420);
         match (dual, aux.is_empty()) {

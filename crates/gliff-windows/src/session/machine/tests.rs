@@ -1504,3 +1504,39 @@ fn a_clipboard_offer_before_the_first_config_does_not_end_the_link() {
         "before HelloAck is still a protocol error"
     );
 }
+
+#[test]
+fn stream_telemetry_counts_both_payloads_even_when_the_pair_cannot_decode() {
+    let mut core = streaming();
+    let _ = core.on_server(frame(1), au(), Bytes::from_static(&[1, 2, 3]));
+    assert_eq!((core.stats().frames, core.stats().video_bytes), (1, 7));
+    assert_eq!(core.stats().acks, 1);
+    assert_eq!(core.stats().decode_ms.count(), 0);
+    assert_eq!(
+        core.stats().stream_info.expect("accepted config").fps_cap,
+        30
+    );
+}
+
+#[test]
+fn stream_telemetry_includes_buffered_and_failed_decode_calls() {
+    let mut core = streaming();
+    let _ = core.on_server(frame(1), au(), Bytes::new());
+    let mut buffered = done(1, Ok(None));
+    buffered.decode_ms = 1.0;
+    let _ = core.decoded(buffered);
+    let _ = core.on_server(frame(2), au(), Bytes::new());
+    let mut failed = done(2, Err(sw_error()));
+    failed.decode_ms = 9.0;
+    let _ = core.decoded(failed);
+    assert_eq!(core.stats().decode_ms.count(), 2);
+    assert_eq!(core.stats().decode_total_ms, 10.0);
+    assert_eq!(
+        (
+            core.stats().frames,
+            core.stats().acks,
+            core.stats().presented
+        ),
+        (2, 2, 0)
+    );
+}

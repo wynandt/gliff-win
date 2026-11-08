@@ -71,6 +71,7 @@ pub mod ssh;
 pub mod stages;
 pub mod startup;
 pub mod stats_out;
+pub mod stream_stats;
 pub mod strip;
 #[cfg(windows)]
 pub mod strip_edit;
