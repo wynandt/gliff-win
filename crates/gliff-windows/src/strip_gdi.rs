@@ -55,17 +55,33 @@ fn colour(c: Rgb) -> COLORREF {
 /// The names' fonts: one regular and one bold per size asked for, made when
 /// first used and kept until the cache is dropped. A size is in device
 /// pixels, so the cache stays valid when the scale changes.
-#[derive(Default)]
 pub struct Fonts {
+    face: windows::core::PCWSTR,
     made: RefCell<Vec<(i32, HFONT, HFONT)>>,
 }
 
+impl Default for Fonts {
+    fn default() -> Self {
+        Self {
+            face: w!("Segoe UI"),
+            made: RefCell::new(Vec::new()),
+        }
+    }
+}
+
 impl Fonts {
+    pub fn monospace() -> Self {
+        Self {
+            face: w!("Consolas"),
+            made: RefCell::new(Vec::new()),
+        }
+    }
+
     pub fn new() -> Self {
         Self::default()
     }
 
-    fn make(size: i32, weight: i32) -> HFONT {
+    fn make(&self, size: i32, weight: i32) -> HFONT {
         // SAFETY: a plain font request; the name is a static string.
         unsafe {
             CreateFontW(
@@ -82,7 +98,7 @@ impl Fonts {
                 Default::default(),
                 CLEARTYPE_QUALITY,
                 0,
-                w!("Segoe UI"),
+                self.face,
             )
         }
     }
@@ -95,8 +111,8 @@ impl Fonts {
             None => {
                 made.push((
                     size,
-                    Self::make(size, FW_NORMAL.0 as i32),
-                    Self::make(size, FW_BOLD.0 as i32),
+                    self.make(size, FW_NORMAL.0 as i32),
+                    self.make(size, FW_BOLD.0 as i32),
                 ));
                 made.len() - 1
             }

@@ -39,7 +39,10 @@ pub fn video_label(stats: &SessionStats) -> String {
     let server = stats
         .stream_info
         .and_then(|info| info.pipeline)
-        .map_or("?", |p| p.label());
+        .map_or("?", |p| match p {
+            gliff_proto::msg::VideoPipeline::Cpu => "CPU",
+            gliff_proto::msg::VideoPipeline::Gpu => "GPU",
+        });
     let decoder = match stats.decoder {
         Some(DecoderKind::Cpu) => "CPU",
         Some(DecoderKind::Gpu) => "GPU",

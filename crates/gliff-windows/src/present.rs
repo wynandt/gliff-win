@@ -111,7 +111,17 @@ struct Planes {
 }
 
 /// The device, swap chain and pipeline for one window.
+struct StatsTexture {
+    text: String,
+    dpi: u32,
+    top: u32,
+    client: (u32, u32),
+    srv: Option<ID3D11ShaderResourceView>,
+    viewport: Viewport,
+}
+
 pub struct Presenter {
+    overlay: Option<StatsTexture>,
     device: ID3D11Device,
     context: ID3D11DeviceContext,
     swap_chain: IDXGISwapChain2,
@@ -212,6 +222,7 @@ impl Presenter {
         let linear = sampler(&device, D3D11_FILTER_MIN_MAG_MIP_LINEAR)?;
 
         let mut presenter = Self {
+            overlay: None,
             device,
             context,
             swap_chain,
@@ -361,6 +372,15 @@ impl Presenter {
                 ctx.PSSetSamplers(0, Some(&[sampler]));
                 ctx.Draw(3, 0);
             }
+            if let Some(overlay) = &self.overlay {
+                ctx.RSSetViewports(Some(&[d3d_viewport(overlay.viewport)]));
+                ctx.IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+                ctx.VSSetShader(&self.vs, None);
+                ctx.PSSetShader(&self.ps_blit, None);
+                ctx.PSSetShaderResources(3, Some(std::slice::from_ref(&overlay.srv)));
+                ctx.PSSetSamplers(0, Some(std::slice::from_ref(&self.point)));
+                ctx.Draw(3, 0);
+            }
             self.swap_chain.Present(SYNC_INTERVAL, DXGI_PRESENT(0))
         };
         if hr == DXGI_STATUS_OCCLUDED {
@@ -371,6 +391,57 @@ impl Presenter {
         }
         hr.ok()?;
         Ok(PresentOutcome::Shown)
+    }
+
+    /// Rebuild the small text texture only when content or placement changes.
+    pub fn set_overlay(
+        &mut self,
+        text: Option<&str>,
+        dpi: u32,
+        top: u32,
+    ) -> windows::core::Result<bool> {
+        let Some(text) = text else {
+            return Ok(self.overlay.take().is_some());
+        };
+        if self.overlay.as_ref().is_some_and(|o| {
+            o.text == text && o.dpi == dpi && o.top == top && o.client == self.size
+        }) {
+            return Ok(false);
+        }
+        self.overlay = None;
+        let Some(bitmap) =
+            crate::stats_overlay::raster(text, dpi, (self.size.0, self.size.1.saturating_sub(top)))
+        else {
+            return Ok(true);
+        };
+        let (width, height) = bitmap.size();
+        let texture = self.texture((width as u32, height as u32), BACK_FORMAT, Bind::Read)?;
+        // SAFETY: the top-down DIB contains width*height BGRA pixels and is
+        // alive until the immediate-context upload has copied them.
+        unsafe {
+            self.context.UpdateSubresource(
+                &texture,
+                0,
+                None,
+                bitmap.pixels().as_ptr().cast(),
+                width as u32 * 4,
+                0,
+            );
+        }
+        self.overlay = Some(StatsTexture {
+            text: text.to_owned(),
+            dpi,
+            top,
+            client: self.size,
+            srv: Some(self.srv(&texture)?),
+            viewport: Viewport {
+                x: 0,
+                y: i32::try_from(top).unwrap_or(i32::MAX),
+                width: width as u32,
+                height: height as u32,
+            },
+        });
+        Ok(true)
     }
 
     fn back_view(&self) -> windows::core::Result<ID3D11RenderTargetView> {
