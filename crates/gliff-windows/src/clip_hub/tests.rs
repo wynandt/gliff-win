@@ -384,3 +384,38 @@ fn cancel_transfers_cancels_each_of_that_sessions_transfers_by_its_own_id() {
     fx.hub.cancel_transfers(SessionId::from_raw(3));
     assert!(kinds(&mut fx.engines[2]).is_empty(), "none to cancel");
 }
+
+#[test]
+fn another_tabs_empty_offer_never_reaches_windows_or_redirects_a_paste() {
+    let mut fx = fixture(1);
+    offer(&fx.hosts[0], "text/plain");
+    fx.hub.show(Some(SessionId::from_raw(2)));
+    fx.hosts[1].event(HostEvent::RemoteOffer {
+        serial: 2,
+        mime_types: Vec::new(),
+        files: Vec::new(),
+    });
+    assert_eq!(fx.windows.lines(), ["remote-offer text/plain"]);
+    let (result, _answer) = oneshot::channel();
+    fx.input
+        .send(EngineIn::Command(Command::FetchMime {
+            mime_type: "text/plain".to_owned(),
+            serial: 1,
+            result,
+        }))
+        .expect("send");
+    assert_eq!(drained(&mut fx), [vec!["fetch"], vec![], vec![]]);
+    fx.hub.show(Some(SessionId::from_raw(1)));
+    fx.hosts[0].event(HostEvent::RemoteOffer {
+        serial: 3,
+        mime_types: Vec::new(),
+        files: Vec::new(),
+    });
+    let offers: Vec<_> = fx
+        .windows
+        .lines()
+        .into_iter()
+        .filter(|line| line.starts_with("remote-offer"))
+        .collect();
+    assert_eq!(offers, ["remote-offer text/plain", "remote-offer "]);
+}

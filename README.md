@@ -174,6 +174,14 @@ Each tab shows the machine's full name and a dot:
 - **Fullscreen** hides the strip. Move the pointer to the top edge and it
   slides in; move away and it slides out.
 
+When resizing the remote desktop, returning to an earlier window size still
+requests that final size, even if the remote has not applied the first resize.
+Duplicate requests are compared with the latest requested size and scale.
+
+A remote clipboard copy stays with the tab that supplied it when you switch
+tabs. An empty clipboard offer from another tab cannot withdraw that copy;
+the owning tab can withdraw its own offer.
+
 ### Stream statistics
 
 Click the graph button beside fullscreen to show or hide statistics over the

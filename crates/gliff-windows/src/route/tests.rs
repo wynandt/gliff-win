@@ -204,8 +204,8 @@ fn an_empty_offer_from_the_owner_clears_ownership_and_one_from_another_does_not(
     router.remote_offer(id(1), false);
     router.show(Some(id(2)));
     assert!(
-        router.remote_offer(id(2), true),
-        "passed on: it clears Windows too"
+        !router.remote_offer(id(2), true),
+        "another tab cannot withdraw the owner's promise"
     );
     assert_eq!(
         router.fetch_target(),
@@ -213,7 +213,7 @@ fn an_empty_offer_from_the_owner_clears_ownership_and_one_from_another_does_not(
         "id 1 still owns the clipboard"
     );
     router.show(Some(id(1)));
-    router.remote_offer(id(1), true);
+    assert!(router.remote_offer(id(1), true));
     assert_eq!(router.fetch_target(), None);
 }
 
@@ -271,4 +271,11 @@ fn a_sessions_transfers_are_listed_by_the_engines_own_ids() {
     assert_eq!(router.transfers_of(id(2)), [1]);
     router.session_gone(id(1));
     assert_eq!(router.transfers_of(id(1)), Vec::<u32>::new());
+}
+
+#[test]
+fn an_empty_offer_without_an_owner_is_not_forwarded() {
+    let mut router = router(&[1, 2], Some(1));
+    assert!(!router.remote_offer(id(1), true));
+    assert_eq!(router.fetch_target(), None);
 }

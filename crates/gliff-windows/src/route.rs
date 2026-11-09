@@ -172,19 +172,13 @@ impl ClipRouter {
     }
 
     /// A session reports its remote clipboard. True when it goes to Windows:
-    /// only the shown session's does, if it shares. An empty offer from the owner clears
-    /// the ownership; a non-empty one takes it.
+    /// only the shown, sharing session may replace the promise, and an empty
+    /// offer may withdraw only that session's own promise.
     pub fn remote_offer(&mut self, from: SessionId, empty: bool) -> bool {
-        if !self.shares(from) {
+        if !self.shares(from) || (empty && self.owner != Some(from)) {
             return false;
         }
-        if empty {
-            if self.owner == Some(from) {
-                self.owner = None;
-            }
-        } else {
-            self.owner = Some(from);
-        }
+        self.owner = if empty { None } else { Some(from) };
         true
     }
 
