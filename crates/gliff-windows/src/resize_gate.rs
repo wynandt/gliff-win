@@ -2,7 +2,9 @@
 //!
 //! Upstream (gliff 089662fd `crates/gliff/src/main.rs:1859-1945`) polls the
 //! widget every 100 ms and sends once the size has held for 200 ms, gated
-//! against the server's view and the last request, never under 64 px. On
+//! against the server's view and the last request, never under 64 px. This
+//! gate instead deduplicates against the latest request only: a server view
+//! may predate an in-flight resize. On
 //! Windows the window tells us instead of being polled: a drag ends with
 //! `WM_EXITSIZEMOVE` (send once, at once), other size changes (maximise,
 //! snap, F11) settle for the same 200 ms, and `WM_DPICHANGED` sends after
@@ -30,8 +32,8 @@ pub enum Settled {
     Send(ResizeReq),
     /// The size changed since the timer was armed: fire again after this.
     Wait(Duration),
-    /// Nothing pending, or the request is gated (same as the view or the
-    /// last request, or too small): stop the timer.
+    /// Nothing pending, or the request matches the last request or is too
+    /// small: stop the timer.
     Nothing,
 }
 
@@ -44,8 +46,6 @@ pub struct ResizeGate {
     seen: Option<ResizeReq>,
     /// The last request sent (the Hello-time one to begin with).
     requested: ResizeReq,
-    /// The server's view from the latest `StreamConfig`.
-    view: Option<(u32, u32)>,
 }
 
 impl ResizeGate {
@@ -61,7 +61,6 @@ impl ResizeGate {
             pending: None,
             seen: None,
             requested: initial,
-            view: None,
         }
     }
 
@@ -117,13 +116,6 @@ impl ResizeGate {
         }
     }
 
-    /// `UiEvent::StreamConfig`: the server's view. A request matching it is
-    /// not sent (upstream compares the view, not the stream, so a reduced
-    /// stream is not a mismatch).
-    pub fn on_view(&mut self, view: (u32, u32)) {
-        self.view = Some(view);
-    }
-
     /// Sends `client` at once, superseding any pending settle.
     fn now(&mut self, client: (u32, u32), dpi: u32) -> Option<ResizeReq> {
         let req = request_for(client, dpi);
@@ -132,14 +124,12 @@ impl ResizeGate {
         self.gate(req)
     }
 
-    /// Upstream's `request_resize` gate (`main.rs:1926-1945`).
+    /// Latest requested size wins, even if an older server view matches it.
     fn gate(&mut self, req: ResizeReq) -> Option<ResizeReq> {
         if req.width < Self::MIN_SIDE || req.height < Self::MIN_SIDE {
             return None;
         }
-        let size = (req.width, req.height);
-        let last = (self.requested.width, self.requested.height);
-        if self.requested.scale == req.scale && (Some(size) == self.view || size == last) {
+        if self.requested == req {
             return None;
         }
         self.requested = req;

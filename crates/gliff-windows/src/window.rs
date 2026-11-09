@@ -562,7 +562,6 @@ impl App {
                     config.pipeline.map_or("unstated", |p| p.label())
                 ));
                 view.fps_cap = config.fps_cap;
-                view.gate.on_view(g.view);
                 if shown {
                     self.resizes.on_config(g.view, g.scale_milli, ms);
                 }

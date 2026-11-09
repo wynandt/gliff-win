@@ -1,4 +1,4 @@
-//! The gate, one rule per test, each against upstream's behaviour.
+//! Resize settlement and latest-request deduplication.
 
 use std::time::Duration;
 use std::time::Instant;
@@ -20,8 +20,7 @@ fn req(width: u32, height: u32, scale: f32) -> ResizeReq {
 }
 
 fn gate() -> (ResizeGate, Instant) {
-    let mut g = ResizeGate::new(req(1920, 1200, 2.0));
-    g.on_view((1920, 1200));
+    let g = ResizeGate::new(req(1920, 1200, 2.0));
     (g, Instant::now())
 }
 
@@ -119,12 +118,18 @@ fn a_drag_cancels_a_pending_settle() {
 }
 
 #[test]
-fn a_size_matching_the_server_view_is_not_sent() {
+fn a_resize_back_supersedes_a_request_for_another_size() {
     let (mut g, t0) = gate();
-    g.on_view((2560, 1600));
-    let _ = g.on_size((2560, 1600), DPI, Moving::Free, t0);
-    assert_eq!(g.on_settle(t0 + ResizeGate::SETTLE), Settled::Nothing);
-    assert_eq!(g.on_exit_size_move((2560, 1600), DPI), None);
+    assert_eq!(
+        g.on_exit_size_move((2560, 1600), DPI),
+        Some(req(2560, 1600, 2.0))
+    );
+    let _ = g.on_size((1920, 1200), DPI, Moving::Free, t0);
+    assert_eq!(
+        g.on_settle(t0 + ResizeGate::SETTLE),
+        Settled::Send(req(1920, 1200, 2.0))
+    );
+    assert_eq!(g.on_exit_size_move((1920, 1200), DPI), None);
 }
 
 #[test]
