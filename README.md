@@ -490,5 +490,7 @@ scripts/check --host-only  # the same without the Windows steps
 MIT, see [LICENSE](LICENSE), which names both copyright holders: Wynand
 Theunissen for this project's changes and Kevin McConnell for upstream Gliff.
 Parts of the code are derived from upstream Gliff, which is also MIT; see
-[NOTICE](NOTICE). OpenH264 is compiled from source, so Cisco's binary patent
+[NOTICE](NOTICE). The application icon is the upstream Gliff icon
+([assets/gliff.svg](assets/gliff.svg)), also MIT, Copyright (c) 2026 Kevin
+McConnell. OpenH264 is compiled from source, so Cisco's binary patent
 grant does not apply to it.
