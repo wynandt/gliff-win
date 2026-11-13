@@ -422,19 +422,22 @@ fn create_window() -> windows::core::Result<HWND> {
     // static string, and the window procedure is ours.
     unsafe {
         let instance = GetModuleHandleW(None)?;
+        let dpi = GetDpiForSystem();
+        let (hicon, hicon_sm) = crate::app_icon::load(dpi);
         let class = WNDCLASSEXW {
             cbSize: size_of::<WNDCLASSEXW>() as u32,
             style: CS_HREDRAW | CS_VREDRAW,
             lpfnWndProc: Some(window::wndproc),
             hInstance: instance.into(),
+            hIcon: hicon,
             hCursor: LoadCursorW(None, IDC_ARROW)?,
+            hIconSm: hicon_sm,
             lpszClassName: CLASS_NAME,
             ..Default::default()
         };
         if RegisterClassExW(&class) == 0 {
             return Err(windows::core::Error::from_thread());
         }
-        let dpi = GetDpiForSystem();
         let mut rect = RECT {
             left: 0,
             top: 0,
@@ -449,7 +452,7 @@ fn create_window() -> windows::core::Result<HWND> {
             WINDOW_EX_STYLE::default(),
             dpi,
         )?;
-        CreateWindowExW(
+        let hwnd = CreateWindowExW(
             WINDOW_EX_STYLE::default(),
             CLASS_NAME,
             w!("gliff"),
@@ -464,7 +467,9 @@ fn create_window() -> windows::core::Result<HWND> {
             None,
             Some(instance.into()),
             None,
-        )
+        )?;
+        crate::app_icon::apply(hwnd, (hicon, hicon_sm));
+        Ok(hwnd)
     }
 }
 
