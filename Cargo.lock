@@ -297,7 +297,7 @@ dependencies = [
 
 [[package]]
 name = "gliff-windows"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "bytes",
  "clap",
@@ -317,7 +317,7 @@ dependencies = [
 
 [[package]]
 name = "gwin-verify"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "bytes",
