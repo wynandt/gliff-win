@@ -7,6 +7,10 @@ release, see [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
 ## [Unreleased]
 
+- The program now uses upstream Gliff's application icon in the window
+  title, the taskbar, Alt+Tab and Explorer, instead of the generic Windows
+  icon.
+
 ## [0.2.2]
 
 - *GPU decode* is now on by default for every machine. If the GPU cannot

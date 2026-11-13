@@ -34,6 +34,14 @@ carry the upstream copyright notice through LICENSE:
   crates/gwin-verify/src/bin/gwin-fake-server/main.rs
   crates/gwin-verify/src/bin/gwin-fake-server/model.rs
 
+App icon
+--------
+
+The application icon in assets/gliff.svg, and the multi-size assets/gliff.ico
+built from it, is the upstream Gliff icon (pkgbuild/gliff.svg at tag v0.4.3).
+It is MIT licensed, Copyright (c) 2026 Kevin McConnell; the license text is
+in LICENSE.
+
 keycodemapdb
 ------------
 

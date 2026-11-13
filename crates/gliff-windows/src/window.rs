@@ -987,6 +987,7 @@ impl App {
         if let Err(e) = moved {
             crate::logging::line(&format!("WM_DPICHANGED SetWindowPos failed: {e}"));
         }
+        crate::app_icon::apply(self.hwnd, crate::app_icon::load(dpi));
         self.sync_strip();
         let client = picture_size(self.hwnd);
         if let Some(req) = self

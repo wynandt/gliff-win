@@ -6,6 +6,8 @@
 pub mod altgr;
 #[cfg(windows)]
 pub mod app;
+#[cfg(windows)]
+mod app_icon;
 pub mod bounded_wait;
 pub mod change;
 pub mod chord_watch;
