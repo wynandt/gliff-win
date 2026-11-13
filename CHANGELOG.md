@@ -7,9 +7,26 @@ release, see [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
 ## [Unreleased]
 
+## [0.3.0]
+
+- Click the graph button beside fullscreen to show or hide connection
+  statistics over the active tab's picture. They are off at startup.
+  The readout shows white monospace text over 60% black: decoder tiers,
+  FPS, video payload Mbit/s, mean decode time, stream size and the
+  server cap. Switching tabs shows that session's statistics. The
+  readout never takes the keyboard or pointer.
+  ([#41](https://github.com/wynandt/gliff-win/issues/41))
 - The program now uses upstream Gliff's application icon in the window
   title, the taskbar, Alt+Tab and Explorer, instead of the generic Windows
   icon.
+- Resizing the window back to an earlier size could be lost if the remote
+  had not applied the first resize yet, so the picture ended at the
+  intermediate size. The client now still requests the final size.
+  ([#44](https://github.com/wynandt/gliff-win/issues/44))
+- A remote clipboard copy could be cleared when you switched to another tab
+  and that tab announced an empty clipboard. The copy now stays with the
+  tab that supplied it; only that tab can withdraw it.
+  ([#43](https://github.com/wynandt/gliff-win/issues/43))
 
 ## [0.2.2]
 
