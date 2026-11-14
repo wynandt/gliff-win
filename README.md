@@ -440,6 +440,10 @@ What is proven, and where. Numbers are from this repository's records.
 - **Unit and integration tests:** `cargo test --workspace --locked` runs about
   1,500 tests with no failures (6 more are ignored). About 1,100 of them are in the
   client's library. The counts are rounded because they change with every fix. They run on Linux against a fake server and need no second machine.
+- **Held keys:** `formal/held-keys/run` model-checks that keys the client
+  sends to the remote machine are released again, and that Windows is not
+  left holding a key the user has let go of. It is part of `scripts/check`
+  and of CI. See [formal/held-keys](formal/held-keys/README.md).
 - **Pictures of the UI:** `gwin-verify strip-shot` draws the tab strip's scenes
   at 100, 125, 150 and 200%, 104 pictures, and judges each (no overlap, dot size, the
   Failed dot's red, names whole). `gwin-verify panel-shot` draws the failure
@@ -459,6 +463,10 @@ What is proven, and where. Numbers are from this repository's records.
   have no recorded hardware gate of their own. The lists of what is not
   tested are in
   [docs/windows-quirks.md](docs/windows-quirks.md#not-tested-anywhere).
+- **Feature map:**
+  [.cursor/skills/verify-gliff-win/features](.cursor/skills/verify-gliff-win/features/README.md)
+  lists each user-facing feature and the check that exercises it. Native
+  journeys that have not been run are marked unexecuted there.
 
 To run the checks yourself:
 
@@ -482,6 +490,8 @@ scripts/check --host-only  # the same without the Windows steps
   recent hosts list.
 - [docs/development.md](docs/development.md): the test suite and `gwin-verify`.
 - [docs/gwin-verify.md](docs/gwin-verify.md): what each check proves.
+- [The verification map](.cursor/skills/verify-gliff-win/features/README.md):
+  user-facing features and the checks that exercise them.
 - [KNOWN-ISSUES.md](KNOWN-ISSUES.md): what is off by default, not built, not
   tested, or still open.
 

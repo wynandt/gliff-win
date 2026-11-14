@@ -4,7 +4,8 @@
 one JSON object per line, `{"check": ..., "ok": ..., <metrics>}`. It exits
 non-zero if any line has `"ok": false`. This page is the reference for each
 check. For how to build it, where it runs and what to do first, read
-[development.md](development.md).
+[development.md](development.md). The user-facing index of these checks is
+the [feature map](../.cursor/skills/verify-gliff-win/features/README.md).
 
 ## Checks
 

@@ -4,6 +4,7 @@
 #   ssh:   scripts/lint-ssh (no weakened ssh option or key tool in the sources)
 #   registry: scripts/lint-registry (needs Python 3; only the registry modules may touch the registry)
 #   clip-log: scripts/lint-clip-log (the clipboard log can hold no clipboard contents)
+#   held-keys: formal/held-keys/run (TLA+ model of holding and releasing keys)
 #   host:  cargo fmt --check, clippy -D warnings, tests
 #   workflows: scripts/lint-workflows (zizmor and actionlint; installs pinned copies under target/)
 #   msvc:  cargo xwin clippy -D warnings and build for x86_64-pc-windows-msvc
@@ -39,6 +40,9 @@ scripts/lint-registry
 step "lint-clip-log"
 scripts/lint-clip-log --self-test
 scripts/lint-clip-log
+
+step "held-keys"
+formal/held-keys/run
 
 step "fmt"
 cargo fmt --all -- --check
