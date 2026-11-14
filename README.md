@@ -459,6 +459,10 @@ What is proven, and where. Numbers are from this repository's records.
   have no recorded hardware gate of their own. The lists of what is not
   tested are in
   [docs/windows-quirks.md](docs/windows-quirks.md#not-tested-anywhere).
+- **Feature map:**
+  [.cursor/skills/verify-gliff-win/features](.cursor/skills/verify-gliff-win/features/README.md)
+  lists each user-facing feature and the check that exercises it. Native
+  journeys that have not been run are marked unexecuted there.
 
 To run the checks yourself:
 
@@ -482,6 +486,8 @@ scripts/check --host-only  # the same without the Windows steps
   recent hosts list.
 - [docs/development.md](docs/development.md): the test suite and `gwin-verify`.
 - [docs/gwin-verify.md](docs/gwin-verify.md): what each check proves.
+- [The verification map](.cursor/skills/verify-gliff-win/features/README.md):
+  user-facing features and the checks that exercise them.
 - [KNOWN-ISSUES.md](KNOWN-ISSUES.md): what is off by default, not built, not
   tested, or still open.
 
