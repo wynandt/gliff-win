@@ -320,7 +320,7 @@ files and a list of `problems`. It fails if there is one.
 Scenes: `one-tab`, `three-tabs-connecting`, `ten-tabs`, `dots` (every dot state),
 `failed` (the red Failed dot, set directly in the state, with no connection),
 `hover-tab`, `hover-dot`, `hover-add`, `hover-fullscreen`, `dragging`, `long-name`,
-`long-host` (a 40-character host), `near-identical-ips` and `narrow-near-identical-ips`
+`short-names`, `long-host` (a 40-character host), `near-identical-ips` and `narrow-near-identical-ips`
 (twelve addresses that differ in the last digits), `near-identical-hosts` (long names that
 differ only at the end),
 `narrow-chevron` and `narrow-hover-chevron` (a width that needs the overflow

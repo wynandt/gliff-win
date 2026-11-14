@@ -48,7 +48,17 @@ settings*. All are off by default except *GPU decode*, which is on.
   session ends are logged, but the client's exit and the end of ssh's error
   output are not.
 - **An installer.** Releases are a zip of the programs, with no installer.
-  Releases after 0.2.0 are code-signed.
+  Releases from 0.2.1 on are code-signed.
+- **Automatic updates**
+  ([#40](https://github.com/wynandt/gliff-win/issues/40)). Each new version
+  is a zip on the Releases page. The client does not check for updates or
+  install them.
+- **Send the monitor refresh rate in Resize**
+  ([#29](https://github.com/wynandt/gliff-win/issues/29)), after upstream
+  [omacom/gliff#117](https://github.com/omacom/gliff/pull/117) merges.
+- **Send the stale clipboard abort reason**
+  ([#28](https://github.com/wynandt/gliff-win/issues/28)), after upstream
+  [omacom/gliff#118](https://github.com/omacom/gliff/pull/118) merges.
 
 ## Not tested
 
@@ -118,5 +128,9 @@ The client has run on one Windows machine. Not tried yet
   starts; see [docs/clipboard.md](docs/clipboard.md#known-gaps).
 - **The release chord cannot be turned off.** `--release-chord none` is refused
   at start.
+- **Clicking a tab while its session is closing can start a new session**
+  ([#46](https://github.com/wynandt/gliff-win/issues/46)). Disconnecting a
+  live tab ends the session and keeps the tab. A click on that tab can then
+  start a new session while the previous one is still closing.
 
 gliff-win needs `gliff-server` 0.4.1 or later on the remote machine.
