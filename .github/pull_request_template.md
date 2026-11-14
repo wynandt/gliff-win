@@ -14,8 +14,13 @@ re-implemented. Thanks for sending it either way.
 <!-- What you changed and why this approach. -->
 
 ## Proof
-<!-- Show it works against the real thing: the command you ran and its output,
-a log excerpt, or a screenshot. A test that fails before the change and passes
-after is the best proof. -->
+<!-- Show it works against the real thing. A test that fails before the
+change and passes after is the best proof when you can add one. -->
 
 - [ ] `cargo fmt --all`, `cargo clippy --workspace --all-targets --locked -- -D warnings` and `cargo test --workspace --locked` pass
+- [ ] If this change touches how keys are held or let go (the hook, the grab,
+      the key ledger, the local chords, or the release paths in the session
+      or input modules): the output of `formal/held-keys/run` is attached
+      below (or in a comment)
+- [ ] Otherwise: the command you ran and its output, a log excerpt, or a
+      screenshot is attached below (or in a comment)
