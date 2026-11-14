@@ -440,6 +440,10 @@ What is proven, and where. Numbers are from this repository's records.
 - **Unit and integration tests:** `cargo test --workspace --locked` runs about
   1,500 tests with no failures (6 more are ignored). About 1,100 of them are in the
   client's library. The counts are rounded because they change with every fix. They run on Linux against a fake server and need no second machine.
+- **Held keys:** `formal/held-keys/run` model-checks that keys the client
+  sends to the remote machine are released again, and that Windows is not
+  left holding a key the user has let go of. It is part of `scripts/check`
+  and of CI. See [formal/held-keys](formal/held-keys/README.md).
 - **Pictures of the UI:** `gwin-verify strip-shot` draws the tab strip's scenes
   at 100, 125, 150 and 200%, 104 pictures, and judges each (no overlap, dot size, the
   Failed dot's red, names whole). `gwin-verify panel-shot` draws the failure

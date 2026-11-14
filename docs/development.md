@@ -82,20 +82,25 @@ In order:
    clipboard log can hold no clipboard contents or file names. Only
    `clip_log.rs` writes clipboard lines, and its types hold no free text (see
    [The log](clipboard.md#the-log)). Needs Python 3.
-5. `cargo fmt --all -- --check`.
-6. `cargo clippy --workspace --all-targets --locked -- -D warnings`.
-7. `cargo test --workspace --locked`.
-8. `scripts/lint-workflows --self-test`, then `scripts/lint-workflows`: lint
+5. `formal/held-keys/run`: model-check holding and releasing keys with TLC.
+   On x86-64 Linux the first run downloads a pinned TLC and a pinned Java
+   runtime into `target/tla-tools` (SHA-256 checked). Needs the network that
+   first time. About half a minute; see
+   [formal/held-keys](../formal/held-keys/README.md).
+6. `cargo fmt --all -- --check`.
+7. `cargo clippy --workspace --all-targets --locked -- -D warnings`.
+8. `cargo test --workspace --locked`.
+9. `scripts/lint-workflows --self-test`, then `scripts/lint-workflows`: lint
    the files in `.github/workflows` (see [CI and release](#ci-and-release)).
    Needs Python 3 and Go, and the network the first time (it installs two
    pinned tools under `target/`).
-9. Unless `--host-only`: `cargo xwin clippy ... -D warnings`, again with
-   `--features test-hooks`, and `cargo xwin build --release` for
-   `x86_64-pc-windows-msvc`.
+10. Unless `--host-only`: `cargo xwin clippy ... -D warnings`, again with
+    `--features test-hooks`, and `cargo xwin build --release` for
+    `x86_64-pc-windows-msvc`.
 
 It prints `check: all green` at the end. A full run takes several minutes;
 `--host-only` skips the Windows steps (use it while editing, run the full gate
-before you push). Win32 code is checked only by step 9, the Windows CI jobs
+before you push). Win32 code is checked only by step 10, the Windows CI jobs
 and by hand on a real machine.
 
 ## Run on one machine
@@ -413,12 +418,13 @@ week or two, or sooner for a Rust security fix.
 ## CI and release
 
 `.github/workflows/ci.yml` runs on every pull request and every push to
-`main`. It has four jobs. Their names are the names to require in a branch ruleset.
-A release waits for all four.
+`main`. It has five jobs. Their names are the names to require in a branch ruleset.
+A release waits for all five.
 
 | Job (check name) | Runs on | What it does |
 |---|---|---|
 | `lint, fmt, clippy, test (linux)` | ubuntu | `lint-terms`, `lint-ssh`, `lint-registry`, `lint-clip-log`, `cargo fmt --check`, clippy with `-D warnings`, `cargo test` on the default threads |
+| `held-keys (linux)` | ubuntu | `formal/held-keys/run`: the TLA+ model of holding and releasing keys |
 | `clippy, build (windows)` | windows | clippy with `-D warnings`, again with `--features test-hooks`, and a release build for `x86_64-pc-windows-msvc` |
 | `test (windows)` | windows | `cargo test -p gliff-windows`: the tests of the Windows-only code that can run without a desktop, such as the registry code in `lockreg.rs`. The hook, window and clipboard glue still need a hand check on Windows |
 | `lint workflows` | ubuntu | `scripts/lint-workflows`: zizmor and actionlint over `.github/workflows` |
@@ -427,7 +433,7 @@ A release waits for all four.
 
 1. `tagged commit is on main` fails unless the tagged commit is an ancestor of
    `origin/main`.
-2. The four CI jobs run, called from `ci.yml`.
+2. The five CI jobs run, called from `ci.yml`.
 3. `build (windows)`, with a read-only token, refuses a `Cargo.toml` version
    that is not plain semantic versioning (`1.2.3` or `1.2.3-rc.1`) or that does
    not equal the tag without its `v`, and a `CHANGELOG.md` with no section for
