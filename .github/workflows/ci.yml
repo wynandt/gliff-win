@@ -1,6 +1,8 @@
 # CI for gliff-win. It mirrors the local gate in scripts/check:
 #   host job : lint-terms, lint-ssh, lint-registry, lint-clip-log, fmt, clippy -D warnings, tests
-#              (Linux, like `scripts/check --host-only`)
+#              (Linux, like `scripts/check --host-only` without held-keys)
+#   held-keys job : formal/held-keys/run (Linux; its own job so it can start
+#                   without the Rust toolchain, about half a minute)
 #   msvc job : clippy -D warnings and a release build for x86_64-pc-windows-msvc
 #   windows-test job : the gliff-windows tests on Windows, where the Windows-only code compiles
 #   workflows job : scripts/lint-workflows (zizmor and actionlint) over .github/workflows
@@ -159,3 +161,17 @@ jobs:
         run: |
           scripts/lint-workflows --self-test
           scripts/lint-workflows
+
+  held-keys:
+    name: held-keys (linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # First run downloads a pinned TLC and, on this runner, a pinned JRE
+      # into target/tla-tools (SHA-256 checked). Later steps are not needed.
+      - name: held-keys
+        run: formal/held-keys/run

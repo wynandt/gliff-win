@@ -1,9 +1,10 @@
 # Held-keys model check
 
 A TLA+ model of how the client holds and lets go of keys, checked with TLC.
-Run it when a change touches hook.rs, grab.rs, grab_state.rs, key_ledger.rs,
+`scripts/check` and CI (`held-keys (linux)`) run it on every change. Run it
+alone when a change touches hook.rs, grab.rs, grab_state.rs, key_ledger.rs,
 chord_watch.rs, local_chords.rs, route.rs, or the release paths in
-session/machine.rs or input.rs, and before merging such a change.
+session/machine.rs or input.rs, or when you want only this check.
 
 ## The promise
 
