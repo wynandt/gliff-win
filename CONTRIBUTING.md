@@ -33,10 +33,13 @@ fix; the PR template shows how.
 
 ## What makes a change mergeable
 Proof, not promises. Tools and assistants are welcome, for code, reports and
-review. What counts is verification: show the change works against the real
-thing (a command and its output, a log, a screenshot), and add a test that fails
-before the change and passes after when you can. It does not matter who or what
-wrote the change.
+review. What counts is verification. If the change touches how keys are held
+or let go (the hook, the grab, the key ledger, the local chords, or the
+release paths in the session or input modules), attach the output of
+`formal/held-keys/run`. Otherwise attach the command you ran and its output,
+a log excerpt, or a screenshot. Add a test that fails before the change and
+passes after when you can. The pull request template lists these. It does
+not matter who or what wrote the change.
 
 ## Releasing
 For the maintainer. A pushed `v*` tag runs `.github/workflows/release.yml`: it
