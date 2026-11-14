@@ -1037,7 +1037,7 @@ In rough priority order:
    (an OLE `IDataObject`). The spool covers parity until then.
    HTML and RTF are written and unit-tested, but `gwin-verify clipboard` has no
    case for them yet.
-5. **An installer.** Releases are a zip built and, after 0.2.0, code-signed
+5. **An installer.** Releases are a zip built and, from 0.2.1 on, code-signed
    by CI (see [development.md](development.md#ci-and-release)).
 6. **The tray** and key setup from the window. The tab strip,
    its address bar, the ssh error panel and recent hosts are built.

@@ -5,8 +5,8 @@ desktop for Hyprland. gliff-win shows the Hyprland session of another machine
 in a normal, resizable Windows window, with one tab for each machine. All it
 needs between the two machines is ssh: no open ports, no accounts, no relay.
 
-This is version 0.2. It works and is used daily, and has been tried on one
-set of hardware. See [Not in 0.2](#not-in-02) and
+This is version 0.3. It works and is used daily, and has been tried on one
+set of hardware. See [Not in 0.3](#not-in-03) and
 [Verification](#verification).
 
 ## Status and contributing
@@ -40,6 +40,9 @@ privately through the Security tab, see [SECURITY.md](SECURITY.md).
   per machine, is on by default and falls back to the CPU (OpenH264) on its
   own; untick it to decode on the CPU ([details](docs/settings.md#gpu-decode)). The strip's fullscreen button, the window menu or `F11` (while Windows has
   the keyboard) toggles borderless fullscreen.
+- **Connection statistics.** Click the graph button beside fullscreen to show
+  or hide a live readout over the active tab's picture. It is off at startup
+  and never takes the keyboard or pointer.
 - **Keyboard and mouse.** Every key, including Super chords, goes to Hyprland
   while the window has the keyboard. Your Windows layout is sent as an XKB
   keymap. A mouse wheel scrolls in notches; a precision touchpad scrolls
@@ -85,7 +88,7 @@ Get-FileHash .\gliff-win-vX.Y.Z-x86_64-pc-windows-msvc.zip
 Each release also carries a build provenance attestation, which the GitHub CLI
 checks with `gh attestation verify <file> --repo wynandt/gliff-win`.
 
-**Releases after 0.2.0 are signed** with an Azure Artifact Signing certificate.
+**Releases from 0.2.1 on are signed** with an Azure Artifact Signing certificate.
 To check the signature, right-click the `.exe` file, choose **Properties**, then
 the **Digital Signatures** tab, and select the signature to view its details. You
 can also verify it with `signtool`:
@@ -308,7 +311,7 @@ reconnect; changing it in the remote desktop's own display settings is not
 supported and blanks the picture for 10 seconds or more
 ([details](docs/settings.md#which-remote-screen-the-window-shows)).
 
-## Not in 0.2
+## Not in 0.3
 
 - **System tray.** The window is the only place the client lives. A tray
   needs its own design for what closing the window means.
@@ -381,7 +384,7 @@ means no document in this repository plans it.
     ignored and logged. Not planned yet.
 12. **A package or installer.** The Linux client ships as a package.
     gliff-win ships as a zip of the programs on the Releases page, with no
-    installer. Releases after 0.2.0 are code-signed.
+    installer. Releases from 0.2.1 on are code-signed.
 
 The full list of limits and open issues is in [KNOWN-ISSUES.md](KNOWN-ISSUES.md).
 
@@ -436,7 +439,7 @@ What is proven, and where. Numbers are from this repository's records.
 
 - **Digital signatures:** How to check a signed release: run `signtool verify /pa <file>`
   on Windows, or right-click the exe, choose Properties, then the Digital Signatures
-  tab. Releases after 0.2.0 are signed with an Azure Artifact Signing certificate.
+  tab. Releases from 0.2.1 on are signed with an Azure Artifact Signing certificate.
 - **Unit and integration tests:** `cargo test --workspace --locked` runs about
   1,500 tests with no failures (6 more are ignored). About 1,100 of them are in the
   client's library. The counts are rounded because they change with every fix. They run on Linux against a fake server and need no second machine.
@@ -471,7 +474,7 @@ What is proven, and where. Numbers are from this repository's records.
 To run the checks yourself:
 
 ```
-scripts/check              # lint, fmt, clippy, tests, then the Windows clippy and release build
+scripts/check              # lints, held-keys, fmt, clippy, tests, then the Windows clippy and release build
 scripts/check --host-only  # the same without the Windows steps
 ```
 

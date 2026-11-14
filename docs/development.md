@@ -9,10 +9,11 @@ reference for the verification tool is [gwin-verify.md](gwin-verify.md).
 gliff-win is checked at three levels:
 
 1. **`scripts/check`**: the terms, ssh, registry and clipboard-log lints,
-   format, clippy, host tests, the workflow lint and the Windows cross-build.
-   Everything must pass before a change lands. [CI](#ci-and-release) runs
-   most of them on every pull request (not the ssh, registry and
-   clipboard-log lints), but the gate is this script, run before you push.
+   the held-keys model, format, clippy, host tests, the workflow lint and
+   the Windows cross-build. Everything must pass before a change lands.
+   [CI](#ci-and-release) runs the same checks on every pull request (the
+   held-keys model as its own job), but the gate is this script, run
+   before you push.
 2. **`gwin-verify`**: a command line that proves one behaviour of the client
    per subcommand and prints one JSON line each. Most subcommands run on Linux
    against stand-ins.
@@ -418,8 +419,8 @@ week or two, or sooner for a Rust security fix.
 ## CI and release
 
 `.github/workflows/ci.yml` runs on every pull request and every push to
-`main`. It has five jobs. Their names are the names to require in a branch ruleset.
-A release waits for all five.
+`main`. It has five jobs. The branch ruleset on `main` requires these five
+names. A release waits for all five.
 
 | Job (check name) | Runs on | What it does |
 |---|---|---|
