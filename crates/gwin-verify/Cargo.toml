@@ -21,6 +21,12 @@ path = "src/main.rs"
 name = "gwin-fake-server"
 path = "src/bin/gwin-fake-server/main.rs"
 
+# Stand-in ssh that runs gwin-fake-server on the same machine, so the real
+# Windows client can run a session with no network (verification scaffolding).
+[[bin]]
+name = "gwin-fake-ssh"
+path = "src/bin/gwin-fake-ssh/main.rs"
+
 [dependencies]
 anyhow.workspace = true
 bytes.workspace = true
