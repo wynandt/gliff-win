@@ -36,6 +36,13 @@ The check overwrites both clipboards.
   is captured, HTML and rich text) stay in `docs/clipboard.md`; do not
   claim them.
 
+Loopback (partial): `launch -Clipboard` leaves sharing on, and the fake
+server logs each `clipboard_offer` with its MIME types (never the data).
+Copying text on the Windows machine then shows an offer line. That proves
+only that an offer reached the remote side; the fake server never pastes
+or offers back, so CLIP-1 still needs the remote machine. Copying
+overwrites the Windows clipboard.
+
 Host companions (not native proof):
 
 - `cargo test -p gwin-verify --locked` for the clipboard driver and judge

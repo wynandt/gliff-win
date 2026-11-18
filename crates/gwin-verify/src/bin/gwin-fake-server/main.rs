@@ -47,7 +47,12 @@
 //!
 //! `GWIN_FAKE_HYPR_DIR`, when set, is where it writes `monitors.json` and
 //! `clients.json` for `scripts/fake-bin/hyprctl`.
+//!
+//! `GWIN_FAKE_INPUT_LOG`, when set, is a file it appends what it received
+//! to, one JSON line per key, button, wheel step, Resize and clipboard offer,
+//! and a last line with the keys still held at Bye (see `input_log.rs`).
 
+mod input_log;
 mod model;
 
 // Shared with gwin-verify; the compare half is unused here.
@@ -80,6 +85,7 @@ use tokio::io::Stdout;
 use tokio::sync::mpsc;
 use tokio::time::Instant;
 
+use crate::input_log::InputLog;
 use crate::pattern::Content;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -195,9 +201,12 @@ async fn serve() -> anyhow::Result<()> {
             }
         })
         .unwrap_or_else(|| format!("gliff-{}", std::process::id()));
+    let mut input_log = InputLog::from_env()?;
     let mut reader = Framed::new(tokio::io::stdin());
     let writer = Framed::new(tokio::io::stdout());
-    let caps_max = match reader.read_msg::<ClientMsg>().await? {
+    let hello = reader.read_msg::<ClientMsg>().await?;
+    input_log.record(&hello)?;
+    let caps_max = match hello {
         ClientMsg::Hello { version, caps, .. } if version == PROTOCOL_VERSION => {
             (caps.max_width, caps.max_height)
         }
@@ -243,9 +252,15 @@ async fn serve() -> anyhow::Result<()> {
         tokio::select! {
             msg = inbound.recv() => match msg {
                 Some(ClientMsg::Pong { t }) if t == first_ping => ponged = true,
-                Some(ClientMsg::Bye) if ponged => break,
+                Some(ClientMsg::Bye) if ponged => {
+                    input_log.bye()?;
+                    break;
+                }
                 Some(ClientMsg::Bye) => anyhow::bail!("Bye before Pong"),
-                Some(msg) => server.on_client(msg).await?,
+                Some(msg) => {
+                    input_log.record(&msg)?;
+                    server.on_client(msg).await?
+                }
                 None => anyhow::bail!("closed without Bye"),
             },
             _ = tokio::time::sleep_until(next_frame) => {

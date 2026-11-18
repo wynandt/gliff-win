@@ -32,6 +32,25 @@ configured authorized target. Never provision trust or change ssh policy.
 - Second process: start again with a target; it becomes a new tab on the
   window that is already open, not a second window.
 
+Loopback (no remote machine):
+
+- Connect: `gwin-native.ps1 launch -Bundle .` then `doctor`. The target
+  `verify@loopback` reaches a streaming session through `--ssh
+  gwin-fake-ssh.exe`; `input.jsonl` starts with a `hello` line.
+- Reconnect (CONNECT-3): `gwin-native.ps1 drop -Run $run` kills the fake
+  server this run started. Pass: a second `hello` in `input.jsonl` and a
+  streaming session in `stats.json` within 30 s; `evidence\drop.json`
+  keeps `sessions` with `retries`.
+- Windows run: passed under Windows PowerShell 5.1 on one high-DPI laptop
+  screen at 200% scale, built from this branch, in a run folder with a fresh
+  config. Connect and reconnect both passed:
+  the second `hello` arrived and the session was streaming with
+  `retries` 1.
+- Refused key and changed host key cannot be produced on the loopback;
+  `GWIN_FAKE_SSH_STDERR` with a file from
+  `crates/gliff-windows/tests/ssh_corpus` makes the fake ssh fail with
+  that real text, but `launch` does not set it yet.
+
 Host companions (not native proof):
 
 - `gwin-verify ssh <target>`: HelloAck, Ping/Pong, StreamConfig, Bye. Stand-ins
