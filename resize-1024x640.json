@@ -1,0 +1,28 @@
+﻿{
+    "step":  "resize",
+    "ok":  true,
+    "reasons":  [
+
+                ],
+    "window":  [
+                   207,
+                   196,
+                   1002,
+                   629
+               ],
+    "remote_before":  {
+                          "ev":  "resize",
+                          "width":  2880,
+                          "height":  1800,
+                          "scale":  2.0
+                      },
+    "remote_new":  [
+                       {
+                           "ev":  "resize",
+                           "width":  998,
+                           "height":  504,
+                           "scale":  2.0
+                       }
+                   ],
+    "shot":  "%TEMP%\\gwin-verify-20261118-161134-bb008a\\evidence\\resize-1024x640.png"
+}
