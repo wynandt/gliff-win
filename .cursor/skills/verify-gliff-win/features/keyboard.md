@@ -42,8 +42,23 @@ puts the value back.
   (`Win+Shift+S` by default), and that the log names no key other than a
   modifier.
 
+Loopback (no remote machine; parent skill's loopback launch and doctor):
+
+- Type: `gwin-native.ps1 type -Run $run -Text gliff`. It clicks the
+  picture, types with `SendInput` scan codes, then presses `Ctrl+Alt+Home`.
+  Pass: `got` equals `want` (each key down then up, in order, evdev
+  34 38 23 33 33), `remote_held` is empty, and `evidence\type.json`,
+  `type-before.png` and `type-after.png` exist. After `cleanup`, the
+  `bye` line in `input.jsonl` has empty `held_keys`.
+- This covers KEYS-1 (click to grab, release chord) and the remote half of
+  KEYS-3 for plain keys. Chords Hyprland must act on still need the remote
+  machine and `gwin-verify keys`.
+
 Host companions (not native proof):
 
+- `cargo test -p gwin-verify --test loopback --locked`: keys through the
+  real session driver reach the fake server in order, a released input
+  sends its Ups before any Bye, and nothing is held at Bye.
 - `formal/held-keys/run`: TLA+ model of holding and releasing keys. Run it
   when changing the hook, the grab, the key ledger, the local chords, or the
   release paths. See `formal/held-keys/README.md`.

@@ -7,6 +7,7 @@ and doctor. Preserve proof after cleanup and record each skipped entry
 point separately.
 
 - [Connect](connect.md): address bar, command-line targets, ssh start, retry.
+- [Resize](resize.md): the window size reaching the remote output.
 - [Failure panel](failure-panel.md): the panel when a connection fails.
 - [Tabs](tabs.md): strip, dots, menus, switch chords, several sessions.
 - [Fullscreen](fullscreen.md): borderless fullscreen and the hidden strip.
@@ -18,3 +19,7 @@ point separately.
 
 A configured authorized server, SSH trust and an unlocked disposable Windows
 session are preconditions, not things these recipes may silently create.
+The loopback launch in the parent skill needs none of the first two: the
+real client talks to `gwin-fake-server.exe` on the Windows machine, and its
+`input.jsonl` records what the remote side received. Journeys marked
+*loopback* run there; the others need a real remote machine.
