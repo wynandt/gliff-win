@@ -12,6 +12,25 @@ It shows a remote Hyprland session in a normal Windows window, one tab per
 machine, with ssh as the only transport. It speaks the stock `gliff-server`
 protocol unchanged.
 
+## Working with pstack
+
+This repository follows [pstack](https://github.com/cursor/plugins/tree/main/pstack).
+If you have pstack installed, start a task with [`/poteto-mode`]. It picks
+the matching playbook. The process sections below map to these playbooks
+and skills. Public copies live under the
+[pstack tree](https://github.com/cursor/plugins/blob/main/pstack/):
+
+- Bug fix uses the [bug-fix playbook]. Use [`/tdd`] when a cheap local test exists.
+- Feature uses the [feature playbook]. Use [`/architect`] before you add a
+  module, and [`/technical-writing`] for README-first docs.
+- Refactor uses the [refactoring playbook].
+- Investigation uses [`/how`] and [`/why`].
+- Performance uses the [perf-issue playbook] and [`/benchmark-checklist`].
+- Verification uses the repo [verify-gliff-win](.cursor/skills/verify-gliff-win/SKILL.md)
+  skill. Use [`/maintain-verification-skill`] to keep it current.
+
+If you do not have pstack, follow the plain process sections below.
+
 ## Choose a process
 
 Pick one process and stay with it. Name it in the pull request.
@@ -118,3 +137,16 @@ the first commit of the behaviour they describe.
 Do not merge a pull request, push a `v*` tag, or publish a release unless
 the maintainer has approved that exact step. Release steps are in
 [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
+
+[`/poteto-mode`]: https://github.com/cursor/plugins/blob/main/pstack/skills/poteto-mode/SKILL.md
+[bug-fix playbook]: https://github.com/cursor/plugins/blob/main/pstack/skills/poteto-mode/playbooks/bug-fix.md
+[`/tdd`]: https://github.com/cursor/plugins/blob/main/pstack/skills/tdd/SKILL.md
+[feature playbook]: https://github.com/cursor/plugins/blob/main/pstack/skills/poteto-mode/playbooks/feature.md
+[`/architect`]: https://github.com/cursor/plugins/blob/main/pstack/skills/architect/SKILL.md
+[`/technical-writing`]: https://github.com/cursor/plugins/blob/main/pstack/skills/technical-writing/SKILL.md
+[refactoring playbook]: https://github.com/cursor/plugins/blob/main/pstack/skills/poteto-mode/playbooks/refactoring.md
+[`/how`]: https://github.com/cursor/plugins/blob/main/pstack/skills/how/SKILL.md
+[`/why`]: https://github.com/cursor/plugins/blob/main/pstack/skills/why/SKILL.md
+[perf-issue playbook]: https://github.com/cursor/plugins/blob/main/pstack/skills/poteto-mode/playbooks/perf-issue.md
+[`/benchmark-checklist`]: https://github.com/cursor/plugins/blob/main/pstack/skills/benchmark-checklist/SKILL.md
+[`/maintain-verification-skill`]: https://github.com/cursor/plugins/blob/main/pstack/skills/maintain-verification-skill/SKILL.md
