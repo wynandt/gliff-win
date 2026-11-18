@@ -53,6 +53,12 @@ Loopback (no remote machine; parent skill's loopback launch and doctor):
 - This covers KEYS-1 (click to grab, release chord) and the remote half of
   KEYS-3 for plain keys. Chords Hyprland must act on still need the remote
   machine and `gwin-verify keys`.
+- Windows run: passed under Windows PowerShell 5.1 on one high-DPI laptop
+  screen at 200% scale, built from this branch, in a run folder with a fresh
+  config. `got` matched `want`, `remote_held`
+  was empty, and the `bye` line held nothing. The release chord's own
+  `Ctrl` and `Alt` (29, 56) reach the remote side down and up before the
+  grab is released; that is expected.
 
 Host companions (not native proof):
 

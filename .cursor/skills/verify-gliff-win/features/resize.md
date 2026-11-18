@@ -54,5 +54,9 @@ Host companions (not native proof):
 `resize` sets the outer window size; the Resize carries the client area
 in physical pixels, so the remote numbers are smaller than `-Width` and
 `-Height` and scale with DPI. The fake server clamps to the client's
-advertised maximum, as upstream does. None of these loopback journeys has
-been run on a Windows machine yet.
+advertised maximum, as upstream does.
+
+Windows run: the single **Resize** journey (RESIZE-1) passed under Windows
+PowerShell 5.1 on one high-DPI laptop screen at 200% scale. A 1024x640
+outer window gave a remote `resize` of 998x504 at scale 2.0. **Back and
+forth** (RESIZE-2) and **Reload** (RESIZE-3) have not run on Windows yet.

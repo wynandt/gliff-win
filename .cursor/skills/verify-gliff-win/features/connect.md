@@ -41,6 +41,11 @@ Loopback (no remote machine):
   server this run started. Pass: a second `hello` in `input.jsonl` and a
   streaming session in `stats.json` within 30 s; `evidence\drop.json`
   keeps `sessions` with `retries`.
+- Windows run: passed under Windows PowerShell 5.1 on one high-DPI laptop
+  screen at 200% scale, built from this branch, in a run folder with a fresh
+  config. Connect and reconnect both passed:
+  the second `hello` arrived and the session was streaming with
+  `retries` 1.
 - Refused key and changed host key cannot be produced on the loopback;
   `GWIN_FAKE_SSH_STDERR` with a file from
   `crates/gliff-windows/tests/ssh_corpus` makes the fake ssh fail with

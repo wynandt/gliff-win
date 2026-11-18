@@ -22,4 +22,6 @@ session are preconditions, not things these recipes may silently create.
 The loopback launch in the parent skill needs none of the first two: the
 real client talks to `gwin-fake-server.exe` on the Windows machine, and its
 `input.jsonl` records what the remote side received. Journeys marked
-*loopback* run there; the others need a real remote machine.
+*loopback* run there; the others need a real remote machine. Loopback
+connect, reconnect, typing and a single resize have passed on Windows;
+each entry records its run.

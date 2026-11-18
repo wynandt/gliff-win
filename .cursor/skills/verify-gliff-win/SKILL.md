@@ -8,9 +8,11 @@ description: Verify the gliff-win Windows desktop client against the feature map
 Read [the feature map](features/README.md) before choosing an entry point.
 Host checks, picture judges and cross-builds are not native UI evidence.
 Native journeys that have not been run on an authorized Windows session are
-marked unexecuted in the map; do not claim those. The loopback launch and
-`scripts/gwin-native.ps1` were added without a Windows run: until a map
-entry records one, treat their first run as the proof of the helper itself.
+marked unexecuted in the map; do not claim those. The loopback `launch`,
+`doctor`, `shot`, `type`, `resize` (one size), `drop` and `cleanup` have
+passed on Windows (Windows PowerShell 5.1, one screen at 200%); the map
+entries that rely on them say so. Every other loopback journey has not run
+on Windows yet.
 
 ## Launch
 
@@ -131,7 +133,7 @@ and exits 1 on failure:
 
 | Verb | User action | What it judges |
 |---|---|---|
-| `shot -Name N` | none | PNG of the owned window, `evidence\N.png` |
+| `shot -Name N` | none | PNG of the owned window's visible frame (no pixels of windows behind it), `evidence\N.png` |
 | `type -Text gliff` | click the picture, type, `Ctrl+Alt+Home` | the remote side received each key down and up in order, and holds no key afterwards |
 | `resize -Width W -Height H` | resize the window | the remote side received a new Resize |
 | `drop` | none (the fake server it started is killed) | the tab reconnects: a second `hello` and a streaming session |

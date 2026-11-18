@@ -86,6 +86,7 @@ public static class GwinNative {
   [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
   [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr h);
   [DllImport("user32.dll")] static extern IntPtr WindowFromPoint(POINT p);
+  [DllImport("dwmapi.dll")] static extern int DwmGetWindowAttribute(IntPtr h, int attr, out RECT r, int size);
   [DllImport("user32.dll")] static extern IntPtr GetAncestor(IntPtr h, uint flags);
   [DllImport("user32.dll")] static extern int GetSystemMetrics(int i);
   [DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint flags);
@@ -101,8 +102,11 @@ public static class GwinNative {
     return GetAncestor(WindowFromPoint(p), 2) == h;
   }
 
+  // The visible frame (DWMWA_EXTENDED_FRAME_BOUNDS), without the invisible
+  // resize border, so a capture holds no pixels of the windows behind.
   public static int[] Rect(IntPtr h) {
-    RECT r; GetWindowRect(h, out r);
+    RECT r;
+    if (DwmGetWindowAttribute(h, 9, out r, Marshal.SizeOf(typeof(RECT))) != 0) GetWindowRect(h, out r);
     return new int[] { r.Left, r.Top, r.Right - r.Left, r.Bottom - r.Top };
   }
 
