@@ -37,9 +37,12 @@ param(
   [string]$Run,
   [string]$Fault = '',
   [switch]$Clipboard,
+  [ValidatePattern('^[a-zA-Z0-9_-]+$')]
   [string]$Name = 'shot',
   [string]$Text = 'gliff',
+  [ValidateRange(320, 4096)]
   [int]$Width = 1024,
+  [ValidateRange(240, 4096)]
   [int]$Height = 640,
   [int]$TimeoutSec = 30
 )
@@ -82,6 +85,8 @@ public static class GwinNative {
   [DllImport("user32.dll")] static extern bool SetForegroundWindow(IntPtr h);
   [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
   [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr h);
+  [DllImport("user32.dll")] static extern IntPtr WindowFromPoint(POINT p);
+  [DllImport("user32.dll")] static extern IntPtr GetAncestor(IntPtr h, uint flags);
   [DllImport("user32.dll")] static extern int GetSystemMetrics(int i);
   [DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint flags);
   [DllImport("user32.dll", SetLastError = true)] static extern uint SendInput(uint n, INPUT[] inputs, int size);
@@ -90,6 +95,11 @@ public static class GwinNative {
   public static bool Visible(IntPtr h) { return IsWindowVisible(h); }
   public static bool IsForeground(IntPtr h) { return GetForegroundWindow() == h; }
   public static bool Focus(IntPtr h) { return SetForegroundWindow(h); }
+  // True when the top-level window under a screen point is h (GA_ROOT).
+  public static bool Owns(IntPtr h, int x, int y) {
+    POINT p; p.X = x; p.Y = y;
+    return GetAncestor(WindowFromPoint(p), 2) == h;
+  }
 
   public static int[] Rect(IntPtr h) {
     RECT r; GetWindowRect(h, out r);
@@ -183,13 +193,15 @@ function Get-OwnedClient($state) {
   $p = Get-Process -Id $state.pid -ErrorAction SilentlyContinue
   if (-not $p) { return $null }
   try { $path = $p.Path } catch { return $null }
-  if ($path -ne $state.exe) { return $null }
+  if ($path -ne $state.exe -or $p.StartTime.ToUniversalTime().Ticks.ToString() -ne $state.started_ticks) { return $null }
   $p
 }
 
 # PIDs below the owned client whose program is inside the bundle: the fake
 # ssh and the fake server it runs.
 function Get-OwnedChildren($state) {
+  $root = Get-Process -Id $state.pid -ErrorAction SilentlyContinue
+  if ($root -and -not (Get-OwnedClient $state)) { return @() }
   $all = @(Get-CimInstance Win32_Process)
   $tree = @($state.pid)
   $found = @()
@@ -199,8 +211,10 @@ function Get-OwnedChildren($state) {
     foreach ($p in $all) {
       if (($tree -contains [int]$p.ParentProcessId) -and -not ($tree -contains [int]$p.ProcessId)) {
         $tree += [int]$p.ProcessId
-        if ($p.ExecutablePath -and $p.ExecutablePath.StartsWith($state.bundle, [StringComparison]::OrdinalIgnoreCase)) {
-          $found += [pscustomobject]@{ pid = [int]$p.ProcessId; exe = $p.ExecutablePath }
+        $allowed = @((Join-Path $state.bundle 'gwin-fake-ssh.exe'), (Join-Path $state.bundle 'gwin-fake-server.exe'))
+        if ($p.ExecutablePath -and $allowed -contains $p.ExecutablePath -and
+            $p.CreationDate.ToUniversalTime().Ticks -ge [long]$state.started_ticks) {
+          $found += [pscustomobject]@{ pid = [int]$p.ProcessId; exe = $p.ExecutablePath; started_ticks = $p.CreationDate.ToUniversalTime().Ticks.ToString() }
         }
         $grew = $true
       }
@@ -264,10 +278,22 @@ function Get-Hwnd($state) {
   [IntPtr]$client.MainWindowHandle
 }
 
-function Save-Shot($state, $name) {
-  $hwnd = Get-Hwnd $state
+# Bring the owned window to the front. If Windows refuses (foreground lock),
+# click its client centre, but only when that point is the owned window.
+function Set-Front($hwnd) {
   [void][GwinNative]::Focus($hwnd)
   Start-Sleep -Milliseconds 300
+  if ([GwinNative]::IsForeground($hwnd)) { return }
+  $c = [GwinNative]::ClientCentre($hwnd)
+  if (-not [GwinNative]::Owns($hwnd, $c[0], $c[1])) { throw 'the owned window is covered; no capture or input sent' }
+  [GwinNative]::Click($c[0], $c[1])
+  Start-Sleep -Milliseconds 300
+  if (-not [GwinNative]::IsForeground($hwnd)) { throw 'could not bring the owned window to the front; no capture or input sent' }
+}
+
+function Save-Shot($state, $name) {
+  $hwnd = Get-Hwnd $state
+  Set-Front $hwnd
   $r = [GwinNative]::Rect($hwnd)
   $dir = Join-Path $state.run 'evidence'
   New-Item -ItemType Directory -Force $dir | Out-Null
@@ -293,7 +319,7 @@ switch ($Verb) {
       exe_sha256 = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLower()
       input_log = (Join-Path $runDir 'input.jsonl'); stats = (Join-Path $runDir 'stats.json')
       config = (Join-Path $runDir 'config'); logs = (Join-Path $runDir 'logs')
-      fault = $Fault; clipboard = [bool]$Clipboard; started = (Get-Date).ToString('o'); pid = 0
+      fault = $Fault; clipboard = [bool]$Clipboard; started = (Get-Date).ToString('o'); started_ticks = ''; pid = 0
     }
     $argList = @(
       '--config-dir', ('"' + $state.config + '"'), '--log-dir', ('"' + $state.logs + '"'),
@@ -311,6 +337,7 @@ switch ($Verb) {
       Remove-Item Env:GWIN_FAKE_SERVER -ErrorAction SilentlyContinue
     }
     $state.pid = $p.Id
+    $state.started_ticks = $p.StartTime.ToUniversalTime().Ticks.ToString()
     $state = [pscustomobject]$state
     Save-RunState $state
     $deadline = (Get-Date).AddSeconds($TimeoutSec)
@@ -340,10 +367,13 @@ switch ($Verb) {
     $hwnd = Get-Hwnd $state
     $pre = Save-Shot $state 'type-before'
     $centre = [GwinNative]::ClientCentre($hwnd)
+    if (-not [GwinNative]::Owns($hwnd, $centre[0], $centre[1])) { throw 'the owned window is covered; no keys sent' }
     # Clicking the picture gives the window the keyboard (KEYS-1).
     [GwinNative]::Click($centre[0], $centre[1])
     Start-Sleep -Milliseconds 400
+    if (-not [GwinNative]::IsForeground($hwnd)) { throw 'owned window lost foreground; no keys sent' }
     foreach ($c in $chars) {
+      if (-not [GwinNative]::IsForeground($hwnd)) { throw 'owned window lost foreground during typing; run cleanup' }
       [GwinNative]::Key([uint16]$ScanOf[$c], $false, $true); Start-Sleep -Milliseconds 30
       [GwinNative]::Key([uint16]$ScanOf[$c], $false, $false); Start-Sleep -Milliseconds 30
     }
@@ -440,7 +470,12 @@ switch ($Verb) {
       $p = Get-Process -Id $c.pid -ErrorAction SilentlyContinue
       if ($p) {
         try { $path = $p.Path } catch { $path = $null }
-        if ($path -eq $c.exe) { Stop-Process -Id $c.pid -Force; $ended += $c.pid }
+        # Win32_Process.CreationDate has microsecond precision; StartTime
+        # may have sub-microsecond ticks. Compare at the shared precision.
+        $ticks = $p.StartTime.ToUniversalTime().Ticks
+        if ($path -eq $c.exe -and [Math]::Abs($ticks - [long]$c.started_ticks) -lt 10) {
+          Stop-Process -Id $c.pid -Force; $ended += $c.pid
+        }
       }
     }
     if (Test-Path $state.config) { Remove-Item -Recurse -Force $state.config }
