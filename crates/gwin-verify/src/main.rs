@@ -316,7 +316,7 @@ enum Check {
     Keys {
         #[command(flatten)]
         input: InputArgs,
-        /// Run only these groups (default: all but `lock`).
+        /// Run only these groups (default: all but `lock` and `manual`).
         #[arg(long, value_enum)]
         only: Vec<input_check::KeyGroup>,
         /// Run only the cases whose name contains this text (any case of
