@@ -4,9 +4,15 @@
 //! machine; only the Windows harness grabs a keyboard, and it is never run
 //! unattended on a person's machine.
 
-#[cfg_attr(not(windows), allow(dead_code))]
+#[cfg_attr(
+    not(windows),
+    allow(dead_code, reason = "only the Windows build uses this")
+)]
 pub mod judge;
-#[cfg_attr(not(windows), allow(dead_code))]
+#[cfg_attr(
+    not(windows),
+    allow(dead_code, reason = "only the Windows build uses this")
+)]
 pub mod run;
 #[cfg(test)]
 mod tests;

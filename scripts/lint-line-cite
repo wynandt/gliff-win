@@ -1,0 +1,126 @@
+#!/usr/bin/env python3
+"""Fails when a tracked file cites a source line as `<path>.<ext>:<line>`.
+
+A line number goes stale on the next edit above it. Cite a symbol by name
+instead (`session::Session::run`), or a permalink that pins a commit
+(`https://github.com/<owner>/<repo>/blob/<commit>/src/lib.rs#L12`). See
+docs/development.md, "Comments".
+
+A citation is a file name with one of the extensions in EXTENSIONS, a colon
+and digits, so host:port, addresses and times never match. Every tracked text
+file is read, so comments, docs and assert messages are all checked. A match
+inside a URL with a path segment of 7 to 40 hex digits (a pinned commit)
+passes. A real exception, such as a log format, goes in
+scripts/lint-line-cite.allow: the exact citation text, then a reason.
+
+Skipped: Cargo.lock and the captured ssh text under tests.
+
+Usage: scripts/lint-line-cite             scan the files git knows
+       scripts/lint-line-cite --self-test
+"""
+
+import os
+import re
+import subprocess
+import sys
+
+EXTENSIONS = (
+    "rs", "hlsl", "py", "sh", "ps1", "psm1", "bat", "cmd", "md", "toml", "yml", "yaml",
+    "json", "tla", "cfg", "c", "h", "cc", "cpp", "hpp", "go", "js", "ts", "txt", "html", "xml",
+)
+CITE = re.compile(
+    r"(?<![\w.-])((?:[\w.-]+/)*[\w-][\w.-]*\.(?:" + "|".join(EXTENSIONS) + r")(?::\d+)+)(?!\w)"
+)
+URL = re.compile(r"https?://[^\s<>()\"'`\]]+")
+PINNED = re.compile(r"/[0-9a-f]{7,40}(?=/|#|$)")
+SKIP = re.compile(r"^(Cargo\.lock|crates/[^/]+/tests/ssh_corpus/.*)$")
+SELF = ("scripts/lint-line-cite", "scripts/lint-line-cite.allow")
+
+
+def allowed_citations(text):
+    cites = set()
+    for line in text.splitlines():
+        line = line.strip()
+        if line and not line.startswith("#"):
+            cites.add(line.split()[0])
+    return cites
+
+
+def violations(text, allow):
+    """(line number, citation) for each line citation in text that is not allowed."""
+    bad = []
+    for number, line in enumerate(text.splitlines(), 1):
+        pinned = [m.span() for m in URL.finditer(line) if PINNED.search(m.group(0))]
+        for match in CITE.finditer(line):
+            cite = match.group(1)
+            if cite in allow:
+                continue
+            if any(a <= match.start() and match.end() <= b for a, b in pinned):
+                continue
+            bad.append((number, cite))
+    return bad
+
+
+def tracked_text_files():
+    out = subprocess.run(["git", "grep", "-I", "-l", "-e", "", "--", "."], capture_output=True, text=True, check=True).stdout
+    return [p for p in out.splitlines() if not SKIP.match(p) and p not in SELF and os.path.exists(p)]
+
+
+def scan():
+    with open("scripts/lint-line-cite.allow", encoding="utf-8") as f:
+        allow = allowed_citations(f.read())
+    status = 0
+    for path in tracked_text_files():
+        with open(path, encoding="utf-8", errors="replace") as f:
+            for number, cite in violations(f.read(), allow):
+                print(f"{path}:{number}: {cite} cites a line number; name the symbol or use a pinned permalink")
+                status = 1
+    return status
+
+
+def self_test():
+    status = 0
+    commit = "58c742452ded3f10a2ce61f60eb4845f18205e29"
+    allow = allowed_citations("# comment\n" + "log" + ".rs:7 a log line format\n")
+    bad = [
+        "see foo" + ".rs:12",
+        "fixed at foo" + ".rs:12.",
+        "// session" + ".rs:254 handles it",
+        'assert!(ok, "fixed in src/machine' + '.rs:40:5");',
+        "[README](README" + ".md:10)",
+        "crates/gliff-windows/src/a_b" + ".hlsl:3",
+        "https://github.com/o/r/blob/main/src/lib" + ".rs:12",
+    ]
+    good = [
+        "see `session::Session::run`",
+        "foo" + ".rs::bar",
+        f"https://github.com/omacom/gliff/blob/{commit}/src/lib" + ".rs#L12",
+        f"https://github.com/omacom/gliff/blob/{commit[:7]}/src/lib" + ".rs:12",
+        "connect to localhost:22 or 127.0.0.1:8080 or example.com:443",
+        "at 12:30, version 0.4.1",
+        "the log" + ".rs:7 format",
+        "foo" + ".rsx:12",
+        "C:\\Users\\x",
+    ]
+    for case in bad:
+        if not violations(case, allow):
+            print(f"self-test: missed {case!r}"); status = 1
+    for case in good:
+        if violations(case, allow):
+            print(f"self-test: flagged {case!r}: {violations(case, allow)}"); status = 1
+    print("lint-line-cite self-test: " + ("ok" if status == 0 else "FAILED"))
+    return status
+
+
+def main():
+    if sys.argv[1:] == ["--self-test"]:
+        return self_test()
+    if sys.argv[1:]:
+        print(__doc__.split("Usage:")[1], file=sys.stderr)
+        return 2
+    os.chdir(subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True, check=True).stdout.strip())
+    return scan()
+
+
+if __name__ == "__main__":
+    sys.exit(main())

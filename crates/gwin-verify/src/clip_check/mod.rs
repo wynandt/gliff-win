@@ -7,7 +7,10 @@
 //! machine.
 
 pub mod picture;
-#[cfg_attr(not(windows), allow(dead_code))]
+#[cfg_attr(
+    not(windows),
+    allow(dead_code, reason = "only the Windows build uses this")
+)]
 pub mod remote;
 pub mod sha256;
 pub mod tree;
@@ -57,7 +60,10 @@ impl ClipCase {
 }
 
 /// A short text that differs from run to run (the clock and the process).
-#[cfg_attr(not(windows), allow(dead_code))]
+#[cfg_attr(
+    not(windows),
+    allow(dead_code, reason = "only the Windows build uses this")
+)]
 pub fn nonce() -> String {
     let millis = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)

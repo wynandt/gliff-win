@@ -1,0 +1,3 @@
+# Citations that scripts/lint-line-cite must let through, such as a log line
+# format. One citation per line, exactly as written, then a reason. A source
+# line reference never goes here: name the symbol or use a pinned permalink.

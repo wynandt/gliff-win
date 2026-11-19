@@ -33,7 +33,10 @@ const AREA: (i32, i32) = (640, 400);
 pub struct Options {
     pub out: PathBuf,
     pub scales: Vec<u32>,
-    #[cfg_attr(not(windows), allow(dead_code))]
+    #[cfg_attr(
+        not(windows),
+        allow(dead_code, reason = "only the Windows build uses this")
+    )]
     pub shapes_only: bool,
 }
 

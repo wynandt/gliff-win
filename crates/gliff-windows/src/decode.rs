@@ -205,7 +205,10 @@ impl<'a> Planes<'a> {
     }
 
     /// A tight 4:2:0 frame's planes.
-    #[cfg_attr(not(windows), allow(dead_code))]
+    #[cfg_attr(
+        not(windows),
+        allow(dead_code, reason = "only the Windows build uses this")
+    )]
     pub(crate) fn of(frame: &'a YuvFrame) -> Self {
         let w = frame.width() as usize;
         Self {
