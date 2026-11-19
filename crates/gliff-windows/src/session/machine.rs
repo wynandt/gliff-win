@@ -1,7 +1,6 @@
 //! `Core`: the client's protocol state machine, with no I/O.
 //!
-//! A port of the upstream client's session loop (`gliff/src/net.rs` at
-//! 089662fd). Each server message, decode result and UI command goes in,
+//! A port of the upstream client's session loop (`gliff::net::session`). Each server message, decode result and UI command goes in,
 //! and the [`Action`]s the driver must perform come out, in order. The
 //! driver owns the socket, the decoder and the clock; `Core` owns the
 //! protocol rules, the pending-geometry FIFO and the counters.
@@ -38,8 +37,7 @@ use crate::session::input_side::KeyOut;
 use crate::yuv::Sampling;
 use crate::yuv::YuvFrame;
 
-/// The largest stream the client accepts (upstream `MAX_DECODE`,
-/// net.rs:769-774).
+/// The largest stream the client accepts (upstream `validate_stream_size`).
 pub const MAX_DECODE: (u32, u32) = (4096, 4096);
 
 /// A window-size request, in physical pixels at the protocol scale
@@ -250,7 +248,7 @@ pub struct SessionStats {
     /// FrameAcks emitted.
     pub acks: u64,
     pub decode_errors: u64,
-    /// Idle drains that failed (upstream only logs these, net.rs:549-552).
+    /// Idle drains that failed.
     pub drain_errors: u64,
     pub keyframe_requests: u64,
     /// Pictures handed to the frame slot.
@@ -383,7 +381,7 @@ pub struct Core {
     coded: Option<Coded>,
     geometry: Option<Geometry>,
     /// (frame_id, geometry) of each unit fed to the decoder and not yet
-    /// released, oldest first (upstream `in_decoder`, net.rs:463-467).
+    /// released, oldest first (upstream `in_decoder`).
     in_decoder: VecDeque<(u64, Geometry)>,
     stats: SessionStats,
     /// Counted since the last [`Core::take_colour`].
@@ -540,7 +538,7 @@ impl Core {
     }
 
     /// The result of an [`Action::Decode`]. The FrameAck comes first,
-    /// whatever the result (net.rs:604-611).
+    /// whatever the result.
     pub fn decoded(&mut self, done: Decoded) -> Vec<Action> {
         if self.phase == Phase::Ended {
             return Vec::new();
@@ -571,7 +569,7 @@ impl Core {
     }
 
     /// The result of an idle drain (`CpuDecoder::flush`). Never acks: the
-    /// unit was acked when it was fed (net.rs:525-561).
+    /// unit was acked when it was fed.
     pub fn drained(&mut self, result: Result<Option<YuvFrame>, DecodeError>) -> Vec<Action> {
         match (self.phase, result) {
             (Phase::Ended, _) | (_, Ok(None)) => Vec::new(),
@@ -777,8 +775,7 @@ impl Core {
     }
 
     /// Pops the oldest queued unit for a released picture; with nothing
-    /// queued it takes the current geometry and `fallback_id`
-    /// (net.rs:618-628).
+    /// queued it takes the current geometry and `fallback_id`.
     fn present(&mut self, frame: YuvFrame, fallback_id: u64) -> Action {
         let (frame_id, geometry) = self
             .in_decoder
@@ -822,8 +819,7 @@ fn send(msg: ClientMsg) -> Action {
     Action::Send(msg, Bytes::new())
 }
 
-/// Only what `client_caps` advertised, at a size the decoder takes
-/// (net.rs:769-774).
+/// Only what `client_caps` advertised, at a size the decoder takes.
 fn validate_stream(
     codec: Codec,
     chroma: ChromaMode,

@@ -100,9 +100,7 @@ const IDLE_WAIT_MS: u32 = 1000;
 /// Runs the client until the window closes.
 pub fn run(args: Args) -> ExitCode {
     let started = Instant::now();
-    // SAFETY: called before any window exists; failure (already set by a
-    // manifest) leaves the process DPI-aware anyway or unaware, both
-    // usable.
+    // SAFETY: called before any window exists.
     let _ = unsafe { SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     let startup = match Startup::load(&args) {
         Ok(startup) => startup,

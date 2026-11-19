@@ -64,7 +64,7 @@ use crate::xkb::KeymapTracker;
 use crate::xkb::Reason;
 
 /// Sent when the pointer leaves the window (`TrackMouseEvent` asked for
-/// it); the constant lives in a Windows module this crate does not use.
+/// it).
 const WM_MOUSELEAVE: u32 = 0x02a3;
 
 /// `WTS_SESSION_LOCK` and `WTS_SESSION_UNLOCK`, the `wparam` of

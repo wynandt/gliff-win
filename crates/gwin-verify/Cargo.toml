@@ -16,7 +16,7 @@ name = "gwin-verify"
 path = "src/main.rs"
 
 # Stand-in server for proving `gwin-verify ssh` and `stream` on the build machine
-# (verification scaffolding only; models upstream 089662fd, cited inline).
+# (verification scaffolding only; models upstream gliff-server at the pinned rev).
 [[bin]]
 name = "gwin-fake-server"
 path = "src/bin/gwin-fake-server/main.rs"

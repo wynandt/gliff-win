@@ -10,8 +10,7 @@
 //! uses, so the file does not change when that window comes. The order for a
 //! machine is: a flag, the machine's choice, the `[settings]` table, the
 //! default. A flag applies to every machine, so it locks the choice: the
-//! menu shows it greyed and says why. `sharp_colour` and `gpu_decode` have
-//! no flag and no `[settings]` key: each is the machine's choice or off.
+//! menu shows it greyed and says why.
 //! `send_win_l` is locked by any `--super-l` flag (on for `registry`, off for
 //! `chord` and `off`); with no choice, `super_l = "registry"` in the file
 //! turns it on.

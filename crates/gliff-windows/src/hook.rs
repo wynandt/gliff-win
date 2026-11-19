@@ -588,8 +588,7 @@ impl HookThread {
 
 impl Drop for HookThread {
     fn drop(&mut self) {
-        // SAFETY: PostThreadMessageW takes any thread id; if the thread is
-        // already gone it fails, which is fine because it is then joined.
+        // SAFETY: PostThreadMessageW takes any thread id.
         let _ = unsafe { PostThreadMessageW(self.thread_id, WM_QUIT, WPARAM(0), LPARAM(0)) };
         let Some(join) = self.join.take() else {
             return;

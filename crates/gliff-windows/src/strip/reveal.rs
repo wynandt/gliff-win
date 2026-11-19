@@ -20,7 +20,7 @@ pub struct Rule {
     pub height: i32,
 }
 
-/// Logical px to device px, as the strip's metrics do.
+/// Logical px to device px.
 fn px_at(logical: i32, dpi: u32) -> i32 {
     (logical * i32::try_from(dpi).unwrap_or(96) + 48) / 96
 }

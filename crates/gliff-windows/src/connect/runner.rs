@@ -5,7 +5,7 @@
 //! that returns canned [`Output`]. [`Cmd`] cannot hold an arbitrary command:
 //! it has one constructor per call the client makes, and each is built from
 //! the session's own options, so no check can run with weaker options than
-//! the session (section 11.7 of the design).
+//! the session.
 
 use std::ffi::OsString;
 use std::io::Read;

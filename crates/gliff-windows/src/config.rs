@@ -384,7 +384,7 @@ impl FileGuard {
 
     /// The last look before the file is replaced: if it is not what
     /// [`Self::prepare`] saw, someone wrote in between, and that text is
-    /// kept as well. A file that cannot be read now is left to the rename.
+    /// kept as well.
     fn recheck(
         &mut self,
         examined: &Seen,

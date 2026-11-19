@@ -255,7 +255,7 @@ mod tests {
     }
 
     /// A real present run's sizes: a Resize of 2560x1600 at 2.0 is a
-    /// 2560x1600 mode at scale 2 (gliff-server session.rs:640-650), so the
+    /// 2560x1600 mode at scale 2, so the
     /// covering window is 1280x800.
     #[test]
     fn judge_session_finds_the_one_gliff_output_at_scale_2() {

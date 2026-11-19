@@ -91,8 +91,7 @@ fn running(status: &Status) -> bool {
     )
 }
 
-/// The menu of a tab with this status. The entries that open a settings
-/// window or a details panel come with those windows.
+/// The menu of a tab with this status.
 ///
 /// `live` is what the tab's session started with. When the tab has a session
 /// and the saved choices would run differently now, the settings submenu ends

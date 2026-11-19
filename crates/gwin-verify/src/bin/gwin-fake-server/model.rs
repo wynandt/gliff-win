@@ -1,38 +1,37 @@
-//! The parts of upstream gliff-server (089662fd) the fake reproduces, as
-//! pure functions with the file:line they come from. Paths are relative to
-//! `crates/` in the upstream tree.
+//! The parts of upstream gliff-server, at the revision pinned in the
+//! workspace `Cargo.toml`, that the fake reproduces, as pure functions
+//! that name the upstream symbol they follow.
 
-/// Upper bound of the OpenH264 CPU encoder (gliff-server/src/session.rs:1247-1252,
-/// gliff-sw/src/lib.rs:238).
+/// Upper bound of the OpenH264 CPU encoder (`gliff_sw::Encoder::MAX_SIZE`).
 pub const CPU_ENCODER_MAX: (u32, u32) = (3840, 2160);
 
-/// The ladder's top fps (`MAX_FPS`, session.rs:483) and its starting
-/// level's cap (`START_LEVEL` = 1, 30 fps; rate.rs:324-337, session.rs:493).
+/// The ladder's top fps (`MAX_FPS`) and its starting
+/// level's cap (`START_LEVEL` = 1, 30 fps in `rate::LEVELS`).
 pub const MAX_FPS: u32 = 60;
 pub const START_FPS: u32 = 30;
 
-/// The ladder steps up only after this long at a level (`HOLD_UP`, rate.rs:376).
+/// The ladder steps up only after this long at a level (`HOLD_UP`).
 pub const HOLD_UP_MS: u64 = 4_000;
 
-/// The byte-cap floor (rate.rs:286-296): twice the largest frame seen,
+/// The byte-cap floor: twice the largest frame seen,
 /// at least 96 KiB. The fake has no RTT estimate, so the floor is the cap.
 pub fn cap_bytes(largest_frame: usize) -> u64 {
     (2 * largest_frame).max(96 * 1024) as u64
 }
 
 /// A frame goes out only if nothing is in flight, or the next one still
-/// fits under the cap (session.rs:882-890).
+/// fits under the cap.
 pub fn has_room(inflight: u64, est_frame: u64, cap: u64) -> bool {
     inflight == 0 || inflight + est_frame <= cap
 }
 
 /// The first headless mode: the client's declared maximum, clamped to
-/// 320..1920 x 240..1080 and made even (session.rs:1579-1580).
+/// 320..1920 x 240..1080 and made even.
 pub fn initial_mode(max: (u32, u32)) -> (u32, u32) {
     (max.0.clamp(320, 1920) & !1, max.1.clamp(240, 1080) & !1)
 }
 
-/// What a Resize asks of the output (session.rs:625-645): the size
+/// What a Resize asks of the output: the size
 /// clamped to the caps maximum and made even, the scale clamped to
 /// 0.5..4.0, `None` under 320x240, then `clean_mode`.
 pub fn resize_mode(req: (u32, u32), scale: f32, caps_max: (u32, u32)) -> Option<((u32, u32), f32)> {
@@ -49,7 +48,7 @@ pub fn resize_mode(req: (u32, u32), scale: f32, caps_max: (u32, u32)) -> Option<
     Some((clean_mode(width, height, scale), scale))
 }
 
-/// hypr-ipc/src/lib.rs:197-209, the same arithmetic: round the mode down
+/// Upstream `hypr_ipc::clean_mode`, the same arithmetic: round the mode down
 /// until the scale divides it into whole logical pixels, staying even.
 pub fn clean_mode(width: u32, height: u32, scale: f32) -> (u32, u32) {
     let s = f64::from(scale);
@@ -65,7 +64,7 @@ pub fn clean_mode(width: u32, height: u32, scale: f32) -> (u32, u32) {
     (fit(width), fit(height))
 }
 
-/// gliff-va/src/settings.rs:34-42: the largest even size with the same
+/// Upstream `gliff_va::EncoderSettings::fit_extent`: the largest even size with the same
 /// aspect whose 16-aligned coded size fits the encoder maximum.
 pub fn fit_extent(width: u32, height: u32, max: (u32, u32)) -> (u32, u32) {
     let (max_w, max_h) = (max.0 & !15, max.1 & !15);
@@ -79,7 +78,7 @@ pub fn fit_extent(width: u32, height: u32, max: (u32, u32)) -> (u32, u32) {
 }
 
 /// `scale_milli` in StreamConfig: the output scale times the stream's
-/// downscale of the output (session.rs:1494-1500).
+/// downscale of the output.
 pub fn scale_milli(output_scale: f32, stream_width: u32, output_width: u32) -> u32 {
     (output_scale * stream_width as f32 / output_width.max(1) as f32 * 1000.0).round() as u32
 }

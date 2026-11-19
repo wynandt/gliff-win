@@ -24,7 +24,7 @@ the cache. A stats-only redraw is not a new decoded-frame latency sample.
 ## Metric definitions
 
 The visible `fps` counts only decode calls returning `Ok(Some(picture))`, as
-Linux does at 32bb062. Its decode mean uses the durations of those same calls.
+the Linux client does at the pinned revision (`gliff::net`). Its decode mean uses the durations of those same calls.
 Neither counts buffered/error calls, separate idle drains, slot deliveries,
 redraws, or Windows presentations. Windows and Linux decoder work differs;
 matching paths and denominators does not promise identical measured timings.

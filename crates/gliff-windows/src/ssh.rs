@@ -59,8 +59,7 @@ pub enum SpecError {
 /// The spawned ssh process and its piped stdio.
 pub struct SshLink {
     pub child: Child,
-    /// Drop it after writing Bye: upstream gliff-server exits only at
-    /// stdin EOF, so a session that keeps it open never sees the exit.
+    /// Drop it after writing Bye.
     pub stdin: ChildStdin,
     pub stdout: ChildStdout,
     pub stderr_log: PathBuf,
@@ -163,8 +162,7 @@ pub fn spawn(spec: &SshSpec) -> std::io::Result<SshLink> {
     })
 }
 
-/// Arguments for a second, short ssh that runs one command: the same
-/// options as [`ssh_args`] plus a 10 s connect timeout, then
+/// Arguments for a second, short ssh that runs one command, ending in
 /// `-- <target> <command>`. The remote shell parses `command`, which is
 /// why [`exec`] only takes a `&'static str`.
 pub fn exec_args(spec: &SshSpec, command: &'static str) -> Vec<OsString> {

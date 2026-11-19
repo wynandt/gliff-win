@@ -3,8 +3,8 @@
 //!
 //! This owns OpenH264 itself rather than `gliff_sw::Decoder`, whose only
 //! output is BGRA, because the display path converts on the GPU
-//! (see `docs/architecture.md`). It mirrors `gliff_sw::Decoder` (upstream
-//! 089662fd `gliff-sw/src/lib.rs:390-477`) in everything else: the decoder
+//! (see `docs/architecture.md`). It mirrors `gliff_sw::Decoder` in everything
+//! else: the decoder
 //! config, the held-picture counter, the flush rule, the even crop and the
 //! Dual420 pairing rule (both decoders are fed every unit; one picture
 //! without the other is an error).

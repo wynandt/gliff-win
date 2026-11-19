@@ -164,13 +164,7 @@ fn fail(line: Line, stderr_log: &Path, exit: Option<i32>, error: String) -> Line
 /// drain the pipe to EOF so a server still writing is never blocked; wait
 /// for the exit.
 ///
-/// Takes `stdin` by value so it can be closed: upstream gliff-server
-/// (089662fd) breaks its loop on Bye (`session.rs:498`, `:320`) and tears
-/// down capture, input and the output (`:326-339`), but its `spawn_local`
-/// reader (`session.rs:376-413`) has by then started another read on
-/// `tokio::io::stdin()` (`main.rs:128`), a blocking read tokio cannot
-/// cancel, and dropping the runtime (`main.rs:110-133`) waits for it. With
-/// stdin open the server never exits and never closes stdout.
+/// Takes `stdin` by value so it can be closed.
 async fn session(
     stdin: ChildStdin,
     stdout: ChildStdout,

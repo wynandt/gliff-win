@@ -120,8 +120,7 @@ pub fn parse_sps(nal: &[u8]) -> Result<SpsInfo, SpsError> {
 ///
 /// Without them, a decoder must assume a POC type 0 stream may reorder,
 /// and the Windows decoder then holds pictures until its whole picture
-/// buffer is full. Every gliff encoder sends I and P pictures only, in
-/// decode order, and writes no VUI. An SPS that has a VUI is left alone.
+/// buffer is full. An SPS that has a VUI is left alone.
 pub fn without_reorder_delay(au: &[u8]) -> Option<Vec<u8>> {
     let nals = nal_units(au);
     let rewritten: Vec<Option<Vec<u8>>> = nals.iter().map(|nal| restrict_sps(nal)).collect();

@@ -58,9 +58,10 @@ pub struct SessionEntry {
     pub target: String,
     /// The session on screen (the one the keyboard goes to).
     pub shown: bool,
-    /// The tab's state: "stopped", "connecting", "streaming" or "gave_up".
+    /// The tab's state: "stopped", "connecting", "reconnecting", "streaming" or
+    /// "gave_up".
     pub status: String,
-    /// Reconnect attempts so far (always 0 until reconnect exists).
+    /// Reconnect attempts so far.
     pub retries: u32,
     pub frames: u64,
     pub acks: u64,

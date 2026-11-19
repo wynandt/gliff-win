@@ -518,16 +518,16 @@ data arrives and is correct, not how long it takes.
   window shows there only after it is moved.
 - A mirrored output is the other way round: it keeps its own size and scale, and
   the server only scales the stream down to fit the window, never up
-  (`fit_mirror`, `gliff-server/src/session.rs:718-742`). A window larger than the
+  (`fit_mirror` in gliff-server). A window larger than the
   remote screen shows it zoomed, and the server follows a change of the mirrored
-  output on its own (`session.rs:767-800`). The client's default mirrors the
+  output on its own (`on_capture`). The client's default mirrors the
   focused screen; `--headless` asks for the private one the rest of this page
   describes.
 - `--output auto` can pick a leftover private screen. The server takes the
   focused enabled output, else the leftmost enabled one, with no filter for a
-  headless output (`session.rs:1777-1784`), and removes the private screen it
-  created only when it exits on its own (`SessionOutput` drop,
-  `session.rs:1575-1612`; the screen is named `gliff-<pid>`, `session.rs:1692-1710`).
+  headless output (`main_monitor`), and removes the private screen it
+  created only when it exits on its own (the `Drop` of
+  `SessionOutput`; `setup_output` names the screen `gliff-<pid>`).
   A killed server leaves it behind, and it can win `auto`. Name the display with
   `--output NAME`. This is separate from the mode loss after a compositor reload.
 
@@ -562,24 +562,23 @@ window that shows nothing new and does not react. The link stays up: no
 `Error`, no end of session, no `StreamConfig`. Closing and reopening the client
 gives a good session.
 
-**Cause, in server v0.4.1 (`crates/` paths are upstream's).** The server sets a
-headless output's mode with `keyword monitor` (`hypr-ipc/src/lib.rs:214`), a
+**Cause, in server v0.4.1 (the names are upstream's).** The server sets a
+headless output's mode with `keyword monitor` (`hypr_ipc`'s `set_monitor_mode`), a
 runtime keyword that a reload discards. After the reload the output is back at
 the compositor's default mode (1920x1080 at the default scale), while the
-server's record of the output (`SessionOutput` width, height and scale,
-`gliff-server/src/session.rs:1655-1776`) still holds the mode the client asked
+server's record of the output (`SessionOutput` width, height and scale) still holds the mode the client asked
 for. Nothing watches the compositor's events, so the record is never
-corrected. `matches_output` (`session.rs:924-926`) compares each captured
-frame's extent with that record, and `pump_encoder` (`session.rs:861`, `:873`)
+corrected. `matches_output` compares each captured
+frame's extent with that record, and `pump_encoder`
 drops every frame that does not match, so no picture is encoded and no message
 tells the client why. The mismatch handling in `on_capture`
-(`session.rs:767-800`) runs only for a mirrored real output, not a headless
+runs only for a mirrored real output, not a headless
 one.
 
 A Resize with the size and scale the client last asked for cannot repair it.
 The client gates it (`ResizeGate`, and `Core`'s `last_resize`), and the server
-returns early when the size and scale equal its own record (`session.rs:665-667`).
-The upstream Linux client has the same gate (`crates/gliff/src/main.rs:2191-2219`)
+returns early when the size and scale equal its own record (`resize`).
+The upstream Linux client has the same gate (`request_resize`)
 and no stall detection (`net.rs`), so it is affected the same way.
 
 **What the client does about it.** It cannot see the compositor, so it
@@ -589,7 +588,7 @@ no `VideoFrame` or `StreamConfig` has arrived for 3 s, the session sends a
 *resync*: a Resize to the same size less 32 px of width (more when the window
 is under 352 px wide), then at once the real Resize again. A size that differs
 from the server's record makes it set the mode again and send a new
-`StreamConfig` (`session.rs:649-715`), so the output matches its record
+`StreamConfig` (`resize`), so the output matches its record
 again and frames flow. The window title reads "gliff - re-syncing the display"
 until the first picture after it arrives, and the log says why and counts it. At most one
 resync runs per 30 s. With several sessions each has its own watch and limit,

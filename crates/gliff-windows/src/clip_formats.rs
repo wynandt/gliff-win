@@ -191,9 +191,7 @@ pub fn is_private(formats: &[WinFormat], dword: &mut dyn FnMut(&str) -> Option<u
 }
 
 /// The most raw bytes worth copying off the clipboard for `format`, so that a
-/// huge item is refused before it is copied. A text body is read as UTF-16,
-/// twice the size of its UTF-8, and any other body is no larger than the item
-/// limit, with room for a header. A bitmap is bounded by its pixel limit,
+/// huge item is refused before it is copied. A bitmap is bounded by its pixel limit,
 /// since its PNG is far smaller than the bitmap.
 pub fn raw_limit(format: &WinFormat) -> usize {
     match format {

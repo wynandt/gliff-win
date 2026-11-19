@@ -1,5 +1,5 @@
 //! The remote cursor image and upstream's rule for using it
-//! (gliff 089662fd `crates/gliff/src/main.rs:1266-1330`).
+//! (`set_remote_cursor` in the gliff client at the pinned revision).
 
 use bytes::Bytes;
 

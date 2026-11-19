@@ -1,15 +1,16 @@
 //! A stand-in for `gliff-server --stdio`, used only to prove `gwin-verify
 //! ssh` and `gwin-verify stream` on a host without the real server. Not a
-//! server: it models the upstream (089662fd) behaviour those checks rest
-//! on, each piece cited where it is implemented (see `model.rs`).
+//! server: it models the behaviour of upstream gliff-server at the revision
+//! pinned in the workspace `Cargo.toml` that those checks rest on (see
+//! `model.rs`).
 //!
-//! Order (gliff-server `session.rs:109-158`): read Hello, write HelloAck
+//! Order: read Hello, write HelloAck
 //! for the output `gliff-<pid>`, Ping, then StreamConfig at the clamped
 //! first mode, then stream. A Bye before the first Pong, or the pipe
 //! closing without a Bye, exits non-zero, so `exit_after_bye` proves the
 //! client answered the Ping and said Bye.
 //!
-//! Shutdown is upstream's too (`main.rs:110-133`): a current-thread
+//! Shutdown: a current-thread
 //! runtime and a `LocalSet`, with stdin read by a `spawn_local` task that
 //! loops until EOF. On Bye the session returns, but that task has already
 //! started the next read on tokio's blocking stdin thread, which cannot be
@@ -28,12 +29,12 @@
 //! pattern window on another monitor), `hold30` (the ladder never steps
 //! up from level 1, so the cap stays 30, as seen against a real server) and
 //! `cap15` (the ladder steps down to level 2, 15 fps, with its
-//! StreamConfig, rate.rs:324-358, session.rs:525-547). `reload` models a
+//! StreamConfig). `reload` models a
 //! compositor reload: 1 s after the first Resize the output is lost, as when
 //! a runtime mode is discarded. The server keeps its own record, so it sends
 //! no frame and no StreamConfig (pings go on) and returns early on a Resize
-//! equal to that record (session.rs:665-667); a Resize that differs sets the
-//! mode again and ends the fault (session.rs:649-715). `cursor` is not a
+//! equal to that record; a Resize that differs sets the
+//! mode again and ends the fault. `cursor` is not a
 //! fault: it sends one 4x4 `CursorShape` after the first StreamConfig, for
 //! the client's session driver test.
 //!
@@ -140,13 +141,12 @@ const STALL_FOR: Duration = Duration::from_secs(7);
 const RELOAD_AFTER: Duration = Duration::from_secs(1);
 /// The drop fault leaves every this-many-th P frame off the wire.
 const DROP_EVERY: u64 = 15;
-/// The `cap15` fault's ladder level 2 cap (rate.rs:334-338).
+/// The `cap15` fault's ladder level 2 cap.
 const CAP15_FPS: u32 = 15;
 /// How many frame intervals the schedule may fall behind before it restarts
 /// from now. It bounds the burst after a late wake-up, so a capped stream
 /// stays within a frame or two of its cap over any window.
 const MAX_LAG_FRAMES: u32 = 2;
-/// Upstream pings about once a second; any cadence works for the check.
 const PING_EVERY: Duration = Duration::from_secs(1);
 /// The fake's home monitor, for hyprctl.
 const HOME: (u32, u32) = (2560, 1600);
@@ -376,7 +376,7 @@ impl Server {
         Ok(self.writer.write_msg_with_payloads(&msg, &[&argb]).await?)
     }
 
-    /// session.rs:1485-1511: view = base_stream, empty extradata
+    /// View = base_stream, empty extradata
     /// (parameter sets in-band), scale_milli from the output.
     async fn send_config(&mut self) -> anyhow::Result<()> {
         let msg = ServerMsg::StreamConfig {
@@ -421,7 +421,7 @@ impl Server {
         Ok(())
     }
 
-    /// session.rs:625-683, headless branch.
+    /// Upstream's `Resize` handling for a headless output.
     async fn resize(&mut self, width: u32, height: u32, scale: f32) -> anyhow::Result<()> {
         let Some(((width, height), scale)) =
             model::resize_mode((width, height), scale, self.caps_max)

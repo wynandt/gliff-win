@@ -80,8 +80,7 @@ const BREAKAWAY: u32 = 0x0100_0000;
 /// The mutex every client and every watchdog helper of this user takes
 /// around a look at the setting and the writes that follow it.
 const REGISTRY_MUTEX: &str = "Local\\gliff-windows-lock-policy";
-/// How long to wait for it; past that the work goes ahead without it (a
-/// stuck holder must not keep the lock setting from being put back).
+/// How long to wait for it; past that the work goes ahead without it.
 const REGISTRY_WAIT_MS: u32 = 2_000;
 
 /// Set once this process is on its way out (or its window thread has
@@ -531,8 +530,7 @@ fn restore_after_owner(owner: Owner) -> String {
 }
 
 /// Starts the helper: the same exe, no window, outside the client's job when
-/// that is allowed (a job that does not allow breakaway refuses the flag, so
-/// the helper is then started inside the job). Before the setting is first
+/// that is allowed. Before the setting is first
 /// turned on, and again whenever the helper has gone.
 pub fn spawn_watchdog(owner: Owner) -> std::io::Result<Child> {
     let exe = std::env::current_exe()?;

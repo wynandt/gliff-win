@@ -19,13 +19,12 @@
 # letterboxes any other aspect, which would move every cell); the check
 # compares only the inner 70% of each cell, as fractions of the picture.
 #
-# Sizes: upstream makes the output's mode the client's requested size and
-# applies the scale on top (gliff-server session.rs:625-650, hypr-ipc
-# lib.rs:179-209), so `hyprctl monitors` reports width/height = that mode
-# and scale = the client's; windows on it are mode / scale in logical px.
-# A Resize of 3840x2400 at 2.0 is a 3840x2400 mode, a 1920x1200 window.
-# The first mode is clamped (at most 1920x1080 at 1.0, session.rs:1579-1600)
-# until the client's first Resize. `place WxH` waits for the mode WxH;
+# Sizes: upstream makes the output's mode the client's requested size, capped
+# by `headless_target`, and applies the scale on top (gliff-server `resize`,
+# `hypr_ipc::clean_mode`), so `hyprctl monitors` reports width/height = that
+# mode and scale = the client's; windows on it are mode / scale in logical px.
+# The first mode is clamped (at most 1920x1080 at 1.0) until the client's
+# first Resize. `place WxH` waits for the mode WxH;
 # `follow` takes the first gliff-* output at any mode and re-places on
 # every change. Real runs showed that ffplay opens on the
 # home monitor even when the headless output is focused, so the window is

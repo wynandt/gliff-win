@@ -122,10 +122,7 @@ pub enum Cause {
 /// How a session ended, as the session reports it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum End {
-    /// The session was closed in order (an orderly `Bye`). The shipped session
-    /// reports it only for the client's own `Bye`, which has already unbound
-    /// the tab, so it is dropped; if a server `Bye` is ever mapped here it is
-    /// retried like a link that dropped.
+    /// The session was closed in order (an orderly `Bye`).
     Closed,
     /// The link failed or the server refused; the text is for the user.
     Error(String),

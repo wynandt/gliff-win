@@ -349,7 +349,7 @@ const fn e0(scan: u8) -> Option<u16> {
 }
 
 /// The keys held now, so an Up is sent only for a Down that was sent, and an
-/// auto-repeat is not sent twice (upstream's `track_key`, `main.rs:1551-1561`).
+/// auto-repeat is not sent twice (upstream's `track_key`).
 #[derive(Debug, Default)]
 pub struct KeyState {
     held: BTreeSet<Evdev>,

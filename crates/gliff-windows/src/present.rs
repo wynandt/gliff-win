@@ -684,7 +684,7 @@ fn pick_adapter(
 /// Whether one of `adapter`'s outputs is `monitor`.
 fn drives(adapter: &IDXGIAdapter1, monitor: HMONITOR) -> bool {
     for i in 0.. {
-        // SAFETY: enumeration by index; any error ends it.
+        // SAFETY: enumeration by index.
         let Ok(output) = (unsafe { adapter.EnumOutputs(i) }) else {
             return false;
         };

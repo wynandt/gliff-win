@@ -66,8 +66,7 @@ use crate::stream_check::measure::FpsProblem;
 use crate::stream_check::measure::IdGaps;
 use crate::stream_check::measure::ResizeVerdict;
 
-/// Upstream's idle drain fires after 150 ms without a frame
-/// (net.rs:525-561).
+/// Upstream's idle drain (`IDLE_DRAIN`) fires after 150 ms without a frame.
 const IDLE_DRAIN: Duration = Duration::from_millis(150);
 /// How long the server gets to exit once stdin is closed after Bye.
 const EXIT_WAIT: Duration = Duration::from_secs(10);
@@ -238,8 +237,7 @@ enum Phase {
         start: Instant,
     },
     /// The window is over; the session stays up, acking, until the end
-    /// placement probe answers, because Bye removes the output
-    /// (session.rs:498, :1477-1482).
+    /// placement probe answers, because Bye removes the output.
     Closing {
         until: Instant,
     },

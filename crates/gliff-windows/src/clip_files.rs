@@ -1,9 +1,6 @@
 //! Files on the clipboard, the Windows ends: walking the copied paths into an
 //! offer, naming the files of a peer's offer so Windows accepts them, and
 //! the directory they are spooled to.
-//!
-//! Upstream's walker and spool are Unix-shaped (`\` joins, UTF-8-only names,
-//! a `/proc` sweep), so these are ours; the types are upstream's.
 
 use std::collections::HashMap;
 use std::collections::HashSet;

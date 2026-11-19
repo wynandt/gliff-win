@@ -79,8 +79,7 @@ pub fn client_caps(panel: (u32, u32), colour: Colour) -> ClientCaps {
     }
 }
 
-/// The first message. The keymap is empty (the server's default) until
-/// keyboard input decides how to send the Windows layout.
+/// The first message.
 pub fn hello(caps: ClientCaps, keymap: String) -> ClientMsg {
     ClientMsg::Hello {
         version: PROTOCOL_VERSION,

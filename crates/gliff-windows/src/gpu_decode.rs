@@ -303,9 +303,7 @@ fn pair(
 /// COM for this thread (multithreaded) and Media Foundation for the
 /// process, once.
 fn com_and_mf() -> Result<(), GpuError> {
-    // SAFETY: no reserved pointer. S_FALSE (already initialised) and
-    // RPC_E_CHANGED_MODE (an STA thread, where in-process COM still
-    // works) are both fine here, so the result is not checked.
+    // SAFETY: no reserved pointer.
     let _ = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) };
     static STARTED: OnceLock<Result<(), GpuError>> = OnceLock::new();
     STARTED

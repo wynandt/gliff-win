@@ -9,7 +9,7 @@ const IMPLIED_SLACK: u32 = 4;
 
 /// What one StreamConfig says about the requested size (upstream sends
 /// view = stream = `base_stream`, and `scale_milli` = scale x stream /
-/// output, session.rs:961-975, :1494-1500).
+/// output).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ResizeVerdict {
     /// The output is the requested size and the stream codes all of it.
@@ -19,7 +19,7 @@ pub enum ResizeVerdict {
     Clamped { stream: (u32, u32) },
     /// The output is the requested size, but the stream is smaller than
     /// the encoder fit: the rate ladder's scale-0.5 levels
-    /// (rate.rs:345-358), a symptom that `fps` reports.
+    /// , a symptom that `fps` reports.
     Scaled { stream: (u32, u32) },
     /// Not (yet) the requested output.
     Other { implied_output: (u32, u32) },
@@ -34,7 +34,7 @@ pub fn implied_output(stream: (u32, u32), scale_milli: u32) -> (u32, u32) {
     )
 }
 
-/// The CPU encoder's maximum (gliff-sw lib.rs:238, enforced at :330).
+/// The CPU encoder's maximum (`gliff_sw::Encoder::MAX_SIZE`).
 const CPU_ENCODER_MAX: (u32, u32) = (3840, 2160);
 
 /// The stream the server scales an output down to when it is over the
@@ -69,7 +69,7 @@ pub fn judge_config(requested: (u32, u32), stream: (u32, u32), scale_milli: u32)
 }
 
 /// The share of the server's fps cap the client must decode: the server
-/// commands `min(cap, what its encoder sustains)` (session.rs:951-957)
+/// commands `min(cap, what its encoder sustains)`
 /// and paces frames to it, so a healthy run sits just under the cap.
 pub const FPS_OF_CAP: f64 = 0.95;
 
@@ -77,7 +77,7 @@ pub const FPS_OF_CAP: f64 = 0.95;
 #[derive(Debug, Clone, PartialEq)]
 pub enum FpsProblem {
     /// The server itself capped the stream below the floor at some point
-    /// in the window (a ladder step down, rate.rs:324-358).
+    /// in the window (a ladder step down).
     CapBelowFloor { cap: u32 },
     /// The client decoded fewer than `FPS_OF_CAP` of what the cap allowed.
     BelowCap { fps: f64, expected: f64 },
@@ -85,8 +85,7 @@ pub enum FpsProblem {
 
 /// The fps cap in force over the window, time-weighted: `at_start` until
 /// the first step, then each StreamConfig's cap from its offset
-/// (upstream sends a StreamConfig on every ladder step,
-/// session.rs:525-547).
+/// (upstream sends a StreamConfig on every ladder step).
 pub fn effective_cap(at_start: u32, steps: &[(Duration, u32)], window: Duration) -> f64 {
     let total = window.as_secs_f64();
     if total <= 0.0 {
@@ -163,7 +162,7 @@ pub fn stalls(arrivals: &[Duration], window: Duration, limit: Duration) -> usize
 }
 
 /// Counts frame ids that never arrived: upstream numbers every frame it
-/// sends from 0, +1 each (session.rs:1151-1193), so a hole is a frame
+/// sends from 0, +1 each, so a hole is a frame
 /// lost on the way.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct IdGaps {

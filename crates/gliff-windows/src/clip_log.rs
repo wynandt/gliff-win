@@ -760,8 +760,7 @@ pub mod testing {
 
     /// Fails unless `line` has only the forms a line may have: a fixed word
     /// or a `key=value` whose value is a number, a fixed word, an `io_<kind>`
-    /// or a list of names from the closed mime table. A leak of any kind
-    /// (a name, a path, a piece of text, a hash) has none of these forms.
+    /// or a list of names from the closed mime table.
     pub fn assert_well_formed(line: &str) {
         let rest = line
             .strip_prefix("clipboard:")

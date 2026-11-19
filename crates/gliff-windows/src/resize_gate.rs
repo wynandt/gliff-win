@@ -1,7 +1,6 @@
 //! When the window asks the server for a new output size.
 //!
-//! Upstream (gliff 089662fd `crates/gliff/src/main.rs:1859-1945`) polls the
-//! widget every 100 ms and sends once the size has held for 200 ms, gated
+//! Upstream (`install_resize_handler` in the gliff client) polls the widget every 100 ms and sends once the size has held for 200 ms, gated
 //! against the server's view and the last request, never under 64 px. This
 //! gate instead deduplicates against the latest request only: a server view
 //! may predate an in-flight resize. On
@@ -49,9 +48,9 @@ pub struct ResizeGate {
 }
 
 impl ResizeGate {
-    /// Upstream's settle delay (`main.rs:1878`).
+    /// Upstream's settle delay.
     pub const SETTLE: Duration = Duration::from_millis(200);
-    /// Upstream skips sizes under this on either side (`main.rs:1928`).
+    /// Upstream skips sizes under this on either side.
     pub const MIN_SIDE: u32 = 64;
 
     /// A gate whose last request is `initial`, the size the session

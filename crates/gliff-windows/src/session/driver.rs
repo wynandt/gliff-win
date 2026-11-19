@@ -1,10 +1,5 @@
 //! The client's session loop on its own thread: ssh, the protocol
 //! [`Core`], the decoder, and the hand-off to the UI.
-//!
-//! `gwin-verify stream` keeps its own instrumented copy of this loop, so
-//! the stream check is not changed under it; the shape is the same (a
-//! writer task, a whole-message reader task, the idle drain, and
-//! Bye → stdin EOF → wait for ssh).
 
 use std::collections::VecDeque;
 use std::path::PathBuf;

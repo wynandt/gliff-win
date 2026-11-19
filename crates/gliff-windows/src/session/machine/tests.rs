@@ -193,7 +193,7 @@ fn ping_is_answered_in_every_phase() {
     assert_eq!(
         core.on_server(ServerMsg::Ping { t: 2 }, Bytes::new(), Bytes::new()),
         pong(2),
-        "between HelloAck and StreamConfig (net.rs:304-327)"
+        "between HelloAck and StreamConfig"
     );
     let _ = core.on_server(
         config((1920, 1080), (1920, 1080), 1000, 30),
@@ -217,7 +217,7 @@ fn stream_config_before_hello_ack_ends_the_link() {
     );
     assert!(
         matches!(ended(&actions), Some(EndReason::Link(m)) if m.contains("before StreamConfig")),
-        "upstream bails on a config before HelloAck (net.rs:328-355): {actions:?}"
+        "upstream bails on a config before HelloAck: {actions:?}"
     );
 }
 
@@ -261,7 +261,7 @@ fn pace_only_and_scale_only_configs_keep_the_decoder() {
     );
     assert!(
         !pace.contains(&Action::ResetDecoder(ChromaMode::Single420)),
-        "an fps-only config must not reset (net.rs:676-683): {pace:?}"
+        "an fps-only config must not reset: {pace:?}"
     );
     let scale = core.on_server(
         config((1920, 1080), (3840, 2160), 2000, 60),
@@ -535,7 +535,7 @@ fn a_picture_carries_the_geometry_of_its_own_unit() {
                 frame_id: 0,
             })
         ],
-        "the released picture is unit 0's, under the old scale (net.rs:463-467)"
+        "the released picture is unit 0's, under the old scale"
     );
     assert_eq!(core.stats().presented, 1, "presented counted");
 }
@@ -550,7 +550,7 @@ fn decode_error_clears_the_fifo_and_requests_a_keyframe() {
     assert_eq!(
         out,
         vec![ack(1), send(ClientMsg::RequestKeyframe)],
-        "ack then keyframe request (net.rs:657-661)"
+        "ack then keyframe request"
     );
     assert_eq!(
         (core.stats().decode_errors, core.stats().keyframe_requests),
@@ -591,7 +591,7 @@ fn drained_pictures_are_presented_but_never_acked() {
     assert_eq!(
         core.drained(Err(sw_error())),
         Vec::new(),
-        "drain error is only counted (net.rs:549-552)"
+        "drain error is only counted"
     );
     assert_eq!(core.stats().drain_errors, 1, "drain error counted");
     assert_eq!(core.stats().acks, 1, "only the decode acked");
@@ -868,7 +868,7 @@ fn hello_ack_mid_stream_is_ignored() {
     assert_eq!(
         core.on_server(hello_ack(PROTOCOL_VERSION), Bytes::new(), Bytes::new()),
         Vec::new(),
-        "net.rs:722"
+        "a mid-stream HelloAck is ignored"
     );
 }
 
@@ -879,7 +879,7 @@ fn video_frame_before_stream_config_ends_the_link() {
     let actions = core.on_server(frame(0), au(), Bytes::new());
     assert!(
         matches!(ended(&actions), Some(EndReason::Link(_))),
-        "net.rs:355: {actions:?}"
+        "a frame before StreamConfig ends the session: {actions:?}"
     );
 }
 
@@ -944,7 +944,7 @@ fn a_cursor_shape_while_streaming_reaches_the_ui_with_its_pixels() {
                 argb,
             }
         ))],
-        "main.rs:1270: the shape and hot spot go to the window"
+        "the shape and hot spot go to the window"
     );
 }
 
