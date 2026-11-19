@@ -5,10 +5,16 @@
 //! when any line has `"ok": false`. Checks of features that are not
 //! built yet print a `pending` line and fail, so nothing reads as green before it exists.
 
-#[cfg_attr(not(windows), allow(dead_code))]
+#[cfg_attr(
+    not(windows),
+    allow(dead_code, reason = "only the Windows build uses this")
+)]
 mod client_config;
 mod clip;
-#[cfg_attr(not(windows), allow(dead_code))]
+#[cfg_attr(
+    not(windows),
+    allow(dead_code, reason = "only the Windows build uses this")
+)]
 mod clip_check;
 mod config_check;
 mod decode_check;
@@ -22,7 +28,10 @@ mod present_check;
 mod size;
 mod ssh_check;
 mod stream_check;
-#[cfg_attr(not(windows), allow(dead_code))]
+#[cfg_attr(
+    not(windows),
+    allow(dead_code, reason = "only the Windows build uses this")
+)]
 mod strip_offset;
 mod strip_shot;
 mod tabs_check;
@@ -550,7 +559,10 @@ impl Report {
 }
 
 /// Where and how `present` runs the client (read on Windows only).
-#[cfg_attr(not(windows), allow(dead_code))]
+#[cfg_attr(
+    not(windows),
+    allow(dead_code, reason = "only the Windows build uses this")
+)]
 struct PresentArgs {
     host: HostTarget,
     client: Option<PathBuf>,

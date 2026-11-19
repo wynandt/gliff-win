@@ -65,7 +65,10 @@ pub enum Placement {
     NoOutput { monitors: Vec<String> },
     /// More than one session output, so none is "the" session's
     /// ([`judge_session`], Windows and tests only).
-    #[cfg_attr(not(any(windows, test)), allow(dead_code))]
+    #[cfg_attr(
+        not(any(windows, test)),
+        allow(dead_code, reason = "only the Windows build and the tests use this")
+    )]
     Ambiguous { outputs: Vec<String> },
     /// The command's output did not parse.
     Unreadable(String),
@@ -151,7 +154,10 @@ pub fn judge(stdout: &str, name: &str) -> Placement {
 /// known (the present gate: the client does not report it): the one
 /// gliff-* output. Two or more is [`Placement::Ambiguous`], not a guess.
 /// Used by the Win32 harness, so dead on the build machine outside tests.
-#[cfg_attr(not(any(windows, test)), allow(dead_code))]
+#[cfg_attr(
+    not(any(windows, test)),
+    allow(dead_code, reason = "only the Windows build and the tests use this")
+)]
 pub fn judge_session(stdout: &str) -> Placement {
     let Some(monitors) = serde_json::Deserializer::from_str(stdout)
         .into_iter::<Value>()
@@ -176,7 +182,10 @@ pub fn judge_session(stdout: &str) -> Placement {
 }
 
 /// Upstream names each session's headless output `gliff-<pid>`.
-#[cfg_attr(not(any(windows, test)), allow(dead_code))]
+#[cfg_attr(
+    not(any(windows, test)),
+    allow(dead_code, reason = "only the Windows build and the tests use this")
+)]
 const SESSION_PREFIX: &str = "gliff-";
 
 fn monitor(m: &Value) -> Option<Monitor> {

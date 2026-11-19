@@ -5,25 +5,55 @@
 //! lock-step rows) run on the build machine against fakes. Only `win32`
 //! touches a real machine, and only on Windows.
 
-#[cfg_attr(not(windows), allow(dead_code))]
+#[cfg_attr(
+    not(windows),
+    allow(dead_code, reason = "only the Windows build uses this")
+)]
 pub mod cases;
-#[cfg_attr(not(windows), allow(dead_code))]
+#[cfg_attr(
+    not(windows),
+    allow(dead_code, reason = "only the Windows build uses this")
+)]
 pub mod countdown;
-#[cfg_attr(not(windows), allow(dead_code))]
+#[cfg_attr(
+    not(windows),
+    allow(dead_code, reason = "only the Windows build uses this")
+)]
 pub mod fresh;
-#[cfg_attr(not(windows), allow(dead_code))]
+#[cfg_attr(
+    not(windows),
+    allow(dead_code, reason = "only the Windows build uses this")
+)]
 pub mod judge;
-#[cfg_attr(not(windows), allow(dead_code))]
+#[cfg_attr(
+    not(windows),
+    allow(dead_code, reason = "only the Windows build uses this")
+)]
 pub mod lock;
-#[cfg_attr(not(windows), allow(dead_code))]
+#[cfg_attr(
+    not(windows),
+    allow(dead_code, reason = "only the Windows build uses this")
+)]
 pub mod manual;
-#[cfg_attr(not(windows), allow(dead_code))]
+#[cfg_attr(
+    not(windows),
+    allow(dead_code, reason = "only the Windows build uses this")
+)]
 pub mod placement;
-#[cfg_attr(not(windows), allow(dead_code))]
+#[cfg_attr(
+    not(windows),
+    allow(dead_code, reason = "only the Windows build uses this")
+)]
 pub mod remote_log;
-#[cfg_attr(not(windows), allow(dead_code))]
+#[cfg_attr(
+    not(windows),
+    allow(dead_code, reason = "only the Windows build uses this")
+)]
 pub mod run;
-#[cfg_attr(not(windows), allow(dead_code))]
+#[cfg_attr(
+    not(windows),
+    allow(dead_code, reason = "only the Windows build uses this")
+)]
 pub mod scan;
 #[cfg(windows)]
 pub mod win32;
@@ -31,7 +61,10 @@ pub mod win32;
 use cases::Case;
 
 /// The committed Super-chord table the gate sends.
-#[cfg_attr(not(windows), allow(dead_code))]
+#[cfg_attr(
+    not(windows),
+    allow(dead_code, reason = "only the Windows build uses this")
+)]
 const CHORD_TABLE: &str = include_str!("../../../../docs/phase4/super-chords.tsv");
 
 /// A group of `keys` cases (`--only`).
@@ -62,7 +95,10 @@ pub enum KeyGroup {
 
 impl KeyGroup {
     /// What a run without `--only` includes.
-    #[cfg_attr(not(windows), allow(dead_code))]
+    #[cfg_attr(
+        not(windows),
+        allow(dead_code, reason = "only the Windows build uses this")
+    )]
     pub const DEFAULT: [Self; 8] = [
         Self::Chords,
         Self::System,
@@ -75,7 +111,10 @@ impl KeyGroup {
     ];
 }
 
-#[cfg_attr(not(windows), allow(dead_code))]
+#[cfg_attr(
+    not(windows),
+    allow(dead_code, reason = "only the Windows build uses this")
+)]
 /// The cases whose name contains one of `needles` (any case of letters), in
 /// plan order; all of them when there are no needles. An error when nothing
 /// matches, so a mistyped name is not a run of zero cases that "passes".
@@ -99,7 +138,10 @@ pub fn select_cases(plan: Vec<Case>, needles: &[String]) -> Result<Vec<Case>, St
 
 /// The cases of the chosen groups, in a fixed order. The lock group has no
 /// cases: it is its own driver.
-#[cfg_attr(not(windows), allow(dead_code))]
+#[cfg_attr(
+    not(windows),
+    allow(dead_code, reason = "only the Windows build uses this")
+)]
 pub fn keys_plan(groups: &[KeyGroup]) -> Result<Vec<Case>, String> {
     let groups = if groups.is_empty() {
         &KeyGroup::DEFAULT[..]
@@ -143,7 +185,10 @@ pub fn keys_plan(groups: &[KeyGroup]) -> Result<Vec<Case>, String> {
 
 /// The pointer cases for a remote output of `size`: nine clicks, the wheel
 /// and the four buttons.
-#[cfg_attr(not(windows), allow(dead_code))]
+#[cfg_attr(
+    not(windows),
+    allow(dead_code, reason = "only the Windows build uses this")
+)]
 pub fn pointer_plan(size: (u32, u32)) -> Vec<Case> {
     let mut plan = cases::clicks(size);
     plan.extend(cases::wheel());

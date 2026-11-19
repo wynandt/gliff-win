@@ -91,7 +91,9 @@ the Windows jobs in CI:
 
 `scripts/check --host-only` also runs `scripts/lint-terms`,
 `scripts/lint-ssh`, `scripts/lint-registry`, `scripts/lint-clip-log`,
-`formal/held-keys/run`, and `scripts/lint-workflows`. CI runs those lints,
+`scripts/lint-comments`, `scripts/lint-upstream-cite`,
+`scripts/lint-line-cite`, `formal/held-keys/run`, and
+`scripts/lint-workflows`. CI runs those lints,
 the held-keys model, a Windows clippy and release build, and
 `cargo test -p gliff-windows` on Windows. See [CONTRIBUTING.md](CONTRIBUTING.md)
 and [docs/development.md](docs/development.md#check).
@@ -128,6 +130,9 @@ Never change ssh policy or provision host trust for a test.
   reasons. If code needs explaining, rename it, extract it, give it a type, or
   add a test. Do not copy a workaround because a comment explains it.
   `scripts/lint-comments` and `scripts/lint-upstream-cite` enforce this.
+  Cite code by symbol name or a pinned permalink, never by line number
+  (`scripts/lint-line-cite`). Every `#[allow]` needs a `reason = "..."`
+  (clippy `allow_attributes_without_reason`).
 - Docs are written for a reader who has this repository and nothing else.
   Use "Windows machine", "remote machine", and "build machine". See
   [Docs rules](docs/development.md#docs-rules). Scan a pull request

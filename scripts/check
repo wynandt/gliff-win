@@ -6,6 +6,7 @@
 #   clip-log: scripts/lint-clip-log (the clipboard log can hold no clipboard contents)
 #   comments: scripts/lint-comments (only tagged comments besides doc comments)
 #   upstream-cite: scripts/lint-upstream-cite (only the pinned upstream revision is cited)
+#   line-cite: scripts/lint-line-cite (no file:line citations; name the symbol)
 #   held-keys: formal/held-keys/run (TLA+ model of holding and releasing keys)
 #   host:  cargo fmt --check, clippy -D warnings, tests
 #   workflows: scripts/lint-workflows (zizmor and actionlint; installs pinned copies under target/)
@@ -50,6 +51,10 @@ scripts/lint-comments
 step "lint-upstream-cite"
 scripts/lint-upstream-cite --self-test
 scripts/lint-upstream-cite
+
+step "lint-line-cite"
+scripts/lint-line-cite --self-test
+scripts/lint-line-cite
 
 step "held-keys"
 formal/held-keys/run

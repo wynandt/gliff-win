@@ -15,7 +15,10 @@ pub fn parse_target(text: &str) -> Result<HostTarget, HostTargetError> {
 
 /// The arguments of `ssh` that run `command` on `target`: batch mode, then
 /// `--` so that the target is not read as an option, then the command.
-#[cfg_attr(not(windows), allow(dead_code))]
+#[cfg_attr(
+    not(windows),
+    allow(dead_code, reason = "only the Windows build uses this")
+)]
 pub fn ssh_command_args(target: &str, command: &[&str]) -> Vec<String> {
     let mut args: Vec<String> = ["-o", "BatchMode=yes", "--", target]
         .iter()
