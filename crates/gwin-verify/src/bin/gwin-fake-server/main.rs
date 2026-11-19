@@ -10,12 +10,7 @@
 //! closing without a Bye, exits non-zero, so `exit_after_bye` proves the
 //! client answered the Ping and said Bye.
 //!
-//! Shutdown: a current-thread
-//! runtime and a `LocalSet`, with stdin read by a `spawn_local` task that
-//! loops until EOF. On Bye the session returns, but that task has already
-//! started the next read on tokio's blocking stdin thread, which cannot be
-//! cancelled, and dropping the runtime waits for it. So this exits only
-//! once the client closes stdin after Bye.
+//! Shutdown: after Bye it exits only once the client closes stdin.
 //!
 //! Video is real H.264 from `gliff_sw::Encoder`, upstream's CPU encoder,
 //! of the shared test pattern (`pattern.rs`) with its moving square.
@@ -472,11 +467,8 @@ impl Server {
         }
     }
 
-    /// One pacing tick: send a frame if the byte cap has room, step the
-    /// ladder, and say when to come back.
-    /// Sends the frame due at `due` (or waits); returns when the next is
-    /// due. Pacing from `due`, not from now, keeps the encode time from
-    /// lowering the rate.
+    /// One pacing tick: sends the frame due at `due` if the byte cap has room,
+    /// steps the ladder, and returns when the next frame is due.
     async fn tick(&mut self, due: Instant) -> anyhow::Result<Instant> {
         let now = Instant::now();
         let interval = Duration::from_secs_f64(1.0 / f64::from(self.fps_cap.max(1)));

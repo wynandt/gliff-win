@@ -41,9 +41,8 @@ pub const PANEL: Size = Size {
 #[derive(Debug)]
 pub struct Measured {
     /// Wall time of every decode call (each access unit, then the final
-    /// flush if a picture was held), in ms. Kept whole so quantiles are
-    /// exact: the session's 0.5 ms histogram would move a 33.1 ms p95 to
-    /// 33.5 ms, across the kill-rule line.
+    /// flush if a picture was held), in ms. Every sample is kept, so quantiles
+    /// are exact.
     pub samples_ms: Vec<f64>,
     pub pictures: u64,
     pub errors: u64,

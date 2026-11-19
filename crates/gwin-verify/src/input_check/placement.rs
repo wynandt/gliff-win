@@ -46,8 +46,6 @@ mod tests {
         }
     }
 
-    /// The window the failing run had: 2906x1871 at the corner of a
-    /// 3840x2400 monitor.
     #[test]
     fn the_sink_goes_to_the_strip_right_of_the_client() {
         let (x, y) = beside(rect(0, 0, 2906, 1871), rect(0, 0, 3840, 2360), SIZE)

@@ -12,8 +12,7 @@ pub const ROWS: u32 = 4;
 
 /// Row-major RGB. Levels 0, 128 and 255 in every combination, then five
 /// more; the closest pair is 63 apart on one channel, far above what
-/// H.264 4:2:0 does to a flat cell. Keep in sync with the script's
-/// PALETTE (a test checks it).
+/// H.264 4:2:0 does to a flat cell. Matches the script's PALETTE.
 pub const PALETTE: [[u8; 3]; 32] = [
     [0, 0, 0],
     [0, 0, 128],
@@ -96,8 +95,7 @@ pub fn render(width: u32, height: u32, n: u64, content: Content, out: &mut Vec<u
 }
 
 #[cfg_attr(not(test), allow(dead_code))]
-/// Everything but the moving square. The fake server draws this once per
-/// size and copies it, since only the square changes.
+/// Everything but the moving square.
 pub fn background(width: u32, height: u32, content: Content, out: &mut Vec<u8>) {
     let (w, h) = (width as usize, height as usize);
     out.resize(w * h * 4, 0);
@@ -344,9 +342,7 @@ mod tests {
         );
     }
 
-    /// `frame` scaled up `k` times by pixel repeat, as Hyprland scales the
-    /// script's small source to the output (filtering only softens edges,
-    /// which the inner 70% skips).
+    /// `frame` scaled up `k` times by pixel repeat.
     fn upscaled(frame: &BgraFrame, k: u32) -> BgraFrame {
         let (width, height) = (frame.width * k, frame.height * k);
         let mut pixels = Vec::with_capacity((width * height * 4) as usize);
@@ -363,10 +359,6 @@ mod tests {
         }
     }
 
-    /// A real present run at 200%: the output is a 3840x2400 mode at
-    /// scale 2 (1920x1200 logical) and the client shows the 3840x2400
-    /// stream. The script's 960x600 source fills it 4x; the cells are
-    /// fractions of the picture, so it scores as the pattern.
     #[test]
     fn a_960x600_source_on_the_scale_2_panel_matches() {
         let panel = upscaled(&frame(960, 600, Content::Pattern), 4);
@@ -376,10 +368,6 @@ mod tests {
         assert_eq!(score.verdict(), Verdict::Match, "{score:?}");
     }
 
-    /// ffplay -fs letterboxes, so a 16:9 source (the clamped first mode's)
-    /// on the 16:10 panel shifts the rows by up to 120 px. The inner-70%
-    /// compare still passes it (the margin shrinks), so the script's
-    /// aspect-following source is for an exact picture, not to pass.
     #[test]
     fn a_16_9_source_letterboxed_on_16_10_still_matches_with_less_margin() {
         let wide = upscaled(&frame(960, 540, Content::Pattern), 4);
@@ -405,10 +393,7 @@ mod tests {
         );
     }
 
-    /// The script's real graph through ffmpeg (build machine: `cargo test -p
-    /// gwin-verify -- --ignored ffmpeg`): at the 960x600 source `follow`
-    /// uses for a 16:10 output it is the pattern at 4x, it runs at 60 fps,
-    /// and consecutive frames differ (continuous damage).
+    /// Build machine only, needs ffmpeg: `cargo test -p gwin-verify -- --ignored ffmpeg`.
     #[test]
     #[ignore = "needs bash and ffmpeg on the build machine"]
     fn ffmpeg_renders_the_follow_source_as_moving_pattern_frames() {

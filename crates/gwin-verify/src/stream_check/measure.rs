@@ -18,8 +18,8 @@ pub enum ResizeVerdict {
     /// stream down to fit its maximum.
     Clamped { stream: (u32, u32) },
     /// The output is the requested size, but the stream is smaller than
-    /// the encoder fit: the rate ladder's scale-0.5 levels
-    /// , a symptom that `fps` reports.
+    /// the encoder fit: the rate ladder's scale-0.5 levels, a symptom that
+    /// `fps` reports.
     Scaled { stream: (u32, u32) },
     /// Not (yet) the requested output.
     Other { implied_output: (u32, u32) },

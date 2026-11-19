@@ -150,7 +150,6 @@ pub fn judge(stdout: &str, name: &str) -> Placement {
 /// Decides placement for the session's output when its name is not
 /// known (the present gate: the client does not report it): the one
 /// gliff-* output. Two or more is [`Placement::Ambiguous`], not a guess.
-/// Used by the Win32 harness, so dead on the build machine outside tests.
 #[cfg_attr(not(any(windows, test)), allow(dead_code))]
 pub fn judge_session(stdout: &str) -> Placement {
     let Some(monitors) = serde_json::Deserializer::from_str(stdout)
@@ -254,9 +253,6 @@ mod tests {
         );
     }
 
-    /// A real present run's sizes: a Resize of 2560x1600 at 2.0 is a
-    /// 2560x1600 mode at scale 2, so the
-    /// covering window is 1280x800.
     #[test]
     fn judge_session_finds_the_one_gliff_output_at_scale_2() {
         let stdout = concat!(

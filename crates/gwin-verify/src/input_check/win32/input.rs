@@ -167,9 +167,7 @@ pub fn nudge() -> anyhow::Result<()> {
 }
 
 /// Lets go of every modifier Windows still counts as down (the same sweep the
-/// client makes when a grab ends), and says so when it had to. A step that
-/// ends early, a key a person held a moment too long, or a lock screen that
-/// took an Up must not leave Ctrl, Alt, Shift or Win held for what follows.
+/// client makes when a grab ends), and says so when it had to.
 pub fn release_modifiers(after: &str) {
     let released = gliff_windows::modifiers::release_local();
     if released > 0 {
