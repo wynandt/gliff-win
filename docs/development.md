@@ -83,25 +83,31 @@ In order:
    clipboard log can hold no clipboard contents or file names. Only
    `clip_log.rs` writes clipboard lines, and its types hold no free text (see
    [The log](clipboard.md#the-log)). Needs Python 3.
-5. `formal/held-keys/run`: model-check holding and releasing keys with TLC.
+5. `scripts/lint-comments --self-test`, then `scripts/lint-comments`: every
+   comment in a `.rs` or `.hlsl` file that is not a doc comment opens with an
+   allowed tag (see [Comments](#comments)). Needs Python 3.
+6. `scripts/lint-upstream-cite --self-test`, then `scripts/lint-upstream-cite`:
+   every upstream Gliff revision a tracked file names is the one pinned in
+   `Cargo.toml` (see [Comments](#comments)). Needs Python 3.
+7. `formal/held-keys/run`: model-check holding and releasing keys with TLC.
    On x86-64 Linux the first run downloads a pinned TLC and a pinned Java
    runtime into `target/tla-tools` (SHA-256 checked). Needs the network that
    first time. About half a minute; see
    [formal/held-keys](../formal/held-keys/README.md).
-6. `cargo fmt --all -- --check`.
-7. `cargo clippy --workspace --all-targets --locked -- -D warnings`.
-8. `cargo test --workspace --locked`.
-9. `scripts/lint-workflows --self-test`, then `scripts/lint-workflows`: lint
+8. `cargo fmt --all -- --check`.
+9. `cargo clippy --workspace --all-targets --locked -- -D warnings`.
+10. `cargo test --workspace --locked`.
+11. `scripts/lint-workflows --self-test`, then `scripts/lint-workflows`: lint
    the files in `.github/workflows` (see [CI and release](#ci-and-release)).
    Needs Python 3 and Go, and the network the first time (it installs two
    pinned tools under `target/`).
-10. Unless `--host-only`: `cargo xwin clippy ... -D warnings`, again with
+12. Unless `--host-only`: `cargo xwin clippy ... -D warnings`, again with
     `--features test-hooks`, and `cargo xwin build --release` for
     `x86_64-pc-windows-msvc`.
 
 It prints `check: all green` at the end. A full run takes several minutes;
 `--host-only` skips the Windows steps (use it while editing, run the full gate
-before you push). Win32 code is checked only by step 10, the Windows CI jobs
+before you push). Win32 code is checked only by step 12, the Windows CI jobs
 and by hand on a real machine.
 
 ## Run on one machine
@@ -394,6 +400,42 @@ closes one of these.
 - Record a measurement with the platform (Windows machine or build machine)
   and the command that reproduces it. Describe hardware generically ("one
   high-DPI laptop screen at 200%"), with no model names, clock times or time zones.
+
+## Comments
+
+Most comments are not allowed. A comment is text that nothing checks: it
+goes stale, it starts to say the opposite of the code, and an agent copies a
+workaround it explains into new code. Say it in the code instead: a better
+name, a smaller function, a type that cannot hold the bad state, a test, or a
+lint.
+
+These are allowed:
+
+- A doc comment (`///`, `//!`) that states the contract of an item: what it
+  does for its caller, its errors, panics, units and invariants, and what an
+  `unsafe fn` requires. Not how it works inside, and not its history.
+- `// SAFETY:` on an `unsafe` block, stating what makes it sound.
+- `// Platform:` for behaviour forced by Windows, a driver, OpenSSH or another
+  dependency we cannot change. Keep it to a few lines. Link the section of
+  [windows-quirks.md](windows-quirks.md) or the vendor page that explains it.
+- `// Upstream:` for behaviour forced by Gliff. Name the upstream symbol, not a
+  line number. Any revision you name must be the one pinned in `Cargo.toml`.
+- A marker a lint reads, such as `// clip-log:` for `scripts/lint-clip-log`.
+- A lint exception, as the attribute's reason:
+  `#[allow(dead_code, reason = "...")]`.
+- License headers.
+
+Not allowed: narration, a restatement of the next line, commented-out code,
+history ("used to", "was changed because"), a TODO, and a comment that
+excuses a workaround, a swallowed error, or a retry. Fix the code, or file an
+issue for it and delete the comment. A tag line and the comment lines right
+under it at the same indentation form one comment. A comment after code on
+the same line needs its own tag.
+
+`scripts/lint-comments` enforces the tags in `.rs` and `.hlsl` files. Doc
+comments need review: a lint cannot tell a contract from narration.
+`scripts/lint-upstream-cite` fails when a tracked file names an upstream Gliff
+revision other than the pinned one.
 
 ## The Rust toolchain
 
