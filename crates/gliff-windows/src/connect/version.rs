@@ -12,8 +12,7 @@ use super::runner::ToolError;
 use super::runner::Tools;
 use crate::ssh::SshSpec;
 
-/// The lowest `gliff-server` this client accepts: the one it is tested with
-/// (decision O8).
+/// The lowest `gliff-server` this client accepts: the one it is tested with.
 pub const MIN_SERVER: ServerVersion = ServerVersion::new(0, 4, 1);
 
 /// A `major.minor.patch` version. Ordered the way versions are.

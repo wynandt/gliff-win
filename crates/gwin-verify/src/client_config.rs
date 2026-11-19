@@ -26,12 +26,9 @@ pub fn fresh_config_dir(log_dir: &Path) -> io::Result<PathBuf> {
 }
 
 /// The client's command line so far: the program, its `--config-dir` and
-/// `--headless`. Every launcher starts from this, never from
-/// `Command::new(client)`.
-///
-/// The client's own default is to mirror the remote machine's focused screen.
-/// Every gate was written and passed on the private screen, so each one asks
-/// for it by name and keeps testing what it did.
+/// `--headless` (a private screen, not the client's default of mirroring the
+/// remote machine's focused screen). Every launcher starts from this, never
+/// from `Command::new(client)`.
 pub fn client_command(client: &Path, log_dir: &Path) -> io::Result<Command> {
     let mut command = Command::new(client);
     command.arg("--config-dir").arg(fresh_config_dir(log_dir)?);
@@ -85,10 +82,6 @@ mod tests {
         let _ = fs::remove_dir_all(&log);
     }
 
-    /// A launcher that built its own `Command::new(client)` would read the
-    /// real config folder. Only [`client_command`] may, or a command that
-    /// gives `--config-dir` itself; the lock helper (`--restore-lock-policy`)
-    /// never reads the config.
     #[test]
     fn no_launcher_builds_a_client_command_without_the_config_folder() {
         let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");

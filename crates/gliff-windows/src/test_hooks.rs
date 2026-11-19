@@ -90,7 +90,6 @@ mod on {
 #[cfg(feature = "test-hooks")]
 pub use on::TestHooks;
 
-/// No flag exists in this build, so there is nothing to ask for.
 #[cfg(not(feature = "test-hooks"))]
 use crate::cli::Args;
 #[cfg(not(feature = "test-hooks"))]
@@ -102,6 +101,7 @@ pub struct TestHooks;
 
 #[cfg(not(feature = "test-hooks"))]
 impl TestHooks {
+    /// No flag exists in this build, so there is nothing to ask for.
     pub fn from_args(_args: &Args) -> Self {
         Self
     }

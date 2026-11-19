@@ -64,8 +64,7 @@ pub enum Act {
     /// Close whatever Windows opened over the client (a flyout, an overlay):
     /// the text sink takes the focus, then Escape goes to it, so Escape
     /// never reaches the remote machine. Best effort, and a no-op when the sink
-    /// cannot be focused. The runner sends it after judging every risky
-    /// case, so nothing a chord opened is left for the next one.
+    /// cannot be focused.
     Dismiss,
     /// A left click at a remote logical point (the client's picture is
     /// inverted back to a screen point).

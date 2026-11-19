@@ -97,7 +97,7 @@ fn stopped(reason: &str, error: impl std::fmt::Display) -> Line {
         .with("error", error.to_string())
 }
 
-/// Runs the whole §6 sequence and judges it.
+/// Runs every step of `present` and judges the result.
 pub fn run(h: &mut impl Harness, plan: &Plan) -> Line {
     if let Err(e) = h.launch() {
         return stopped("launch", format!("{e:#}"));
@@ -204,10 +204,7 @@ impl Stage {
 }
 
 /// Probes the damage source after a stage settled, before it is measured:
-/// what was seen, or why it stops the run. Presented fps and the stall gap
-/// measure the source as much as the client (gliff sends frames on
-/// damage), so a stage without the moving pattern would fail them for the
-/// setup.
+/// what was seen, or why it stops the run.
 fn source(h: &mut impl Harness, stage: Stage) -> Result<String, String> {
     match h.damage_source() {
         DamageSource::Covers(seen) => Ok(seen),

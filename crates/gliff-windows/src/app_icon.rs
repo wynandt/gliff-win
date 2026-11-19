@@ -1,7 +1,6 @@
 //! Loads the application icon compiled into the executable.
 //!
-//! `build.rs` embeds `assets/gliff.ico` as resource ID 1. The window class
-//! and `WM_SETICON` both use sizes from `GetSystemMetricsForDpi`.
+//! `build.rs` embeds `assets/gliff.ico` as resource ID 1.
 
 use windows::Win32::Foundation::HWND;
 use windows::Win32::Foundation::LPARAM;

@@ -4,7 +4,7 @@
 //! The cases are pure: they drive a [`Harness`] and judge what it reads back.
 //! Only `win32` touches the real Windows clipboard and window, and only on
 //! Windows; `remote` runs `wl-copy` and `wl-paste` over ssh on the remote
-//! machine and is proven against `scripts/fake-ssh` and the fake wl-clipboard.
+//! machine.
 
 pub mod picture;
 #[cfg_attr(

@@ -158,9 +158,8 @@ impl<H: LockHarness> Steps<'_, H> {
         }
     }
 
-    /// Value is the prior one and the marker is gone. The client takes a
-    /// tick and then a short delay to put it back, and the watchdog a poll,
-    /// so this looks again for [`RESTORE_GRACE`] before it says no.
+    /// Value is the prior one and the marker is gone, looked for again for up
+    /// to [`RESTORE_GRACE`] before it says no.
     fn expect_restored(&mut self, what: &str, reasons: &mut Vec<String>) {
         let Some(prior) = self.prior else {
             return;
@@ -213,10 +212,7 @@ impl<H: LockHarness> Steps<'_, H> {
     }
 
     /// Puts the client or the text field in front of it (`front`), waits
-    /// [`SETTLE`], and looks. The client grabs when it gains the foreground
-    /// and lets go when it loses it, so a click or a window opening or
-    /// closing between the move and the look changes what every later step
-    /// measures; this tries again up to [`PLACE_TRIES`] times. What a failed
+    /// [`SETTLE`], and looks, up to [`PLACE_TRIES`] times. What a failed
     /// try said is kept only when no try succeeds.
     fn place(&mut self, front: Front, what: &str, reasons: &mut Vec<String>) -> bool {
         let mut errors = Vec::new();

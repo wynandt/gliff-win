@@ -1,7 +1,6 @@
 //! The client's tab strip sits at the top of its client area. The checks
 //! talk about the picture, which is the client area below the strip: these
-//! two functions convert between the two. They are pure so a build machine
-//! tests them; the Windows harnesses read the strip's height from the
+//! two functions convert between the two. The strip's height comes from the
 //! client (`gliff_windows::strip_win::height_of`).
 
 /// The picture's screen origin and size, from the client area's and the

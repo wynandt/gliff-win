@@ -5,8 +5,8 @@
 //!
 //! The filter holds a left-Ctrl Down for up to [`DEADLINE_MS`]. If the right
 //! Alt Down follows inside that time, the Ctrl is dropped (and so is its
-//! matching Up). Otherwise the Ctrl is forwarded late. Pure and clocked by
-//! the key times, so it is tested without a clock.
+//! matching Up). Otherwise the Ctrl is forwarded late. It reads no clock:
+//! every time is a key's own.
 
 use crate::keymap::Prefix;
 use crate::keymap::Press;

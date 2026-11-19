@@ -43,7 +43,7 @@ pub const FEATURES: &[&str] = &[];
 /// The colour a session asks for: a machine's *Sharp colour* choice.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Colour {
-    /// 4:2:0 only, as before the choice existed.
+    /// 4:2:0 only.
     #[default]
     Standard,
     /// Full-resolution colour (Dual420), with 4:2:0 for the server to fall

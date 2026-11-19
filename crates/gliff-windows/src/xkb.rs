@@ -1,5 +1,5 @@
-//! The Windows keyboard layout as an XKB keymap for the server (decision 2:
-//! any layout, then a language fallback, then `us`). Pure.
+//! The Windows keyboard layout as an XKB keymap for the server: any layout,
+//! then a language fallback, then `us`. Pure.
 //!
 //! The text is a small template with includes; the server compiles it
 //! against its own xkeyboard-config. Evdev codes stay positions, so nothing

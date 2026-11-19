@@ -1,10 +1,6 @@
 //! `gwin-verify ssh`: start the server exactly as the client does, run the
 //! opening of a session the way upstream's server orders it (HelloAck,
 //! Ping, StreamConfig), say Bye, close stdin, and require a clean exit.
-//!
-//! Closing stdin is part of ending the session, not a courtesy: upstream's
-//! server returns from its session on Bye but only exits at stdin EOF (see
-//! [`session`]), so a client that keeps stdin open waits forever.
 
 use std::path::Path;
 use std::time::Duration;
@@ -163,8 +159,6 @@ fn fail(line: Line, stderr_log: &Path, exit: Option<i32>, error: String) -> Line
 /// upstream asks) and StreamConfig have all arrived; Bye; close stdin;
 /// drain the pipe to EOF so a server still writing is never blocked; wait
 /// for the exit.
-///
-/// Takes `stdin` by value so it can be closed.
 async fn session(
     stdin: ChildStdin,
     stdout: ChildStdout,

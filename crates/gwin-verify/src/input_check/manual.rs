@@ -52,12 +52,10 @@ pub const ITEMS: [Manual; 8] = [
 /// ends.
 const GRAB_TIMEOUT_SECS: &str = "900";
 
-/// Asks each item with a client running and in front, because every prompt
-/// says "with the client focused". The client is brought to the front again
-/// before each prompt (answering clicks the console, which ends a focus-follow
-/// grab), stays up through all of them, and is stopped at the end, which also
-/// releases any modifier left down. `ask` gets the harness so it can use the
-/// same console; a `n` fails the item with the instruction as the reason.
+/// Asks each item with a client running, brought to the front before each
+/// prompt. The client stays up through all of them and is stopped at the end,
+/// which also releases any modifier left down. `ask` gets the harness so it can
+/// use the same console; a `n` fails the item with the instruction as the reason.
 pub fn run<H: Harness>(h: &mut H, ask: &mut dyn FnMut(&mut H, &str) -> bool) -> Vec<CaseResult> {
     let flags = [
         "--grab-timeout-secs".to_owned(),

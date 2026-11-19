@@ -692,8 +692,9 @@ impl Session {
             .map(WheelClock::deadline)
     }
 
-    /// Taking the time first means a Core that drops the command (an ended
-    /// session) cannot leave a deadline in the past for the loop to spin on.
+    /// Ends the open smooth scrolls once [`Self::scroll_due`] has passed. The
+    /// deadline is cleared even when the Core drops the command (an ended
+    /// session), so the loop never spins on a deadline in the past.
     fn end_scroll_if_due(&mut self) {
         if self.scroll_due().is_some_and(|due| Instant::now() >= due) {
             self.wheel_clock = None;

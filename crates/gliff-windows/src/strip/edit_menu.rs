@@ -63,8 +63,7 @@ const WM_COPY: u32 = 0x0301;
 const WM_PASTE: u32 = 0x0302;
 const EM_SETSEL: u32 = 0x00b1;
 
-/// The message that does what the row says. These are the messages the stock
-/// menu sends, so Cut, Copy and Paste behave as they did.
+/// The message that does what the row says: the one the stock menu sends.
 pub fn message(command: EditCommand) -> Message {
     let (msg, wparam, lparam) = match command {
         EditCommand::Cut => (WM_CUT, 0, 0),

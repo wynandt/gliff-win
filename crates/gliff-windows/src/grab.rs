@@ -499,13 +499,10 @@ impl Grab {
     }
 
     /// While the keyboard is grabbed by focus, about once a second: is the
-    /// window in front still ours? Windows does not always send
-    /// `WM_KILLFOCUS` when a game takes the foreground, and without it the
-    /// grab would last until something else ended it. Two looks in a row at
-    /// another program's window are a lost focus, by the usual path (so held
-    /// keys are released on both machines); our own window in front again is
-    /// a gained one. Outside a focus grab this does nothing and asks Windows
-    /// nothing.
+    /// window in front still ours? Two looks in a row at another program's window
+    /// are a lost focus, by the usual path (so held keys are released on both
+    /// machines); our own window in front again is a gained one. Outside a focus
+    /// grab this does nothing and asks Windows nothing.
     fn check_foreground(&mut self) {
         let grabbing = grabbing_by_focus(self.config.follow, self.state.mode());
         if !self.foreground_watch.active(grabbing) {
@@ -767,8 +764,6 @@ impl PointerReading {
     }
 }
 
-/// Whether the pointer is over the window's client area right now, with no
-/// other window in front of it, and what it found on the way.
 /// How the window in front relates to `hwnd`, for the foreground check.
 fn read_relation(hwnd: HWND) -> Relation {
     // SAFETY: no arguments.
@@ -803,6 +798,8 @@ fn read_relation(hwnd: HWND) -> Relation {
     }
 }
 
+/// Whether the pointer is over the window's client area right now, with no
+/// other window in front of it, and what it found on the way.
 fn read_pointer(hwnd: HWND) -> PointerReading {
     let mut out = PointerReading {
         over: None,

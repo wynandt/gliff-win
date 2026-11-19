@@ -429,7 +429,7 @@ pub struct Chord {
 }
 
 impl Chord {
-    /// Ctrl+Alt+Home, the default release chord (decision 8).
+    /// Ctrl+Alt+Home, the default release chord.
     pub fn ctrl_alt_home() -> Self {
         "ctrl+alt+home".parse().expect("the default chord parses")
     }
