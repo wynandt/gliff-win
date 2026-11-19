@@ -1,0 +1,241 @@
+#!/usr/bin/env python3
+"""Fails when a Rust or HLSL source holds a comment the comment policy bans.
+
+The policy is in docs/development.md, "Comments". Doc comments (`///`, `//!`,
+`/** */`, `/*! */`) state an API contract and are not checked here; review
+keeps them to behaviour, errors, panics and safety. Every other comment must
+open with one of these tags, and only the comment lines right after it, at the
+same indentation, belong to it:
+
+  // SAFETY:      the precondition an `unsafe` block relies on
+  // Platform:    behaviour forced by Windows, a driver, OpenSSH or another
+                  dependency we cannot change (link docs/windows-quirks.md
+                  or the vendor page)
+  // Upstream:    behaviour forced by gliff at the pinned revision (name the
+                  symbol; scripts/lint-upstream-cite checks the revision)
+  // clip-log:    a marker scripts/lint-clip-log reads
+
+A comment after code on the same line must carry a tag itself. Commented-out
+code, narration and restatements are not allowed: rename, extract a function,
+add a type or a test instead. A lint exception goes in the attribute:
+`#[allow(lint, reason = "...")]`.
+
+It reads each file with a small lexer that skips strings, raw strings and
+character literals, so `"//"` in a string is not a comment.
+
+Usage: scripts/lint-comments              scan the files git knows (tracked or new)
+       scripts/lint-comments --list FILE  print every comment of FILE
+       scripts/lint-comments --self-test
+"""
+
+import re
+import subprocess
+import sys
+import tempfile
+import os
+
+TAG = re.compile(r"(SAFETY|Platform|Upstream|clip-log):(\s|$)")
+SOURCES = ("*.rs", "*.hlsl")
+
+
+def is_ident(c):
+    return c.isalnum() or c == "_"
+
+
+def raw_string_at(text, i):
+    """(index of the r, number of #) when a raw string opens at i, else None."""
+    j = i
+    if text.startswith("br", i) or text.startswith("cr", i):
+        j = i + 1
+    if text[j : j + 1] != "r" or (i > 0 and is_ident(text[i - 1])):
+        return None
+    k = j + 1
+    while k < len(text) and text[k] == "#":
+        k += 1
+    if text[k : k + 1] != '"':
+        return None
+    return j - 1 if j != i else i - 1, k - j - 1
+
+
+def char_literal_end(text, i):
+    """End index of a character literal opening at i, or None for a lifetime."""
+    if text[i + 1 : i + 2] == "\\":
+        j = i + 2
+        while j < len(text) and text[j] != "'":
+            j += 1
+        return j + 1
+    if text[i + 2 : i + 3] == "'":
+        return i + 3
+    return None
+
+
+def comments(text):
+    """Every comment as (line, column, kind, body, trailing, start, end). kind
+    is `line`, `doc` or `block`; body is the text after the marker; trailing is
+    True when code precedes the comment on its line; start and end are offsets."""
+    out = []
+    i, n, line, line_start, code_on_line = 0, len(text), 1, 0, False
+    while i < n:
+        c = text[i]
+        nxt = text[i + 1 : i + 2]
+        if c == "\n":
+            line += 1
+            line_start = i + 1
+            code_on_line = False
+            i += 1
+        elif c == "/" and nxt == "/":
+            j = text.find("\n", i)
+            j = n if j < 0 else j
+            raw = text[i:j]
+            doc = (raw.startswith("///") and not raw.startswith("////")) or raw.startswith("//!")
+            body = raw[3:] if doc else raw[2:]
+            out.append((line, i - line_start, "doc" if doc else "line", body, code_on_line, i, j))
+            i = j
+        elif c == "/" and nxt == "*":
+            depth, j = 0, i
+            while j < n:
+                if text.startswith("/*", j):
+                    depth += 1
+                    j += 2
+                elif text.startswith("*/", j):
+                    depth -= 1
+                    j += 2
+                    if depth == 0:
+                        break
+                else:
+                    j += 1
+            raw = text[i:j]
+            doc = (raw.startswith("/**") and not raw.startswith("/**/")) or raw.startswith("/*!")
+            out.append((line, i - line_start, "doc" if doc else "block", raw[2:-2], code_on_line, i, j))
+            line += raw.count("\n")
+            if "\n" in raw:
+                line_start = i + raw.rfind("\n") + 1
+            code_on_line = True
+            i = j
+        elif raw_string_at(text, i) is not None:
+            _, hashes = raw_string_at(text, i)
+            body = text.index('"', i) + 1
+            close = '"' + "#" * hashes
+            j = text.find(close, body)
+            end = n if j < 0 else j + len(close)
+            seg = text[i:end]
+            line += seg.count("\n")
+            if "\n" in seg:
+                line_start = i + seg.rfind("\n") + 1
+            code_on_line = True
+            i = end
+        elif c == '"':
+            j = i + 1
+            while j < n and text[j] != '"':
+                j += 2 if text[j] == "\\" else 1
+            seg = text[i : j + 1]
+            line += seg.count("\n")
+            if "\n" in seg:
+                line_start = i + seg.rfind("\n") + 1
+            code_on_line = True
+            i = j + 1
+        elif c == "'" and char_literal_end(text, i) is not None:
+            code_on_line = True
+            i = char_literal_end(text, i)
+        else:
+            if not c.isspace():
+                code_on_line = True
+            i += 1
+    return out
+
+
+def violations(text):
+    """(line, message) for each comment the policy bans."""
+    bad = []
+    tagged_at = None  # (column, last line) of the tagged block in progress
+    for line, col, kind, body, trailing, _, _ in comments(text):
+        if kind == "doc":
+            tagged_at = None
+            continue
+        stripped = body.strip()
+        if kind == "line" and not trailing and tagged_at and col == tagged_at[0] and line == tagged_at[1] + 1:
+            tagged_at = (col, line)
+            continue
+        if TAG.match(stripped):
+            tagged_at = None if trailing or kind == "block" else (col, line)
+            continue
+        tagged_at = None
+        bad.append((line, "untagged comment: " + (stripped[:60] or "(empty)")))
+    return bad
+
+
+def git_files():
+    out = subprocess.run(
+        ["git", "ls-files", "--cached", "--others", "--exclude-standard", "--", *SOURCES],
+        capture_output=True, text=True, check=True,
+    ).stdout
+    return [p for p in out.splitlines() if os.path.exists(p)]
+
+
+def scan(paths):
+    status = 0
+    for path in paths:
+        with open(path, encoding="utf-8") as f:
+            text = f.read()
+        for line, message in violations(text):
+            print(f"{path}:{line}: {message}")
+            status = 1
+    return status
+
+
+def self_test():
+    bad = [
+        "fn a() {}\n// narration\n",
+        "let x = 1; // why\n",
+        "/* block */\nfn a() {}\n",
+        "// SAFETY: ok\nfn a() {}\n    // indented, not part of the block\n",
+        "// SAFETY: ok\n\n// a gap ends the block\n",
+        "fn a() {}\n//\n",
+        "// Safety: wrong case\n",
+        "// let old = 1;\n",
+    ]
+    good = [
+        "/// A doc comment.\nfn a() {}\n",
+        "//! Module docs.\n",
+        "// SAFETY: the handle is live.\n// It stays live until drop.\nunsafe { f() }\n",
+        "    // Platform: Windows sends no WM_KEYUP here; see docs/windows-quirks.md.\n",
+        "// Upstream: `gliff_server::session::fit_mirror` clamps first.\n",
+        "    // clip-log: mime-name\n",
+        "let x = 1; // SAFETY: checked above\n",
+        'let s = "// not a comment";\n',
+        'let s = r#"// not "a" comment"#;\n',
+        "let c = '/'; let d = '\\''; fn f<'a>(x: &'a str) {}\n",
+        "/** Doc block. */\nfn a() {}\n",
+    ]
+    status = 0
+    for case in bad:
+        if not violations(case):
+            print(f"self-test: missed {case!r}")
+            status = 1
+    for case in good:
+        if violations(case):
+            print(f"self-test: flagged {case!r}: {violations(case)}")
+            status = 1
+    print("lint-comments self-test: " + ("ok" if status == 0 else "FAILED"))
+    return status
+
+
+def main():
+    args = sys.argv[1:]
+    if args == ["--self-test"]:
+        return self_test()
+    if len(args) == 2 and args[0] == "--list":
+        with open(args[1], encoding="utf-8") as f:
+            for line, col, kind, body, trailing, _, _ in comments(f.read()):
+                print(f"{line}:{col}:{kind}{':trailing' if trailing else ''}: {body}")
+        return 0
+    if args:
+        print(__doc__.split("Usage:")[1], file=sys.stderr)
+        return 2
+    root = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True, check=True).stdout.strip()
+    os.chdir(root)
+    return scan(git_files())
+
+
+if __name__ == "__main__":
+    sys.exit(main())

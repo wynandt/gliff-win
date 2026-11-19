@@ -1,6 +1,3 @@
-//! Upstream's `paintable.rs` tests, verbatim in substance (`unwrap` becomes
-//! `expect`), then the Windows additions.
-
 use super::Filter;
 use super::Viewport;
 use super::clean_mode;
@@ -98,7 +95,6 @@ fn empty_inputs_have_no_layout() {
     assert!(layout((10, 10), 2.0, 0.0, 100.0).is_none());
 }
 
-// Upstream `hypr-ipc` clean_mode cases the slack test relies on.
 #[test]
 fn clean_mode_rounds_to_the_scale_numerator() {
     assert_eq!(
@@ -120,11 +116,8 @@ fn clean_mode_rounds_to_the_scale_numerator() {
     assert_eq!(clean_mode(2, 2, 1.25), (10, 10), "never below one step");
 }
 
-// The Windows additions.
-
 #[test]
 fn the_panel_at_two_hundred_percent_is_one_to_one_in_device_pixels() {
-    // A 3840x2400 output in a 3840x2400 fullscreen client at 192 DPI.
     let device = f64::from(protocol_scale(192));
     let l = fit((3840, 2400), device, 3840.0 / device, 2400.0 / device);
     assert_eq!(l.factor, 1.0, "{l:?}");
@@ -142,7 +135,6 @@ fn the_panel_at_two_hundred_percent_is_one_to_one_in_device_pixels() {
 
 #[test]
 fn a_letterboxed_viewport_is_centred_in_device_pixels() {
-    // 2560x1600 view in a 2560x1700 client at 2.0: 50 device px bars.
     let l = fit((2560, 1600), 2.0, 1280.0, 850.0);
     assert_eq!(
         l.viewport(2.0),
@@ -194,8 +186,6 @@ mod to_remote {
 
     #[test]
     fn a_200_percent_window_maps_logical_pixels_to_remote_logical_pixels() {
-        // 3840x2400 view at device scale 2, remote scale 2: the window is
-        // 1920x1200 logical, the remote logical output is 1920x1200 too.
         let g = geometry((3840, 2400), (3840, 2400), 2000);
         let l = super::layout(g.view, 2.0, 1920.0, 1200.0).expect("layout");
         assert_eq!(
@@ -223,7 +213,6 @@ mod to_remote {
 
     #[test]
     fn letterbox_points_clamp_to_the_picture_edge() {
-        // A 1920x1080 picture in a 3000x1080 window is centered.
         let g = geometry((1920, 1080), (1920, 1080), 1000);
         let l = super::layout(g.view, 1.0, 3000.0, 1080.0).expect("layout");
         assert_eq!(
@@ -245,8 +234,6 @@ mod to_remote {
 
     #[test]
     fn a_reduced_resolution_stream_is_stretched_to_the_view() {
-        // The stream is half the view in each direction; the pointer still
-        // reaches the far corner of the stream.
         let g = geometry((960, 540), (1920, 1080), 1000);
         let l = super::layout(g.view, 1.0, 1920.0, 1080.0).expect("layout");
         assert_eq!(to_remote(&l, &g, 1.0, 1920.0, 1080.0), (960.0, 540.0));
@@ -288,8 +275,6 @@ mod client_to_remote {
 
     #[test]
     fn device_pixels_at_200_percent_are_remote_logical_pixels_at_the_remote_scale() {
-        // A 2560x1600 view in a 2560x1600 client at 200%: the picture fills
-        // the window, and the remote output is 1280x800 logical.
         let g = geometry((2560, 1600), 2000);
         assert_eq!(
             client_to_remote(&g, (2560, 1600), 192, (1280, 800)),

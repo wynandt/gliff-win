@@ -217,7 +217,6 @@ mod tests {
 
     #[test]
     fn fullscreen_on_the_wrong_monitor_is_caught() {
-        // A real failure: fullscreen on monitor 0 while the output was monitor 2.
         let clients = r#"[{"title":"gwin-pattern","monitor":0,"at":[0,0],"size":[2560,1440],"fullscreen":2}]"#;
         let placement = judge(&format!("{MONITORS}{clients}"), "gliff-339504");
         assert!(
@@ -256,7 +255,7 @@ mod tests {
     }
 
     /// A real present run's sizes: a Resize of 2560x1600 at 2.0 is a
-    /// 2560x1600 mode at scale 2 (gliff-server session.rs:640-650), so the
+    /// 2560x1600 mode at scale 2, so the
     /// covering window is 1280x800.
     #[test]
     fn judge_session_finds_the_one_gliff_output_at_scale_2() {

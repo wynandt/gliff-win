@@ -59,8 +59,7 @@ pub enum SpecError {
 /// The spawned ssh process and its piped stdio.
 pub struct SshLink {
     pub child: Child,
-    /// Drop it after writing Bye: upstream gliff-server exits only at
-    /// stdin EOF, so a session that keeps it open never sees the exit.
+    /// Drop it after writing Bye.
     pub stdin: ChildStdin,
     pub stdout: ChildStdout,
     pub stderr_log: PathBuf,
@@ -73,8 +72,6 @@ pub fn validate(spec: &SshSpec) -> Result<(), SpecError> {
     let chars_ok = path
         .chars()
         .all(|c| c.is_ascii_alphanumeric() || "/._+-".contains(c));
-    // An absolute path, or one word that the remote shell looks up on its
-    // `PATH` (so no `/` and no leading `-`, which it would read as an option).
     let path_ok = chars_ok
         && !path.is_empty()
         && (path.starts_with('/') || !(path.contains('/') || path.starts_with('-')));
@@ -165,8 +162,7 @@ pub fn spawn(spec: &SshSpec) -> std::io::Result<SshLink> {
     })
 }
 
-/// Arguments for a second, short ssh that runs one command: the same
-/// options as [`ssh_args`] plus a 10 s connect timeout, then
+/// Arguments for a second, short ssh that runs one command, ending in
 /// `-- <target> <command>`. The remote shell parses `command`, which is
 /// why [`exec`] only takes a `&'static str`.
 pub fn exec_args(spec: &SshSpec, command: &'static str) -> Vec<OsString> {
@@ -253,7 +249,6 @@ pub async fn exec(
     let child = cmd.spawn().map_err(ExecError::Spawn)?;
     let output = match tokio::time::timeout(timeout, child.wait_with_output()).await {
         Ok(result) => result.map_err(ExecError::Spawn)?,
-        // Dropping the future drops the child: kill_on_drop.
         Err(_) => return Err(ExecError::Timeout(timeout)),
     };
     let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
@@ -393,8 +388,6 @@ mod tests {
 
     #[test]
     fn a_spec_cannot_hold_a_target_ssh_would_misread() {
-        // The target is a `HostTarget`, so what `validate` runs has passed the
-        // one parser; these cannot be built at all.
         for bad in [
             "-oProxyCommand=x",
             "me@-oProxyCommand=x",
@@ -461,7 +454,6 @@ mod tests {
 
     #[test]
     fn an_empty_log_says_ssh_gave_no_reason_not_that_ssh_exited() {
-        // A timeout kills a still-running ssh, so "exited" would mislead.
         let log = std::env::temp_dir().join(format!("gwin-empty-{}.log", std::process::id()));
         std::fs::write(&log, "").expect("write log");
         let failure = super::diagnose(&log, None);
@@ -498,8 +490,8 @@ mod tests {
 
     #[test]
     fn a_failed_exec_says_what_the_command_printed_on_both_streams() {
-        // hyprctl without HYPRLAND_INSTANCE_SIGNATURE: exit 1, the reason
-        // on stdout, nothing on stderr (an empty error message).
+        // Platform: hyprctl without HYPRLAND_INSTANCE_SIGNATURE exits 1 with the reason
+        // on stdout and nothing on stderr.
         let quiet = ExecError::Failed {
             code: Some(1),
             stdout: "HYPRLAND_INSTANCE_SIGNATURE not set! (is hyprland running?)\n\n".to_owned(),

@@ -125,7 +125,6 @@ pub fn button(side: Side) -> anyhow::Result<()> {
     let (down, up, data) = match side {
         Side::Right => (MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP, 0),
         Side::Middle => (MOUSEEVENTF_MIDDLEDOWN, MOUSEEVENTF_MIDDLEUP, 0),
-        // XBUTTON1 and XBUTTON2.
         Side::Back => (MOUSEEVENTF_XDOWN, MOUSEEVENTF_XUP, 1),
         Side::Forward => (MOUSEEVENTF_XDOWN, MOUSEEVENTF_XUP, 2),
     };

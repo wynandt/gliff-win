@@ -119,7 +119,6 @@ fn clear_command(scratch: &str) -> String {
 fn read_tree_command(places: &[(String, String)]) -> String {
     let mut command = String::from("sh -c 'exec tar --format=posix -c -f - \"$@\"' sh");
     for (parent, name) in places {
-        // `./` keeps a name that starts with `-` from being an option.
         command.push_str(&format!(
             " -C {} {}",
             quoted(parent),
@@ -159,10 +158,8 @@ impl Remote {
             .spawn()
             .with_context(|| format!("starting {}", self.ssh.display()))?;
         let mut pipe = child.stdin.take().context("ssh stdin")?;
-        // A command that exits early closes the pipe; the exit code says why.
         let _ = pipe.write_all(stdin);
         drop(pipe);
-        // A picture is larger than a pipe holds: read while it is written.
         let mut stdout = child.stdout.take().context("ssh stdout")?;
         let reader = std::thread::spawn(move || {
             let mut bytes = Vec::new();
@@ -205,9 +202,7 @@ impl Remote {
             Some(0) => Ok(Some(
                 String::from_utf8(done.stdout).context("the text is not UTF-8")?,
             )),
-            // wl-paste: no selection, or none of that type.
             Some(1) => Ok(None),
-            // ssh itself, and a missing compositor.
             other => bail!("wl-paste over ssh ended with {other:?}"),
         }
     }
@@ -266,7 +261,6 @@ impl Remote {
         let done = self.run_for(PASTE_URIS_COMMAND, &[], FILES_TIMEOUT)?;
         match done.code {
             Some(0) => {}
-            // No selection, no uri-list in it, or no answer in time.
             Some(1 | 124) => return Ok(None),
             other => bail!("wl-paste over ssh ended with {other:?}"),
         }
@@ -288,7 +282,6 @@ impl Remote {
         let done = self.run_for(&read_tree_command(&places), &[], FILES_TIMEOUT)?;
         match done.code {
             Some(0) => read_tar(&done.stdout).map(Some),
-            // The files are gone.
             Some(1 | 2) => Ok(None),
             other => bail!("tar over ssh ended with {other:?}"),
         }

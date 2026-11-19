@@ -32,7 +32,6 @@ fn entries(shown: usize, acks: u64) -> Vec<SessionEntry> {
         .collect()
 }
 
-/// What a client that does everything right would show.
 fn good() -> Observed {
     let expect = Expect::standard(targets());
     Observed {
@@ -158,14 +157,12 @@ fn the_plan_stays_inside_the_tabs_so_wrapping_does_not_matter() {
     }
 }
 
-/// A client that follows the chords, with faults to turn on.
 struct Fake {
     shown: usize,
     ticks: u64,
     launched: bool,
     focused: bool,
     log: Vec<String>,
-    /// The chord that does nothing.
     ignore: Option<&'static str>,
     held_key: bool,
     freeze_hidden: Option<usize>,
@@ -253,7 +250,6 @@ impl Harness for Fake {
 
 fn plan() -> Plan {
     let mut plan = Plan::new(Expect::standard(targets()));
-    // The fake's clock is its stats calls, not time.
     plan.start_timeout = Duration::from_millis(1);
     plan.switch_timeout = Duration::from_millis(1);
     plan

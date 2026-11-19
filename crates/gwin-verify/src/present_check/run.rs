@@ -120,7 +120,6 @@ pub fn run(h: &mut impl Harness, plan: &Plan) -> Line {
     if let Err(e) = h.set_client_size(windowed) {
         return abort(h, plan, "set_client_size", e);
     }
-    // The judge decides whether 3 s was met; here only "it showed".
     poll_until(h, plan, plan.resize_timeout, |h| {
         h.stats().is_some_and(|s| shown_at(&s, windowed))
     });

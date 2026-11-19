@@ -27,15 +27,11 @@ mod classify {
 
     #[test]
     fn a_child_or_an_owned_popup_of_ours_is_ours() {
-        // The address bar's field is a child; a context menu, a tooltip and
-        // a dialog are owned by the window.
         assert_eq!(classify(Relation::OwnedOrChild), OURS);
     }
 
     #[test]
     fn any_other_window_of_our_process_is_ours() {
-        // A menu window or an IME window made on our thread, owned by no
-        // window of ours.
         assert_eq!(classify(Relation::SameProcess), OURS);
     }
 
@@ -46,9 +42,6 @@ mod classify {
 
     #[test]
     fn no_foreground_window_and_an_unreadable_one_prove_nothing() {
-        // `GetForegroundWindow` gives null while the foreground changes and
-        // on the secure desktop; a window that cannot be asked about is no
-        // evidence either way.
         assert_eq!(classify(Relation::None), UNKNOWN);
         assert_eq!(classify(Relation::Unreadable), UNKNOWN);
     }
@@ -60,8 +53,6 @@ mod when_it_looks {
     #[test]
     fn only_a_focus_grab_is_checked() {
         assert!(grabbing_by_focus(Follow::Focus, HookMode::Grab));
-        // Hover: the keyboard follows the pointer, so another program in
-        // front is the point, not a fault.
         assert!(!grabbing_by_focus(Follow::Hover, HookMode::Grab));
     }
 
@@ -127,7 +118,6 @@ mod losing {
         let mut w = ForegroundWatch::default();
         w.look(true, OTHER);
         assert_eq!(w.look(true, OTHER), Some(Focus::Lost));
-        // The grab has ended by now, so the caller says it is not grabbing.
         for _ in 0..10 {
             assert_eq!(w.look(false, OTHER), None);
         }
@@ -186,7 +176,6 @@ mod regaining {
     }
 }
 
-/// The watch and the grab state together, as the window drives them.
 mod with_the_grab_state {
     use super::*;
 
@@ -197,7 +186,6 @@ mod with_the_grab_state {
         s
     }
 
-    /// One look, as `Grab::tick` makes it: the watch decides, the state hears.
     fn look(
         w: &mut ForegroundWatch,
         s: &mut GrabState,
@@ -219,8 +207,6 @@ mod with_the_grab_state {
         assert!(look(&mut w, &mut s, Follow::Focus, OTHER).is_none());
         let out = look(&mut w, &mut s, Follow::Focus, OTHER).expect("ended");
         assert_eq!(out.mode, HookMode::Off);
-        // The release is what sends the remote machine its `ReleaseInput`
-        // and lets go of Windows' modifiers.
         assert_eq!(out.release, Release::All);
     }
 
@@ -250,8 +236,6 @@ mod with_the_grab_state {
 
     #[test]
     fn a_locked_session_is_not_looked_at() {
-        // Win+L: the session locks, the state turns the hook off, and the
-        // foreground is another program (the lock screen) for a long time.
         let mut w = ForegroundWatch::default();
         let mut s = grabbing_state();
         s.handle(Event::Session(Session::Locked));

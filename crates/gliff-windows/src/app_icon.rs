@@ -1,8 +1,7 @@
 //! Loads the application icon compiled into the executable.
 //!
 //! `build.rs` embeds `assets/gliff.ico` as resource ID 1. The window class
-//! and `WM_SETICON` both use sizes from `GetSystemMetricsForDpi`, so the
-//! title bar and the taskbar pick 24 or 40 px at 150% or 160% scale.
+//! and `WM_SETICON` both use sizes from `GetSystemMetricsForDpi`.
 
 use windows::Win32::Foundation::HWND;
 use windows::Win32::Foundation::LPARAM;

@@ -31,8 +31,6 @@ fn a_forgotten_value_counts_as_new() {
     assert!(last.update(1));
 }
 
-/// The edit field is moved only when its place is a new one: the strip asks
-/// on every layout, which is every pass of the message loop.
 #[test]
 fn the_edit_field_is_placed_once_for_a_place_that_stays() {
     let bar = Rect {
@@ -74,7 +72,6 @@ fn passes_are_counted_per_window_and_reported_at_its_end() {
     for ms in 0..PASS_WINDOW_MS - 1 {
         assert_eq!(passes.pass(ms), None);
     }
-    // The 5000th pass (counted from 1) closes the window.
     assert_eq!(passes.pass(PASS_WINDOW_MS), Some(PASS_WINDOW_MS as u32));
     assert_eq!(passes.pass(PASS_WINDOW_MS + 1), None, "a new window");
     assert_eq!(passes.pass(2 * PASS_WINDOW_MS), Some(2));

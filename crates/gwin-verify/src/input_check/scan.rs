@@ -36,10 +36,8 @@ pub fn scan_of(name: &str) -> Option<Scan> {
         "lwin" | "super" => Scan::e0(0x5b),
         "lctrl" | "ctrl" => Scan::plain(0x1d),
         "lshift" | "shift" => Scan::plain(0x2a),
-        // The hook reports a real right Shift as scan 0x36 with the extended
-        // flag (measured), so it is injected extended: the keymap forwards
-        // E0 36 only since the right Shift fix, and a plain 0x36 would pass
-        // without that fix.
+        // Platform: the hook reports a real right Shift as extended scan 0x36.
+        // See docs/windows-quirks.md#keyboard.
         "rshift" => Scan::e0(0x36),
         "lalt" | "alt" => Scan::plain(0x38),
         "ralt" | "altgr" => Scan::e0(0x38),

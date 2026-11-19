@@ -1,0 +1,7 @@
+# Hex words that scripts/lint-upstream-cite must not read as an upstream Gliff
+# revision. One word per line, then a reason. A Gliff revision never goes here:
+# cite the revision pinned in Cargo.toml instead.
+ed25519 an ssh key type
+a0010409 a Windows keyboard layout id
+312473c6d8761351a74f27af1fd5c621d3a58a96 a commit of this repository
+1839f39 a commit of this repository

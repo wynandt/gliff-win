@@ -130,7 +130,6 @@ mod tests {
     use super::hex;
     use super::sha256;
 
-    // FIPS 180-4 examples and the NIST long message.
     #[test]
     fn the_standard_test_vectors() {
         assert_eq!(

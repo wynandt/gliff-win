@@ -90,7 +90,6 @@ impl Overlay {
                 // SAFETY: no arguments.
                 let thread_id = unsafe { GetCurrentThreadId() };
                 if let Ok(h) = hwnd {
-                    // Mostly opaque; a layered window also lets clicks through.
                     // SAFETY: our own window.
                     let _ = unsafe { SetLayeredWindowAttributes(h, COLORREF(0), 235, LWA_ALPHA) };
                 }

@@ -25,8 +25,7 @@ pub async fn read_server<S: AsyncRead + Unpin>(
 ) -> Result<Inbound, gliff_transport::Error> {
     let msg = reader.read_msg::<ServerMsg>().await?;
     let (main_len, aux_len) = payload_lens(&msg);
-    // The transport lets a payload be 64 MiB; a message declaring more than
-    // it can carry is refused before its payload is read.
+    // Upstream: `gliff_proto::frame::MAX_PAYLOAD` caps what the transport carries.
     let limit = payload_limit(&msg);
     if let Some(over) = [main_len, aux_len].into_iter().find(|&n| n > limit) {
         return Err(gliff_transport::Error::PayloadTooLarge(over));

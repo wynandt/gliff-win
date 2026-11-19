@@ -1,15 +1,3 @@
-//! Three sessions in one window, end to end on the build machine: the real
-//! `Tabs` and `SessionSet` over three real session drivers, each through
-//! `scripts/fake-ssh` to its own `gwin-fake-server`, and each server draws a
-//! different flat colour (`GWIN_FAKE_TINT`). The test thread stands in for the
-//! UI thread.
-//!
-//! What it proves: every session decodes and acks while it is hidden; after a
-//! switch the picture on screen is the new session's; and what three busy
-//! sessions cost the client in CPU (printed, and kept in the test's temporary
-//! folder for the docs).
-
-// The loop runs through bash wrappers (`scripts/fake-ssh`): build machine only.
 #![cfg(unix)]
 
 use std::path::Path;
@@ -44,11 +32,6 @@ use gliff_windows::tabs::Status;
 use gliff_windows::tabs::SwitchTo;
 use gliff_windows::tabs::Tabs;
 
-/// The test that reads this process's CPU time runs alone: every thread of
-/// every other test in this process would be in the number. The others share
-/// the gate and run together. Tests that share never queue behind a waiting
-/// test that wants to be alone (a std `RwLock` makes them), so the alone test
-/// waits for the ones already running and then the clock is quiet.
 static CPU_CLOCK: Gate = Gate {
     state: Mutex::new(GateState {
         shared: 0,
@@ -67,7 +50,6 @@ struct Gate {
     changed: Condvar,
 }
 
-/// Held while a test runs. Dropping it opens the gate again.
 struct Held {
     alone: bool,
 }
@@ -124,7 +106,6 @@ const SIZE: ResizeReq = ResizeReq {
     scale: 1.0,
 };
 
-/// The three machines and the grey each fake server draws.
 const MACHINES: [(&str, u8); 3] = [("a@one", 40), ("b@two", 120), ("c@three", 220)];
 
 struct Quiet;
@@ -142,7 +123,6 @@ fn tint_of(target: &HostTarget) -> u8 {
         .1
 }
 
-/// An ssh that runs the fake server with this session's tint.
 fn ssh_for(dir: &Path, tint: u8, fault: &str) -> PathBuf {
     let fake_ssh = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../scripts/fake-ssh");
     let wrapper = dir.join("ssh");
@@ -164,9 +144,6 @@ fn window(name: &str) -> (SessionSet<SessionHandle>, Arc<InputRoute<UiCmd>>) {
     window_with(name, "")
 }
 
-/// A window whose second machine's fake server has `fault` (for example
-/// `reload`: it loses its output after a compositor reload, as a real one
-/// can); the others are healthy.
 fn window_with(
     name: &str,
     fault: &'static str,
@@ -213,9 +190,6 @@ fn targets() -> Vec<HostTarget> {
         .collect()
 }
 
-/// The UI thread's loop: poll, and take the shown session's pictures (the
-/// others' stay in their slots, as hidden tabs' do). Returns the luma of the
-/// last picture taken.
 fn pump(
     set: &mut SessionSet<SessionHandle>,
     tabs: &mut Tabs,
@@ -243,7 +217,6 @@ fn pump(
     luma
 }
 
-/// BT.601 limited-range luma of a grey level.
 fn luma_of(grey: u8) -> i32 {
     16 + (i32::from(grey) * 219 + 127) / 255
 }
@@ -259,7 +232,6 @@ fn cpu_seconds() -> f64 {
     let stat = std::fs::read_to_string("/proc/self/stat").expect("/proc/self/stat");
     let after = stat.rsplit_once(')').expect("comm").1;
     let fields: Vec<&str> = after.split_whitespace().collect();
-    // utime and stime are fields 14 and 15 of the line, 12 and 13 after comm.
     let ticks: f64 =
         fields[11].parse::<f64>().expect("utime") + fields[12].parse::<f64>().expect("stime");
     ticks / 100.0
@@ -294,7 +266,6 @@ fn three_sessions_stream_while_hidden_and_a_switch_shows_the_new_ones_picture() 
         tabs.iter().map(|t| t.status().clone()).collect::<Vec<_>>()
     );
 
-    // Hidden sessions keep decoding and acking with nobody looking at them.
     let busy = |_: &Tabs, set: &SessionSet<SessionHandle>| {
         frames_of(set)
             .iter()
@@ -312,7 +283,6 @@ fn three_sessions_stream_while_hidden_and_a_switch_shows_the_new_ones_picture() 
         "the shown session draws its own grey: {shown_luma:?} want {want}"
     );
 
-    // Switch to the second tab: the picture on screen is its picture.
     let effects = tabs.switch(SwitchTo::Next);
     let applied = set.run(&mut tabs, effects);
     let b = match applied.presented {
@@ -358,8 +328,6 @@ fn click_thrice(route: &InputRoute<UiCmd>) {
     }
 }
 
-/// Polls like the UI thread, taking the shown session's pictures, and
-/// collects the resync events of every session until `done` or `within`.
 fn resync_events(
     set: &mut SessionSet<SessionHandle>,
     tabs: &mut Tabs,
@@ -408,15 +376,11 @@ fn a_resync_belongs_to_the_session_that_went_quiet_and_only_when_input_reaches_i
     );
     assert!(tabs.iter().all(|tab| *tab.status() == Status::Streaming));
 
-    // The second server loses its output 1 s after its Resize. Input goes to
-    // the shown, healthy session, so nothing resyncs: not the first (it
-    // answers) and not the second (nothing reached it).
     std::thread::sleep(Duration::from_millis(1500));
     click_thrice(&route);
     let seen = resync_events(&mut set, &mut tabs, a, Duration::from_secs(5), |_| false);
     assert!(seen.is_empty(), "no session resyncs yet: {seen:?}");
 
-    // Switch to the quiet one and click: it, and only it, resyncs.
     let effects = tabs.switch(SwitchTo::Next);
     let b = match set.run(&mut tabs, effects).presented {
         Some(Presented::Session(id)) => id,
@@ -458,7 +422,6 @@ fn what_three_busy_sessions_cost_the_client_in_cpu() {
             Duration::from_secs(30),
             streaming,
         );
-        // Past the connect and the first key frames.
         let warm = |_: &Tabs, set: &SessionSet<SessionHandle>| {
             frames_of(set).iter().all(|&(frames, _)| frames >= 10)
         };

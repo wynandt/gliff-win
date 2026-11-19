@@ -67,7 +67,6 @@ const FOREIGN: usize = 0;
 #[test]
 fn a_key_this_client_injected_is_noted_and_its_message_is_not_a_silent_hook() {
     let mut log = PassLog::default();
-    // The hook sees the injected Win+L (left Win, L, L, left Win)...
     let keys = [
         (0x5b, Press::Down, 5000),
         (0x4c, Press::Down, 5000),
@@ -77,8 +76,6 @@ fn a_key_this_client_injected_is_noted_and_its_message_is_not_a_silent_hook() {
     for (vk, press, at) in keys {
         assert!(log.note_if_own(OWN_TAG, vk, press, at), "{vk:#x} passes");
     }
-    // ...and each one reaches the window as a message, which is ours: the
-    // window sends nothing and installs nothing.
     for (vk, press, at) in keys {
         assert!(log.take(vk, press, at + 2), "{vk:#x} {press:?} was noted");
     }
@@ -88,7 +85,6 @@ fn a_key_this_client_injected_is_noted_and_its_message_is_not_a_silent_hook() {
 fn an_own_key_message_is_only_passed_once() {
     let mut log = PassLog::default();
     assert!(log.note_if_own(OWN_TAG, 0xa2, Press::Down, 7000));
-    // The message names the generic Ctrl, not the left one.
     assert!(log.take(0x11, Press::Down, 7001));
     assert!(
         !log.take(0x11, Press::Down, 7002),
@@ -118,8 +114,6 @@ fn an_own_key_does_not_cover_another_key_or_a_later_one() {
 fn a_note_too_old_to_cover_a_key_still_shows_in_the_wider_look() {
     let mut log = PassLog::default();
     log.record(0xa2, Press::Down, 1000);
-    // A key message 3 s later is not covered, but the log did see this key
-    // family (left Ctrl is Ctrl) a moment before; another key it did not.
     assert!(!log.take(0x11, Press::Down, 4000));
     assert!(log.noted_near(0x11, 4000));
     assert!(log.noted_near(0x11, 500), "a note after the message too");
@@ -155,8 +149,6 @@ mod silent {
 
     #[test]
     fn a_key_passed_while_the_hook_gate_is_off_is_not_silent() {
-        // The release chord fired: the hook is Off, the UI thread has not
-        // caught up yet, and the hook passes every key on purpose.
         assert!(!silent_hook_judge(HookMode::Grab, HookMode::Off, false));
         assert!(!silent_hook_judge(
             HookMode::Grab,
@@ -206,7 +198,6 @@ mod silent {
             "0 keys down; message extra info: none; hook never called since installed; \
                  hook noted this key within 5 s: yes"
         ));
-        // No other key can change the line, only how many there are.
         let one = silent_line(1, [0x41u16], detail);
         for vk in (0u16..=0xff).filter(|vk| ![0x10, 0x11, 0x12, 0x5b, 0x5c].contains(vk)) {
             if (0xa0..=0xa5).contains(&vk) {
@@ -219,8 +210,6 @@ mod silent {
             );
         }
         assert!(one.contains("; 1 key down; "));
-        // The key itself: its modifier group, or the same words for any
-        // other key.
         assert!(silent_line(1, [], quiet).contains("; the key: Ctrl Up; "));
         let other = |vk| {
             silent_line(

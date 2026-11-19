@@ -18,7 +18,6 @@ use crate::keymap::Chord;
 use crate::local_chords::LocalChord;
 use crate::local_chords::LocalChordList;
 
-/// A layer from file text, which must hold nothing the loader refuses.
 fn layer(text: &str) -> Layer {
     let table: toml::Table = text.parse().expect("test TOML");
     let (layer, notes) = Layer::from_table(&table);
@@ -36,8 +35,6 @@ fn defaults() -> Settings {
         .settings
 }
 
-/// Every key with a file value, and a different value for a flag; neither is
-/// the default.
 const FILE_AND_FLAG: &[(&str, &str, &str)] = &[
     ("release_chord", "\"shift+esc\"", "\"ctrl+alt+end\""),
     ("grab_follows", "\"hover\"", "\"focus\""),
@@ -390,7 +387,6 @@ fn input_options_follow_the_settings() {
     }
 }
 
-/// The server's command line for these settings, as the client builds it.
 fn server_words(settings: &Settings) -> Vec<String> {
     let spec = crate::ssh::SshSpec {
         ssh: PathBuf::from("ssh.exe"),
@@ -503,7 +499,7 @@ fn a_local_chord_the_check_cannot_place_is_an_error_not_a_pass() {
         .sources;
     settings.local_chords = LocalChordList(vec![LocalChord::from_parts(
         ModifierSet::CTRL.with(ModifierSet::SHIFT),
-        0x10, // VK_SHIFT: not a key a local chord can end in
+        0x10,
     )]);
     let error = super::validate(&settings, &sources).expect_err("unplaceable");
     assert!(
@@ -558,9 +554,6 @@ fn a_local_chord_is_refused_exactly_where_a_default_claim_can_fire_with_it() {
         "ctrl+win",
         "ctrl+alt+shift+win",
     ];
-    // The default claims are ctrl+alt+L (the lock chord) and ctrl+alt+1..9.
-    // A chord that holds ctrl and alt, and any other modifier on top, fires
-    // together with a claim on the same key.
     let claimed = |mods: &str, trigger: &str| {
         let on_claim = trigger == "l"
             || matches!(trigger, "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9");

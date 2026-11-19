@@ -276,12 +276,8 @@ fn the_typed_keysyms_must_match_in_order() {
     );
 }
 
-/// The remote log of the first hardware run (remote machine time): every chord was
-/// preceded by an `other` line the catch-all bind wrote for the lone modifier.
 const RUN1: &str = include_str!("fixtures/run1-remote.log");
 
-/// Entries `from..=to` of the first run's log, less the `other` lines the
-/// remote-side script no longer writes.
 fn run1(from: u64, to: u64) -> Observed {
     let parsed = crate::input_check::remote_log::parse(RUN1);
     assert_eq!(parsed.malformed, 0, "the fixture is whole");
@@ -331,8 +327,6 @@ fn the_first_runs_other_chords_pass_once_the_noise_is_gone() {
     let rows = parse_chord_table(include_str!("../../../../../docs/phase4/super-chords.tsv"))
         .expect("table");
     let cases = super_chords(&rows).expect("cases");
-    // (case name part, log entries) of the run, row by row; the chords the
-    // run logged one entry each.
     let by_entry: &[(&str, u64)] = &[
         ("SUPER alone", 2),
         ("SUPER+Return", 4),
@@ -350,7 +344,6 @@ fn the_first_runs_other_chords_pass_once_the_noise_is_gone() {
         let mut observed = run1(*n, *n);
         observed.sent_keys = Vec::new();
         observed.foreground_is_client = true;
-        // The key lines are not in this older log; the bind line is.
         let reasons = judge(&case.expect, &observed);
         assert!(reasons.is_empty(), "{name}: {reasons:?}");
     }
@@ -372,8 +365,6 @@ fn the_stand_in_and_shift_x5_of_the_first_run_pass_the_new_expectations() {
         ["SUPER+L", "probe:none"]
     );
     assert!(judge(&standin.expect, &observed).is_empty(), "stand-in");
-    // The first run had no probe after the Shifts: the stand-in's probe
-    // entry stands in for the one the case now adds.
     let probe = run1(94, 94).remote;
     let shifts = system_chords().pop().expect("Shift x5 is last");
     let mut observed = run1(51, 60);
@@ -387,8 +378,6 @@ fn the_stand_in_and_shift_x5_of_the_first_run_pass_the_new_expectations() {
 
 #[test]
 fn the_injected_local_case_expected_the_wrong_thing_in_the_first_run() {
-    // The first run expected a `probe:none` entry from a key that stays on
-    // the Windows machine; the remote machine (correctly) saw nothing of it.
     use crate::input_check::cases::injected_local;
     let case = injected_local().remove(0);
     let mut observed = seen(&[]);

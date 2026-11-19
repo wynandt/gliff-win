@@ -117,14 +117,10 @@ fn the_verdict_names_the_sign_of_our_own_write() {
 
 #[test]
 fn a_copy_in_one_place_is_one_offer_on_each_side() {
-    // The user copies on Windows: not an echo, so an offer goes out.
     let mut guard = EchoGuard::default();
     assert!(!guard.is_echo(1, false, false));
-    // The remote side answers with its own offer; we write it and record the
-    // sequence. The update that write causes is an echo: no new local offer.
     guard.wrote(2);
     assert!(guard.is_echo(2, true, true));
-    // The user copies again: an offer again.
     assert!(!guard.is_echo(3, false, false));
 }
 
@@ -141,7 +137,6 @@ fn a_burst_of_updates_settles_once() {
 
 #[test]
 fn a_windows_snip_is_offered_as_one_png() {
-    // Snipping puts a bitmap in two forms, often a registered PNG too.
     for formats in [
         vec![WinFormat::Dib, WinFormat::DibV5],
         vec![WinFormat::Png, WinFormat::Dib, WinFormat::DibV5],

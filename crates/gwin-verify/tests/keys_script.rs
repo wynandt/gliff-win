@@ -1,9 +1,3 @@
-//! `scripts/remote/gwin-keys` on the build machine, against the fake
-//! `hyprctl` (`scripts/fake-bin/hyprctl`). The fake keeps each lua chunk the
-//! script sends; the test replays the `exec` binds from it, as Hyprland
-//! would on a key press, and reads the log the way `gwin-verify` does.
-
-// Bash scripts and fakes: build machine only.
 #![cfg(unix)]
 
 use std::path::Path;
@@ -17,13 +11,10 @@ fn repo() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
-/// A remote machine in a temp dir: the fakes first on PATH, an interactive
-/// session's Hyprland environment, and a gliff output at (100, 50).
 struct Remote {
     dir: Scratch,
 }
 
-/// A scratch directory, removed on drop.
 struct Scratch(PathBuf);
 
 impl Scratch {
@@ -105,7 +96,6 @@ impl Remote {
         String::from_utf8(out.stdout).expect("utf8")
     }
 
-    /// The lua chunks the script sent with `hyprctl eval`, oldest first.
     fn evals(&self) -> Vec<String> {
         let dir = self.hypr().join("evals");
         let mut files: Vec<PathBuf> = std::fs::read_dir(&dir)
@@ -118,8 +108,6 @@ impl Remote {
             .collect()
     }
 
-    /// Presses a bind: runs the `exec_cmd` of the line whose keys are
-    /// exactly `keys`, in the first (arming) chunk.
     fn press(&self, keys: &str) {
         let lua = &self.evals()[0];
         let prefix = format!("hl.bind(\"{keys}\", hl.dsp.exec_cmd(\"");
@@ -127,7 +115,6 @@ impl Remote {
             .lines()
             .find(|l| l.starts_with(&prefix))
             .unwrap_or_else(|| panic!("no bind for `{keys}` in:\n{lua}"));
-        // The lua string literal, read back: `\\` and `\"` are one character.
         let cmd = line[prefix.len()..]
             .split("\")")
             .next()
@@ -187,7 +174,6 @@ fn a_path_with_quotes_and_a_backslash_still_runs_its_binds_and_its_timer() {
         ["SUPER+E"],
         "the bind ran the copy in the odd directory: {all:?}"
     );
-    // The timer is a bash with the script's path as an argument of its own.
     let state =
         std::fs::read_to_string(remote.dir.path().join("run/gwin-keys.state")).expect("state");
     let pid = state

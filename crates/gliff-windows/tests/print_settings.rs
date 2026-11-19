@@ -1,6 +1,3 @@
-//! `gliff-windows --print-settings` as a user runs it: the real program, a
-//! temporary config folder, no session and no change to anything.
-
 use std::fs;
 use std::path::Path;
 use std::process::Command;
@@ -140,13 +137,9 @@ fn overlapping_chords_exit_2_and_say_which_flags() {
     let _ = fs::remove_dir_all(&dir);
 }
 
-// On Windows a bare start opens the real window and waits, so this runs
-// only where the client stops after loading its settings.
 #[cfg(not(windows))]
 #[test]
 fn a_start_with_no_target_is_not_an_argument_error() {
-    // Off Windows the client only parses and loads its settings; a bare
-    // start must get as far as saying so, not stop at a missing TARGET.
     let dir = std::env::temp_dir().join(format!("gwin-bare-start-{}", std::process::id()));
     let output = Command::new(env!("CARGO_BIN_EXE_gliff-windows"))
         .arg("--config-dir")

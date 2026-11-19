@@ -241,7 +241,6 @@ pub fn layout(
     };
     let fullscreen = button(width - m.pad);
     let stats = button(fullscreen.left - m.gap);
-    // The add button, or the open address bar in its place.
     let add_width = if bar {
         m.bar_field + m.bar_list + m.bar_go
     } else {
@@ -260,8 +259,6 @@ pub fn layout(
             })
             .collect()
     };
-    // Room for the tabs and the add button between the two paddings and the
-    // full-screen button.
     let room = width - 2 * m.pad - 2 * m.button - 2 * m.gap;
     let fits = |natural: &[i32]| natural.iter().sum::<i32>() + count * m.gap + add_width <= room;
     let sizes = m.text_sizes();
@@ -295,8 +292,6 @@ pub fn layout(
         }
         false => {
             let chevron = button(stats.left - m.gap);
-            // The bar gives up field width before it gives up its buttons, and
-            // leaves the tabs about one tab of room.
             let right = chevron.left - m.gap;
             let least = m.bar_field_min + m.bar_list + m.bar_go;
             let width = if bar {
@@ -384,7 +379,6 @@ fn bar_of(m: &Metrics, whole: Rect) -> Bar {
         right: go.left,
         ..whole
     };
-    // The edit field is as tall as one line of text, centred.
     let high = (m.text * 4 + 2) / 3;
     let top = whole.top + (whole.bottom - whole.top - high) / 2;
     let edit = Rect {
@@ -410,7 +404,6 @@ impl Layout {
             return self.scroll;
         };
         let view = self.viewport.width();
-        // The tab's place in the unscrolled content.
         let left = tab.rect.left - self.viewport.left + self.scroll;
         let right = left + tab.rect.width();
         let wanted = if left < self.scroll {

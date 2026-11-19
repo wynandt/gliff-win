@@ -246,7 +246,6 @@ pub fn layout(
     if link_text.is_some() {
         total += m.gap_link + link_h;
     }
-    // A little above the middle; a picture too small shows the top.
     let mut y = (height * 2 / 5 - total / 2).max(0);
 
     let centred = |w: i32| (width - w) / 2;

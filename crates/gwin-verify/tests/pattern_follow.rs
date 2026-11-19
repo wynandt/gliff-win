@@ -1,14 +1,3 @@
-//! `scripts/remote/gwin-pattern` end to end on the build machine, against the same
-//! output sizing a real present run produced: the client's session
-//! driver through `scripts/fake-ssh` to `gwin-fake-server`, which sizes the
-//! headless output as upstream does (physical mode plus scale; a Resize of
-//! 2560x1600 at 2.0 is a 2560x1600 mode at scale 2, 1280x800 logical), and
-//! the script on `scripts/fake-bin` (fake hyprctl with its window world,
-//! fake ffplay). An early real run never placed
-//! the pattern: the script waited for a 3840x2400 logical output that a
-//! scale-2 session never has.
-
-// Bash scripts and fakes: build machine only.
 #![cfg(unix)]
 
 use std::path::Path;
@@ -32,12 +21,10 @@ use gliff_windows::session::driver::start;
 use gliff_windows::ssh::SshSpec;
 use serde_json::Value;
 
-/// What is run on the remote machine before a present run.
 const REMOTE_ARGS: &[&str] = &["follow"];
 
 const SERVER: &str = env!("CARGO_BIN_EXE_gwin-fake-server");
 
-/// The present run's two client sizes, both at 200%.
 const WINDOWED: ResizeReq = ResizeReq {
     width: 2560,
     height: 1600,
@@ -67,12 +54,6 @@ fn executable(path: &Path, body: &str) {
     std::fs::set_permissions(path, perms).expect("chmod");
 }
 
-/// The pattern window's title for the test that owns `dir`. The tests run at
-/// the same time, and the script's `cleanup` kills every process on the
-/// machine whose command line holds its title, so each test needs its own or
-/// one test's start kills another's ffplay. It does not start with the
-/// script's default title either, so a checkout whose cleanup matches by
-/// prefix leaves these windows alone.
 fn title(dir: &Path) -> String {
     format!(
         "test-{}",
@@ -80,8 +61,6 @@ fn title(dir: &Path) -> String {
     )
 }
 
-/// The remote machine side: the script with the fakes first on PATH and an
-/// interactive session's Hyprland environment.
 fn remote(dir: &Path, hypr: &Path) -> Child {
     remote_with(dir, hypr, REMOTE_ARGS)
 }
@@ -114,7 +93,6 @@ fn remote_with(dir: &Path, hypr: &Path, args: &[&str]) -> Child {
         .expect("start gwin-pattern")
 }
 
-/// The Windows side: a session whose server writes the output into `hypr`.
 fn session(dir: &Path, hypr: &Path) -> SessionHandle {
     let ssh = dir.join("ssh");
     executable(
@@ -143,7 +121,6 @@ fn session(dir: &Path, hypr: &Path) -> SessionHandle {
     start(opts, Arc::new(Quiet)).expect("start the session thread")
 }
 
-/// The session output as hyprctl reports it: (id, mode, scale).
 fn output(hypr: &Path) -> Option<(i64, (i64, i64), f64)> {
     let text = std::fs::read_to_string(hypr.join("monitors.json")).ok()?;
     let monitors: Value = serde_json::from_str(&text).ok()?;
@@ -157,9 +134,6 @@ fn output(hypr: &Path) -> Option<(i64, (i64, i64), f64)> {
     })
 }
 
-/// Why the pattern is not ready on the output at `mode`, or None: one
-/// fullscreen pattern window on it, drawn at the output's aspect (ffplay
-/// letterboxes any other) by a source that moves at 60 fps.
 fn not_ready(dir: &Path, hypr: &Path, mode: (i64, i64)) -> Option<String> {
     let Some((id, now, scale)) = output(hypr) else {
         return Some("no gliff-* output".to_owned());
@@ -200,8 +174,6 @@ fn not_ready(dir: &Path, hypr: &Path, mode: (i64, i64)) -> Option<String> {
     None
 }
 
-/// Waits until `ready` (None) or `within` passes, taking pictures so the
-/// session keeps flowing; the last reason on a timeout.
 fn wait_ready(
     handle: &SessionHandle,
     dir: &Path,
@@ -221,8 +193,6 @@ fn wait_ready(
     }
 }
 
-/// The script, killed if the test fails first so cargo does not wait on
-/// its inherited stderr.
 struct Script(Child);
 
 impl Drop for Script {
@@ -256,9 +226,6 @@ fn the_pattern_follows_a_scale_2_output_through_the_present_run() {
     let out = || std::fs::read_to_string(dir.join("remote.out")).unwrap_or_default();
     let handle = session(&dir, &hypr);
 
-    // Upstream: the mode is the client's size, the scale divides it
-    // (session.rs:625-650, hypr-ipc lib.rs:197-209); hyprctl reports the
-    // mode with scale 2, so the windows are 1280x800 then 1920x1200.
     let windowed = wait_ready(&handle, &dir, &hypr, (2560, 1600), Duration::from_secs(20));
     assert_eq!(
         windowed,
@@ -276,8 +243,6 @@ fn the_pattern_follows_a_scale_2_output_through_the_present_run() {
         "fullscreen (3840x2400 @2): remote machine said:\n{}",
         out()
     );
-    // The script saw the change and checked the window again at the new
-    // logical size, not only Hyprland keeping it fullscreen.
     let until = Instant::now() + Duration::from_secs(10);
     let rechecked = |said: &str| {
         said.split_once("mode 3840x2400 scale 2.0 logical 1920x1200")
@@ -315,8 +280,6 @@ fn the_pattern_follows_a_scale_2_output_through_the_present_run() {
     assert_eq!(left, 0, "ffplay stopped with the output:\n{said}");
 }
 
-/// A move Hyprland ignores (as `movetoworkspacesilent` was in a real
-/// run) leaves the window on the home monitor: still exit 1.
 #[test]
 fn follow_still_fails_when_the_window_does_not_land() {
     let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("pattern-follow-stuck");
@@ -361,9 +324,6 @@ fn monitors(hypr: &Path, gliff: &str) {
     std::fs::rename(tmp, hypr.join("monitors.json")).expect("monitors in place");
 }
 
-/// Upstream's first mode is clamped to 1920x1080 at 1.0 (16:9) until the
-/// client's Resize (16:10): the source restarts at the new aspect, so
-/// ffplay never letterboxes the grid.
 #[test]
 fn follow_restarts_the_source_when_the_aspect_changes() {
     let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("pattern-follow-aspect");

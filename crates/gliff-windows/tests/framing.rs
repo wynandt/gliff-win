@@ -1,7 +1,3 @@
-//! A `VideoFrame` with a real H.264 access unit goes through upstream
-//! `Framed` and comes back out of the client's reader byte for byte, then
-//! decodes to a picture of the encoded size.
-
 use gliff_proto::msg::Rect;
 use gliff_proto::msg::ServerMsg;
 use gliff_sw::Encoder;
@@ -14,7 +10,6 @@ use gliff_windows::link::read_server;
 const WIDTH: u32 = 640;
 const HEIGHT: u32 = 360;
 
-/// One keyframe from the same OpenH264 encoder the server's CPU path uses.
 fn real_access_unit() -> Vec<u8> {
     let mut encoder = Encoder::new(
         EncoderSettings {
@@ -54,7 +49,6 @@ async fn video_frame_with_real_payload_round_trips_and_decodes() {
         data_len: u32::try_from(au.len()).expect("one AU fits in u32"),
         aux_len: 0,
     };
-    // A small pipe forces the reader to see the AU in several pieces.
     let (server_end, client_end) = tokio::io::duplex(4096);
     let writer = tokio::spawn({
         let sent = sent.clone();
@@ -79,7 +73,6 @@ async fn video_frame_with_real_payload_round_trips_and_decodes() {
     assert!(main[..] == au[..], "AU bytes are unchanged");
     assert!(aux.is_empty(), "aux_len 0 reads no aux payload");
 
-    // The next message starts exactly after the payload.
     let next = read_server(&mut client).await.expect("read Ping");
     assert_eq!(next.msg, ServerMsg::Ping { t: 1 });
     assert!(next.main.is_empty());

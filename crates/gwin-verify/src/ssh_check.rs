@@ -69,8 +69,6 @@ impl Progress {
     fn mode_matches(&self, mode: &DesktopMode) -> bool {
         match mode {
             DesktopMode::Headless => self.headless == Some(true),
-            // `auto` is the server's choice of a real output: any name that is
-            // not a private screen matches.
             DesktopMode::Mirror { output } if output == FOCUSED_OUTPUT => {
                 self.headless == Some(false)
             }
@@ -112,10 +110,7 @@ pub async fn run(spec: SshSpec, timeout: Duration) -> Line {
         Err(_) => Some(format!("timed out after {}s", timeout.as_secs())),
     };
     if error.is_some() {
-        // tokio's kill also waits, so ssh has exited and its log is whole.
         let _ = child.kill().await;
-        // An ssh that had already exited (a missing server, exit 127) keeps
-        // its code; one the kill ended has none.
         if progress.exit_code.is_none() {
             progress.exit_code = child.try_wait().ok().flatten().and_then(|s| s.code());
         }
@@ -169,13 +164,7 @@ fn fail(line: Line, stderr_log: &Path, exit: Option<i32>, error: String) -> Line
 /// drain the pipe to EOF so a server still writing is never blocked; wait
 /// for the exit.
 ///
-/// Takes `stdin` by value so it can be closed: upstream gliff-server
-/// (089662fd) breaks its loop on Bye (`session.rs:498`, `:320`) and tears
-/// down capture, input and the output (`:326-339`), but its `spawn_local`
-/// reader (`session.rs:376-413`) has by then started another read on
-/// `tokio::io::stdin()` (`main.rs:128`), a blocking read tokio cannot
-/// cancel, and dropping the runtime (`main.rs:110-133`) waits for it. With
-/// stdin open the server never exits and never closes stdout.
+/// Takes `stdin` by value so it can be closed.
 async fn session(
     stdin: ChildStdin,
     stdout: ChildStdout,
@@ -221,7 +210,6 @@ async fn session(
     }
     writer.write_msg(&ClientMsg::Bye).await?;
     progress.bye_sent = true;
-    // EOF on the server's stdin: ssh forwards it as channel EOF.
     drop(writer);
     loop {
         match read_server(&mut reader).await {

@@ -19,7 +19,6 @@ fn rgb(px: u32) -> Rgb {
     Rgb((px >> 16) as u8, (px >> 8) as u8, px as u8)
 }
 
-/// A dot of `state` drawn at `dpi` on a square canvas, and its size.
 fn draw_dot(state: DotState, dpi: u32, phase: u32) -> (Vec<u32>, i32) {
     let d = Metrics::at(dpi).dot;
     let size = d + 8;
@@ -43,14 +42,11 @@ fn a_live_dot_has_smooth_edges_and_the_area_of_a_circle() {
         let mid = size / 2;
         assert_eq!(at(&px, size, mid, mid), PAL.ok, "centre at {dpi} dpi");
         assert_eq!(at(&px, size, 0, 0), PAL.strip, "corner at {dpi} dpi");
-        // Pixels that are neither the dot's colour nor the strip's.
         let blended = px
             .iter()
             .filter(|p| rgb(**p) != PAL.ok && rgb(**p) != PAL.strip)
             .count();
         assert!(blended >= 8, "{blended} blended pixels at {dpi} dpi");
-        // The strip's green channel runs from 0x30 to the dot's 0xf0: the
-        // lit amount of all pixels is the dot's area.
         let lit: f64 = px
             .iter()
             .map(|p| f64::from(rgb(*p).1.saturating_sub(PAL.strip.1)))
@@ -70,8 +66,6 @@ fn a_failed_dot_is_red_with_a_cross_you_can_see() {
         let (px, size) = draw_dot(DotState::Failed, dpi, 0);
         let d = Metrics::at(dpi).dot;
         let mid = size / 2;
-        // The crossing is the cross's colour; a point of the red disc off
-        // the cross is red.
         assert_eq!(at(&px, size, mid, mid), PAL.backdrop, "{dpi} dpi");
         let off = at(&px, size, mid + d / 2 - 2, mid);
         assert_eq!(off, PAL.err, "{dpi} dpi");
@@ -89,7 +83,6 @@ fn a_connecting_arc_turns_and_a_stopped_ring_is_hollow() {
     assert!(a.iter().any(|p| rgb(*p) == PAL.accent));
     let (ring, size_ring) = draw_dot(DotState::Stopped, 96, 0);
     assert_eq!(size, size_ring);
-    // Hollow: the middle is the strip's colour.
     assert_eq!(at(&ring, size, size / 2, size / 2), PAL.strip);
     assert!(ring.iter().any(|p| rgb(*p) == PAL.ring));
 }

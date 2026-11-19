@@ -1,7 +1,3 @@
-//! `gwin-verify ssh` end to end on the build machine: the real binary, spawning
-//! `scripts/fake-ssh`, which runs `gwin-fake-server` locally over stdio.
-//! Stands in for ssh.exe to the remote machine; see docs/development.md.
-
 use std::path::Path;
 use std::path::PathBuf;
 use std::process::Command;
@@ -16,7 +12,6 @@ fn run(server_path: &str, log_dir: &Path, extra: &[&str]) -> (bool, Value) {
     run_with(server_path, log_dir, extra, "")
 }
 
-/// `fake` goes to the fake server as GWIN_FAKE_SERVER (through fake-ssh).
 fn run_with(server_path: &str, log_dir: &Path, extra: &[&str], fake: &str) -> (bool, Value) {
     let out = Command::new(env!("CARGO_BIN_EXE_gwin-verify"))
         .env("GWIN_FAKE_SERVER", fake)

@@ -1,14 +1,3 @@
-//! What a person reads when ssh fails, from real ssh output.
-//!
-//! Each file in `tests/ssh_corpus/<version>/` is the stderr of a real OpenSSH
-//! run. The Linux directory comes from `scripts/capture-ssh-corpus`, the
-//! Windows one from `scripts/capture-ssh-corpus-windows.ps1`; Windows' ssh
-//! ends its lines with CRLF, as ssh's own messages do on Linux, and the files
-//! keep the bytes as they were. The exit code is not in
-//! the file: ssh exits 255 for its own failures, and the remote shell's code
-//! (127) when it could not find the server. A new bug report adds a file and
-//! a row here.
-
 use std::collections::BTreeSet;
 use std::path::Path;
 
@@ -23,7 +12,6 @@ struct Case {
     file: &'static str,
     exit: i32,
     class: &'static str,
-    /// Words the person must find in the message.
     says: &'static str,
     button: Button,
 }
@@ -66,12 +54,6 @@ const fn win(
     case_in(WINDOWS, file, exit, class, says, button)
 }
 
-/// Windows' ssh: only the cases that need no server. Where the wording
-/// differs from Linux: a refused connection with `ConnectTimeout` set (as the
-/// client does) reads "banner exchange: Connection to UNKNOWN port -1:
-/// Connection refused"; "No such host is known." has a trailing space; a
-/// route that does not exist reads "Unknown error"; a config file path has
-/// doubled backslashes.
 fn windows_cases() -> Vec<Case> {
     use Button::*;
     vec![
@@ -330,8 +312,6 @@ fn every_corpus_file_has_a_row_above() {
 
 #[test]
 fn the_message_never_repeats_ssh_text_beyond_the_last_line() {
-    // The raw text goes to the log. The message may quote only one line, and
-    // never a file path or the address ssh printed.
     let target = "me@lab-pc".parse().expect("a target");
     for c in cases() {
         let text = read(&c);
@@ -361,10 +341,6 @@ fn the_same_text_is_classified_the_same_in_the_version_check() {
 
 #[test]
 fn every_line_of_the_windows_files_ends_with_crlf() {
-    // The corpus is byte for byte what ssh printed. ssh's own messages end
-    // with CRLF on Linux too (a remote shell's lines end with LF, so some
-    // Linux files mix the two); a tool that rewrote line ends would make the
-    // Windows files test nothing.
     for c in cases().into_iter().filter(|c| c.dir == WINDOWS) {
         let text = read(&c);
         let (crlf, lf) = (text.matches("\r\n").count(), text.matches('\n').count());
@@ -378,7 +354,6 @@ fn every_line_of_the_windows_files_ends_with_crlf() {
 
 #[test]
 fn line_ends_do_not_change_what_a_person_reads() {
-    // The same text with every line end CRLF, and with every one LF, reads the same.
     let target = "me@lab-pc".parse().expect("a target");
     for c in cases() {
         let text = read(&c);

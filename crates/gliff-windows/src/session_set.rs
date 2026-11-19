@@ -379,7 +379,6 @@ impl<L: Link> SessionSet<L> {
         let mut total = Applied::default();
         let sessions = self.sessions();
         for session in sessions {
-            // Finished first: every event the thread sent is queued by then.
             let finished = self
                 .live
                 .get(&session)
@@ -389,7 +388,6 @@ impl<L: Link> SessionSet<L> {
                 match event {
                     UiEvent::Connected(info) => {
                         effects.extend(tabs.connected(session, (self.clock)()));
-                        // The view wants the machine's kind too.
                         total.events.push((session, UiEvent::Connected(info)));
                     }
                     UiEvent::Ended(reason) => {

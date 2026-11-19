@@ -1,16 +1,3 @@
-//! The loopback the native verification skill drives, end to end on the
-//! build machine: the real session driver, spawning `gwin-fake-ssh` (the
-//! portable ssh stand-in), which runs the `gwin-fake-server` next to it with
-//! `GWIN_FAKE_INPUT_LOG` set. The test reads that log as the remote side's
-//! record of what arrived.
-//!
-//! What it proves: keys and a Resize sent through the session reach the
-//! remote side in order; a key left down is let go when the client
-//! releases input (before any Bye); a key still down at the end is let go
-//! before the Bye, so the Bye line reports nothing still held. On Windows
-//! the skill's `gwin-native.ps1` reads the same file after real key presses.
-
-// The ssh wrapper that sets the log path is a bash script: build machine only.
 #![cfg(unix)]
 
 use std::path::Path;
@@ -45,8 +32,6 @@ impl Waker for Quiet {
     fn event(&self) {}
 }
 
-/// An ssh that is `gwin-fake-ssh` with the input log set, as
-/// `gwin-native.ps1` sets it in the client's environment on Windows.
 fn ssh_with_log(dir: &Path, log: &Path) -> PathBuf {
     let wrapper = dir.join("ssh");
     std::fs::write(
@@ -72,7 +57,6 @@ fn session(name: &str) -> (SessionHandle, PathBuf) {
         spec: SshSpec {
             ssh: ssh_with_log(&dir, &log),
             target: "verify@loopback".parse().expect("a target"),
-            // A bare name, as on Windows: gwin-fake-ssh runs its sibling.
             server_path: "gliff-server".to_owned(),
             mode: DesktopMode::Headless,
             log_dir: dir,
@@ -91,8 +75,6 @@ fn session(name: &str) -> (SessionHandle, PathBuf) {
     (start(opts, Arc::new(Quiet)).expect("start"), log)
 }
 
-/// Waits until the session has decoded a few pictures, taking them as the
-/// UI thread would.
 fn streaming(handle: &SessionHandle) {
     let deadline = Instant::now() + Duration::from_secs(20);
     while handle.stats().frames < 3 {
@@ -114,7 +96,6 @@ fn lines(log: &Path) -> Vec<Value> {
         .collect()
 }
 
-/// A key as the low-level hook reports it: virtual key and scan code.
 fn key(vk: u16, scan: u16, press: Press, time_ms: u32) -> UiCmd {
     UiCmd::Key(RawKey {
         vk,
@@ -127,7 +108,6 @@ fn key(vk: u16, scan: u16, press: Press, time_ms: u32) -> UiCmd {
     })
 }
 
-/// Lines of one kind, in order.
 fn of(lines: &[Value], ev: &str) -> Vec<Value> {
     lines.iter().filter(|l| l["ev"] == ev).cloned().collect()
 }
@@ -136,8 +116,6 @@ fn of(lines: &[Value], ev: &str) -> Vec<Value> {
 fn keys_and_a_resize_reach_the_remote_side_and_nothing_is_held_at_bye() {
     let (handle, log) = session("keys");
     streaming(&handle);
-    // g, l, i, f, f through the hook's path: (virtual key, scan code), which
-    // reach the remote as evdev 34, 38, 23, 33, 33.
     let mut t = 1000;
     for (vk, scan) in [
         (0x47, 0x22),
@@ -156,11 +134,8 @@ fn keys_and_a_resize_reach_the_remote_side_and_nothing_is_held_at_bye() {
         height: 600,
         scale: 1.0,
     }));
-    // A left Shift (evdev 42) left down, then the client lets go of the
-    // input, as on focus loss.
     handle.send(key(0xa0, 0x2a, Press::Down, t));
     handle.send(UiCmd::ReleaseInput);
-    // The Up comes from the release, not from the Bye (which also lets go).
     let released = Instant::now() + Duration::from_secs(5);
     while !lines(&log)
         .iter()
@@ -173,8 +148,6 @@ fn keys_and_a_resize_reach_the_remote_side_and_nothing_is_held_at_bye() {
         );
         std::thread::sleep(Duration::from_millis(20));
     }
-    // A key still down when the session ends: the Bye line must show that
-    // the client let go of it first.
     handle.send(key(0x41, 0x1e, Press::Down, t + 20));
     std::thread::sleep(Duration::from_millis(200));
     handle.send(UiCmd::Bye);

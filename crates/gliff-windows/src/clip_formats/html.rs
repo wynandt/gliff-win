@@ -54,8 +54,6 @@ fn split_document(html: &str) -> (String, std::ops::Range<usize>) {
     if let Some(body) = lower.find("<body")
         && let Some(open_end) = lower[body..].find('>')
     {
-        // The comments go around the body's content, so a program that
-        // reads them finds the same fragment as one that reads offsets.
         let from = body + open_end + 1;
         let to = lower
             .rfind("</body")
@@ -104,7 +102,6 @@ fn header_range(payload: &[u8], start_key: &str, end_key: &str) -> Option<std::o
 
 /// The number after `key:` in the header lines at the front of the payload.
 fn header_value(payload: &[u8], key: &str) -> Option<usize> {
-    // The header ends where the HTML starts; stop looking there.
     let limit = payload
         .iter()
         .position(|&b| b == b'<')

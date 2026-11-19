@@ -53,11 +53,8 @@ mod on {
         /// its own.
         pub fn on_key(&self, vk: u16, press: Press, injected: bool) {
             if self.panic && vk == VK_F23 && press == Press::Down && injected {
-                // A panic cannot unwind out of the `extern "system"` callback
-                // (Rust 1.81 and later): after the panic hook has put the lock
-                // setting back (`lockreg::restore_now`) the process aborts.
-                // That is the path this test exercises, and the watchdog
-                // helper covers it if the hook itself did not run.
+                // Platform: a panic cannot unwind out of an `extern "system"` callback; the
+                // process aborts after the panic hook restores the lock setting.
                 panic!("--test-panic: the hook thread was asked to panic (injected F23)");
             }
             self.stall(vk, press);
@@ -70,7 +67,6 @@ mod on {
             if vk != VK_F24 || press != Press::Down {
                 return;
             }
-            // Take one of the remaining stalls, if any are left.
             let mut left = stall.times.load(Ordering::Acquire);
             loop {
                 if left == 0 {

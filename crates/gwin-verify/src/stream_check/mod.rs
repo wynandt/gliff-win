@@ -66,8 +66,7 @@ use crate::stream_check::measure::FpsProblem;
 use crate::stream_check::measure::IdGaps;
 use crate::stream_check::measure::ResizeVerdict;
 
-/// Upstream's idle drain fires after 150 ms without a frame
-/// (net.rs:525-561).
+/// Upstream's idle drain (`IDLE_DRAIN`) fires after 150 ms without a frame.
 const IDLE_DRAIN: Duration = Duration::from_millis(150);
 /// How long the server gets to exit once stdin is closed after Bye.
 const EXIT_WAIT: Duration = Duration::from_secs(10);
@@ -238,8 +237,7 @@ enum Phase {
         start: Instant,
     },
     /// The window is over; the session stays up, acking, until the end
-    /// placement probe answers, because Bye removes the output
-    /// (session.rs:498, :1477-1482).
+    /// placement probe answers, because Bye removes the output.
     Closing {
         until: Instant,
     },
@@ -370,13 +368,9 @@ pub async fn run(opts: Options) -> Line {
     let timed_out = tokio::time::timeout(budget, run.session(&mut in_rx))
         .await
         .is_err();
-    // Bye was sent (or the session broke): dropping the sender ends the
-    // writer, which closes stdin.
     run.tx = None;
     stop.store(true, Ordering::Relaxed);
     if let Some(handle) = consumer {
-        // The consumer only sleeps and takes; a panic there is a bug in
-        // this file, and the picture it held is simply missing.
         let _ = handle.join();
     }
     let written = match writer.await {
@@ -396,12 +390,9 @@ pub async fn run(opts: Options) -> Line {
             "timed out after {}s",
             budget.as_secs()
         )));
-        // tokio's kill also waits, so ssh has exited and its log is whole.
         let _ = child.kill().await;
         None
     } else {
-        // Drain to EOF so a server still writing is never blocked, then
-        // wait for the exit.
         let drain = async {
             while in_rx.recv().await.is_some() {}
             child.wait().await
@@ -452,8 +443,6 @@ async fn write_loop(
             acks.fetch_add(1, Ordering::Relaxed);
         }
     }
-    // Dropping `writer` closes stdin: ssh forwards EOF, and upstream's
-    // server exits only then (see ssh_check).
     Ok(())
 }
 
@@ -576,7 +565,6 @@ impl Run {
                 }
                 None => self.bye(),
             },
-            // The end probe never answered; collect_probes reports it.
             Phase::Closing { .. } => self.bye(),
             Phase::Done => {}
         }
@@ -621,8 +609,6 @@ impl Run {
             results.push(r);
         }
         if let Some(probe) = self.end_probe.take() {
-            // Still running at Bye: whatever it sees now is after the
-            // output was removed, so it proves nothing.
             probe.abort();
             results.push(Err("end probe did not answer before Bye".to_owned()));
         }
@@ -631,7 +617,6 @@ impl Run {
 
     fn send(&self, msg: ClientMsg) {
         if let Some(tx) = &self.tx {
-            // The writer only stops on a write error, reported at the end.
             let _ = tx.send(msg);
         }
     }
@@ -641,17 +626,12 @@ impl Run {
             frame_id, keyframe, ..
         } = inbound.msg
         {
-            // Before the Resize the stream is the clamped first mode; the
-            // SPS that counts is the one after it.
             if keyframe
                 && let Some(Ok(sps)) = find_sps(&inbound.main)
                 && (self.sps.is_none() || self.phase != Phase::WaitResize)
             {
                 self.sps = Some(sps);
             }
-            // `at` is stamped by the reader before the channel, so a frame
-            // queued during a decode can predate the window's start; it
-            // belongs to the settle phase.
             if let Phase::Measure { start } = self.phase
                 && let Some(offset) = at.checked_duration_since(start)
             {
@@ -841,7 +821,6 @@ impl Run {
         let picture = self.last_picture.lock().expect("picture lock").take();
         let pattern_json = match (&picture, measured) {
             (Some(p), _) => {
-                // Upstream's CPU conversion: the same pixels the pattern check scores.
                 let bgra = p.frame.to_bgra();
                 let score = pattern::compare(&bgra, self.opts.tolerance);
                 let png = match write_png(&self.opts.png, &bgra) {

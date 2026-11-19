@@ -1,10 +1,5 @@
 //! The client's session loop on its own thread: ssh, the protocol
 //! [`Core`], the decoder, and the hand-off to the UI.
-//!
-//! `gwin-verify stream` keeps its own instrumented copy of this loop, so
-//! the stream check is not changed under it; the shape is the same (a
-//! writer task, a whole-message reader task, the idle drain, and
-//! Bye → stdin EOF → wait for ssh).
 
 use std::collections::VecDeque;
 use std::path::PathBuf;
@@ -141,8 +136,6 @@ pub struct SessionHandle {
 impl SessionHandle {
     /// Sends a command; after the session ended it is dropped.
     pub fn send(&self, cmd: UiCmd) {
-        // A closed channel means the session already ended, which the
-        // event queue reports.
         let _ = self.cmds.send(cmd);
     }
 
@@ -198,7 +191,6 @@ impl SessionHandle {
                 stderr_log: None,
             },
         };
-        // The slot lives on this side; the thread leaves the count at 0.
         SessionEnd {
             slot_dropped: self.slot.dropped(),
             ..end
@@ -263,7 +255,6 @@ struct Out {
 
 impl Out {
     fn event(&self, event: UiEvent) {
-        // The UI dropped its receiver: nobody is left to tell.
         let _ = self.events.send(event);
         self.waker.event();
     }
@@ -321,8 +312,6 @@ async fn run(
         Ok(link) => link,
         Err(e) => {
             let error = format!("spawn ssh: {e}");
-            // A program that is not there is the one start failure with a
-            // plain-words answer; the rest stay as they were.
             return match from_spawn_error(&e) {
                 SshFailure::ClientMissing => {
                     let failure = SshFailure::ClientMissing;
@@ -339,7 +328,6 @@ async fn run(
     let engine = clipboard.and_then(|port| {
         let writer_tx = tx.clone();
         let send: clip_link::SendToServer = Arc::new(move |msg, payload| {
-            // The writer only stops on a write error, reported at the end.
             let _ = writer_tx.send((ClientMsg::from(msg), payload));
         });
         match clip_link::spawn(port, send) {
@@ -382,11 +370,7 @@ async fn run(
         Bytes::new(),
     );
     session.run(&mut in_rx, &mut cmds, &mut child).await;
-    // Bye was sent (or the link broke): dropping the sender ends the
-    // writer, which closes stdin; upstream's server exits only then.
     session.tx = None;
-    // The engine holds a writer sender too: stop it first, or stdin
-    // stays open and the server never exits.
     if let Some(engine) = session.engine.take() {
         let _ = tokio::task::spawn_blocking(move || engine.stop()).await;
     }
@@ -399,7 +383,6 @@ async fn run(
     reader.abort();
     let stats = session.core.stats().clone();
     session.out.publish(&stats, session.decoder.kind());
-    // The UI learns of the end only after ssh is gone, so it may exit.
     session.out.waker.event();
     SessionEnd {
         reason: session.reason,
@@ -433,7 +416,6 @@ async fn finish(
                 "ssh still running {}s after Bye and stdin EOF",
                 EXIT_WAIT.as_secs()
             ));
-            // tokio's kill also waits, so ssh has exited and its log is whole.
             let _ = child.kill().await;
             None
         }
@@ -541,8 +523,6 @@ impl Session {
     ) {
         let mut last_frame = Instant::now();
         while !self.core.is_ended() {
-            // Whatever woke the loop, a deadline that has passed is served
-            // first: a flood of mouse motion must not push it back.
             self.tick_if_due();
             self.resync_if_due();
             let key_due = self.key_due();
@@ -567,7 +547,6 @@ impl Session {
                     None => self.link_lost(ssh, "reader ended".to_owned()).await,
                 },
                 cmd = cmds.recv() => {
-                    // The handle was dropped: the UI is gone, so say Bye.
                     let cmd = cmd.unwrap_or(UiCmd::Bye);
                     for cmd in coalesce_motion(cmd, cmds) {
                         self.on_cmd(cmd);
@@ -576,8 +555,6 @@ impl Session {
                 () = tokio::time::sleep_until(key_due.unwrap_or_else(Instant::now).into()), if key_due.is_some() => {
                     self.tick_if_due();
                 }
-                // Queued commands go first: after a stall they may hold more
-                // of the same gesture, which a stop would split in two.
                 () = tokio::time::sleep_until(scroll_due.unwrap_or_else(Instant::now).into()), if scroll_due.is_some() && cmds.is_empty() => {
                     self.end_scroll_if_due();
                 }
@@ -745,7 +722,6 @@ impl Session {
         if self.core.stats().configs > 0 {
             return EndReason::Link(error);
         }
-        // ssh closes its stdout as it exits; give it a moment to be gone.
         let exit = match tokio::time::timeout(LINK_EXIT_WAIT, ssh.wait()).await {
             Ok(Ok(status)) => status.code(),
             _ => return EndReason::Link(error),
@@ -766,7 +742,6 @@ impl Session {
 
     fn send(&self, msg: ClientMsg, payload: Bytes) {
         if let Some(tx) = &self.tx {
-            // The writer only stops on a write error, reported at the end.
             let _ = tx.send((msg, payload));
         }
     }
@@ -792,7 +767,6 @@ impl Session {
                     let ms = t.elapsed().as_secs_f64() * 1000.0;
                     self.log_decoder_notes();
                     if self.decoder.kind() != before {
-                        // A fallback: the times so far are the old decoder's.
                         self.report_decode_as(before);
                     }
                     if let Some(window) = &mut self.decode_window {

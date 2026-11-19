@@ -38,7 +38,6 @@ fn r(r: Rect) -> String {
     format!("{},{},{},{}", r.left, r.top, r.right, r.bottom)
 }
 
-/// One line per operation: the golden text.
 fn render(ops: &[Op]) -> String {
     let mut out = String::new();
     for op in ops {
@@ -121,7 +120,6 @@ struct Scene {
     items: Vec<TabItem>,
 }
 
-/// Tabs named `host-1`..; `dots` gives each one's dot.
 fn scene(dots: &[DotState]) -> Scene {
     let mut tabs = Tabs::new();
     for i in 1..=dots.len() {
@@ -238,7 +236,6 @@ fn the_background_comes_first_and_tabs_are_cut_to_the_viewport() {
     );
     assert_eq!(list[1], Op::Clip(f.layout.viewport));
     let unclip = list.iter().position(|o| *o == Op::Unclip).expect("unclip");
-    // Only the buttons come after the tabs.
     assert!(
         list[unclip + 1..]
             .iter()
@@ -270,8 +267,6 @@ fn the_shown_tab_is_lit_and_a_hovered_tab_is_lit_less() {
             (f.layout.tabs[1].rect, PAL.tab_hover),
         ]
     );
-    // The pointer on the dot slot lights the tab too; on the shown tab it
-    // adds nothing.
     let list = ops(&s, &f, Some(s.ids[0]), Hit::Slot(s.ids[0]), None, 0);
     assert_eq!(fills(&list), [(f.layout.tabs[0].rect, PAL.tab_shown)]);
     let list = ops(&s, &f, Some(s.ids[0]), Hit::Slot(s.ids[2]), None, 0);
@@ -324,7 +319,6 @@ fn under_the_pointer_the_dot_becomes_a_cross_button() {
             _ => None,
         })
         .expect("a pad");
-    // The pad sits inside the slot.
     assert!(pad.left >= slot.left && pad.right <= slot.right);
     assert!(pad.top >= slot.top && pad.bottom <= slot.bottom);
     let crosses = over
@@ -352,8 +346,6 @@ fn the_drop_marker_sits_in_the_gap_it_would_drop_into() {
     };
     assert_eq!(marker(None), None);
     let tabs = &f.layout.tabs;
-    // Drag the first tab before the third: the bar is in the gap before the
-    // third tab.
     let bar = marker(Some(Drag {
         id: s.ids[0],
         before: Some(s.ids[2]),
@@ -367,14 +359,12 @@ fn the_drop_marker_sits_in_the_gap_it_would_drop_into() {
         (bar.top, bar.bottom),
         (f.layout.viewport.top, f.layout.viewport.bottom)
     );
-    // Drag the first to the end: after the last tab.
     let bar = marker(Some(Drag {
         id: s.ids[0],
         before: None,
     }))
     .expect("a bar");
     assert!(bar.left >= tabs[2].rect.right, "{bar:?}");
-    // The dragged tab is tinted as if hovered.
     let list = ops(
         &s,
         &f,
@@ -544,8 +534,6 @@ mod bar {
 
     #[test]
     fn no_text_is_drawn_under_the_live_edit_field() {
-        // The edit field draws its own text and hint. A second copy under it,
-        // repainted by the strip on every pass, is what made the text blink.
         let s = scene(&[DotState::Live]);
         for text in ["", "me@host", "me@a-very-long-host-name.example.org"] {
             let bar = BarPaint {
@@ -583,8 +571,6 @@ mod bar {
             }
             _ => false,
         };
-        // The bar draws a chevron and an arrow, never the plus: a plus is
-        // one horizontal and one vertical stroke through a centre.
         let bar = f.layout.bar.expect("open");
         let centre = (bar.go.left + bar.go.right) / 2;
         assert!(
@@ -614,8 +600,6 @@ mod bar {
         assert_eq!(list[at + 1], Op::Unclip, "and released after");
     }
 
-    /// The outline is the first rounded rectangle of the bar, over the
-    /// whole bar.
     fn outline(f: &Frame, list: &[Op]) -> Rgb {
         list.iter()
             .find_map(|op| match op {

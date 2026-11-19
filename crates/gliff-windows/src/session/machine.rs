@@ -1,7 +1,6 @@
 //! `Core`: the client's protocol state machine, with no I/O.
 //!
-//! A port of the upstream client's session loop (`gliff/src/net.rs` at
-//! 089662fd). Each server message, decode result and UI command goes in,
+//! A port of the upstream client's session loop (`gliff::net::session`). Each server message, decode result and UI command goes in,
 //! and the [`Action`]s the driver must perform come out, in order. The
 //! driver owns the socket, the decoder and the clock; `Core` owns the
 //! protocol rules, the pending-geometry FIFO and the counters.
@@ -38,8 +37,7 @@ use crate::session::input_side::KeyOut;
 use crate::yuv::Sampling;
 use crate::yuv::YuvFrame;
 
-/// The largest stream the client accepts (upstream `MAX_DECODE`,
-/// net.rs:769-774).
+/// The largest stream the client accepts (upstream `validate_stream_size`).
 pub const MAX_DECODE: (u32, u32) = (4096, 4096);
 
 /// A window-size request, in physical pixels at the protocol scale
@@ -116,7 +114,6 @@ pub struct Picture {
     pub frame_id: u64,
 }
 
-// By picture content; `YuvFrame`'s own equality ignores `decoded_at`.
 impl PartialEq for Picture {
     fn eq(&self, other: &Self) -> bool {
         self.geometry == other.geometry
@@ -251,7 +248,7 @@ pub struct SessionStats {
     /// FrameAcks emitted.
     pub acks: u64,
     pub decode_errors: u64,
-    /// Idle drains that failed (upstream only logs these, net.rs:549-552).
+    /// Idle drains that failed.
     pub drain_errors: u64,
     pub keyframe_requests: u64,
     /// Pictures handed to the frame slot.
@@ -384,7 +381,7 @@ pub struct Core {
     coded: Option<Coded>,
     geometry: Option<Geometry>,
     /// (frame_id, geometry) of each unit fed to the decoder and not yet
-    /// released, oldest first (upstream `in_decoder`, net.rs:463-467).
+    /// released, oldest first (upstream `in_decoder`).
     in_decoder: VecDeque<(u64, Geometry)>,
     stats: SessionStats,
     /// Counted since the last [`Core::take_colour`].
@@ -471,7 +468,6 @@ impl Core {
         self.resyncing = true;
         self.stats.resyncs += 1;
         self.stats.resizes_sent += 2;
-        // The remote may have missed a modifier's Up while it stalled.
         let mut actions = vec![
             Action::Ui(UiEvent::Resyncing),
             send(real.nudged().to_msg()),
@@ -490,8 +486,6 @@ impl Core {
     pub fn on_server(&mut self, msg: ServerMsg, main: Bytes, aux: Bytes) -> Vec<Action> {
         match (self.phase, msg) {
             (Phase::Ended, _) => Vec::new(),
-            // Ping first in every phase, so the server's RTT estimate is
-            // seeded before the first ack (net.rs:304-306, :326, :712-714).
             (_, ServerMsg::Ping { t }) => vec![send(ClientMsg::Pong { t })],
             (_, ServerMsg::Error { code, message, .. }) => {
                 let message = bounded_message(&message);
@@ -531,14 +525,10 @@ impl Core {
                 hot: (hot_x, hot_y),
                 argb: main,
             }))],
-            // The server may offer its selection as soon as the session
-            // is up, so clipboard traffic is also taken before the first
-            // StreamConfig.
             (Phase::Streaming | Phase::AwaitStreamConfig, msg) if is_clipboard(&msg) => msg
                 .into_clipboard()
                 .map(|clip| vec![Action::Clipboard(clip, main)])
                 .unwrap_or_default(),
-            // Mid-stream HelloAck and CursorPos: ignored (net.rs:715-722).
             (Phase::Streaming | Phase::AwaitStreamConfig, ServerMsg::HelloAck { .. }) => Vec::new(),
             (Phase::Streaming, _) => Vec::new(),
             (Phase::AwaitHelloAck | Phase::AwaitStreamConfig, other) => self.end(EndReason::Link(
@@ -548,7 +538,7 @@ impl Core {
     }
 
     /// The result of an [`Action::Decode`]. The FrameAck comes first,
-    /// whatever the result (net.rs:604-611).
+    /// whatever the result.
     pub fn decoded(&mut self, done: Decoded) -> Vec<Action> {
         if self.phase == Phase::Ended {
             return Vec::new();
@@ -562,7 +552,6 @@ impl Core {
                 self.stats.immediate_decode_total_ms += f64::from(done.decode_ms);
                 actions.push(self.present(frame, done.frame_id));
             }
-            // The CPU decoder holds the picture; its geometry stays queued.
             Ok(None) => {}
             Err(e) => {
                 self.stats.decode_errors += 1;
@@ -580,7 +569,7 @@ impl Core {
     }
 
     /// The result of an idle drain (`CpuDecoder::flush`). Never acks: the
-    /// unit was acked when it was fed (net.rs:525-561).
+    /// unit was acked when it was fed.
     pub fn drained(&mut self, result: Result<Option<YuvFrame>, DecodeError>) -> Vec<Action> {
         match (self.phase, result) {
             (Phase::Ended, _) | (_, Ok(None)) => Vec::new(),
@@ -610,7 +599,6 @@ impl Core {
             }
             (_, UiCmd::Resize(req)) => self.resize(req).into_iter().collect(),
             (_, UiCmd::Bye) => {
-                // Nothing may stay held on the remote after the session.
                 let mut actions: Vec<Action> =
                     self.input.release_all().into_iter().map(send).collect();
                 actions.push(send(ClientMsg::Bye));
@@ -618,7 +606,6 @@ impl Core {
                 actions
             }
             (phase, UiCmd::ReleaseGrab) => {
-                // Before the HelloAck the server has seen no key.
                 let mut actions = if phase == Phase::AwaitHelloAck {
                     self.input.release_all();
                     Vec::new()
@@ -628,19 +615,11 @@ impl Core {
                 actions.push(Action::Ui(UiEvent::GrabReleased));
                 actions
             }
-            // Before the HelloAck keys go through the pipeline, so the
-            // release chord works while the hook already holds the keyboard
-            // (a slow or unreachable host), but nothing is sent: the server
-            // has not accepted the session yet. Everything else has nowhere
-            // to go.
             (Phase::AwaitHelloAck, cmd @ (UiCmd::Key(_) | UiCmd::Tick(_))) => self
                 .on_input(cmd)
                 .into_iter()
                 .filter(|action| matches!(action, Action::Ui(_)))
                 .collect(),
-            // A switch away from a session that is still connecting: the
-            // server has seen no key, but the pipeline counts the held ones,
-            // and they must not stay held for the next time it is shown.
             (Phase::AwaitHelloAck, UiCmd::ReleaseInput) => {
                 self.input.release_all();
                 Vec::new()
@@ -667,7 +646,6 @@ impl Core {
             UiCmd::ClearModifiers { user_holds } => {
                 self.input.release_modifiers_not_held(&user_holds)
             }
-            // Handled by `on_ui`.
             UiCmd::Resize(_) | UiCmd::Bye | UiCmd::ReleaseGrab => Vec::new(),
         };
         for msg in &msgs {
@@ -724,7 +702,6 @@ impl Core {
         self.phase = Phase::Streaming;
         self.geometry = Some(geometry);
         let mut actions = Vec::new();
-        // Reset only when the coded stream changes (net.rs:676-683).
         let decoder = if self.coded == Some(coded) {
             DecoderChange::Kept
         } else {
@@ -758,11 +735,7 @@ impl Core {
             (false, true) => {}
         }
         if dual == aux.is_empty() {
-            // An aux payload on a Single420 stream, which no decoder takes,
-            // or a Dual420 frame without its aux half. Neither decoder is
-            // fed, so a Dual420 pair stays in step until the keyframe.
-            // decoded_at_ms is 0 (never decoded); gliff-server never reads
-            // the field (only frame_id, session.rs:499-503).
+            // Upstream: gliff-server does not read `decoded_at_ms`.
             return vec![self.ack(frame_id, 0), self.request_keyframe()];
         }
         let geometry = self.current_geometry();
@@ -802,8 +775,7 @@ impl Core {
     }
 
     /// Pops the oldest queued unit for a released picture; with nothing
-    /// queued it takes the current geometry and `fallback_id`
-    /// (net.rs:618-628).
+    /// queued it takes the current geometry and `fallback_id`.
     fn present(&mut self, frame: YuvFrame, fallback_id: u64) -> Action {
         let (frame_id, geometry) = self
             .in_decoder
@@ -822,7 +794,6 @@ impl Core {
     }
 
     fn current_geometry(&self) -> Geometry {
-        // Streaming implies a config; the zero geometry is unreachable.
         self.geometry.unwrap_or(Geometry {
             stream: (0, 0),
             view: (0, 0),
@@ -848,8 +819,7 @@ fn send(msg: ClientMsg) -> Action {
     Action::Send(msg, Bytes::new())
 }
 
-/// Only what `client_caps` advertised, at a size the decoder takes
-/// (net.rs:769-774).
+/// Only what `client_caps` advertised, at a size the decoder takes.
 fn validate_stream(
     codec: Codec,
     chroma: ChromaMode,

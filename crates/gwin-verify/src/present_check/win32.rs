@@ -138,7 +138,6 @@ impl Drop for Win32Harness {
 impl Harness for Win32Harness {
     fn launch(&mut self) -> anyhow::Result<()> {
         let l = &self.launch;
-        // A stale file from an earlier run must not read as this one.
         match std::fs::remove_file(&l.stats_out) {
             Ok(()) => {}
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
@@ -189,8 +188,6 @@ impl Harness for Win32Harness {
     }
 
     fn stats(&mut self) -> Option<ClientStats> {
-        // The client renames a complete file into place, so a read sees a
-        // whole one or none.
         let text = std::fs::read_to_string(&self.launch.stats_out).ok()?;
         ClientStats::from_json(&text).ok()
     }
@@ -215,8 +212,6 @@ impl Harness for Win32Harness {
             left: 0,
             top: 0,
             right: i32::try_from(size.0).context("width")?,
-            // The tab strip sits above the picture: the client area is the
-            // picture and the strip.
             bottom: i32::try_from(client_height_for(size.1, height_of(hwnd))).context("height")?,
         };
         // SAFETY: a live window; the style words are plain integers and
@@ -244,7 +239,6 @@ impl Harness for Win32Harness {
     }
 
     fn press_f11(&mut self) -> anyhow::Result<()> {
-        // Repeat count 1, bit 30 clear: a fresh press, not auto-repeat.
         self.post(WM_KEYDOWN, usize::from(VK_F11.0), 1)
     }
 
@@ -263,8 +257,7 @@ impl Harness for Win32Harness {
 
     fn capture(&mut self) -> anyhow::Result<BgraFrame> {
         let hwnd = self.hwnd()?;
-        // Best effort: Windows may refuse focus to a background process,
-        // and a covered window then fails `pattern`, which is the point.
+        // Platform: Windows may refuse focus to a background process.
         // SAFETY: a live window.
         let _ = unsafe { SetForegroundWindow(hwnd) };
         std::thread::sleep(Duration::from_millis(500));
@@ -352,7 +345,6 @@ fn screen_pixels(x: i32, y: i32, width: u32, height: u32) -> anyhow::Result<Bgra
         bmiHeader: BITMAPINFOHEADER {
             biSize: size_of::<BITMAPINFOHEADER>() as u32,
             biWidth: w,
-            // Negative: top-down rows.
             biHeight: -h,
             biPlanes: 1,
             biBitCount: 32,
@@ -389,7 +381,7 @@ fn screen_pixels(x: i32, y: i32, width: u32, height: u32) -> anyhow::Result<Bgra
     if rows != h {
         bail!("GetDIBits copied {rows} of {h} rows");
     }
-    // GDI leaves alpha undefined.
+    // Platform: GetDIBits leaves alpha undefined.
     for px in pixels.as_chunks_mut::<4>().0 {
         px[3] = 255;
     }

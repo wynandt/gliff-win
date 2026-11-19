@@ -1,5 +1,3 @@
-//! The policy with a fake clock: only `Instant`s built from one start.
-
 use super::*;
 use crate::connect::ServerVersion;
 
@@ -85,7 +83,6 @@ fn a_failure_that_cannot_pass_gives_up_at_once_and_is_not_the_limit() {
 
 #[test]
 fn a_session_that_connects_and_drops_at_once_still_runs_out_of_retries() {
-    // The upstream weakness: reset on connect makes this loop for ever.
     let policy = Policy::STANDARD;
     let start = Instant::now();
     let mut backoff = Backoff::default();

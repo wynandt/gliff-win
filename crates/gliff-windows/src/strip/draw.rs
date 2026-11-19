@@ -274,8 +274,6 @@ pub fn dot(centre: (i32, i32), d: i32, state: DotState, phase: u32, pal: &Palett
                 fill: None,
                 stroke: Some((pal.warn, thin)),
             },
-            // The left half, from nine o'clock round the top is 90 to 270
-            // degrees: from six o'clock clockwise through nine to twelve.
             Op::Pie {
                 rect,
                 start: 90,
@@ -399,8 +397,6 @@ fn address_bar(p: &Paint<'_>, bar: &Bar, paint: BarPaint<'_>) -> Vec<Op> {
             radius,
             fill: outline,
         },
-        // The edit field runs under the go button, whose square left edge
-        // covers the rounded end.
         Op::Rect {
             rect: Rect {
                 left: whole.left + 1,
@@ -433,7 +429,6 @@ fn address_bar(p: &Paint<'_>, bar: &Bar, paint: BarPaint<'_>) -> Vec<Op> {
         radius: radius - 1,
         fill: go_fill,
     });
-    // The seam between the edit field and the go button.
     ops.push(Op::Rect {
         rect: Rect {
             right: bar.go.left + 1,
@@ -517,7 +512,6 @@ fn glyph_in(rect: Rect, glyph: Glyph, m: &Metrics, pal: &Palette) -> Vec<Op> {
             }
         }
         Glyph::Fullscreen => {
-            // Four corners of a square, each an L.
             let tick = (arm * 2 / 3).max(2);
             for (sx, sy) in [(-1, -1), (1, -1), (-1, 1), (1, 1)] {
                 let corner = (cx + sx * arm, cy + sy * arm);

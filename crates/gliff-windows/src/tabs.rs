@@ -122,10 +122,7 @@ pub enum Cause {
 /// How a session ended, as the session reports it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum End {
-    /// The session was closed in order (an orderly `Bye`). The shipped session
-    /// reports it only for the client's own `Bye`, which has already unbound
-    /// the tab, so it is dropped; if a server `Bye` is ever mapped here it is
-    /// retried like a link that dropped.
+    /// The session was closed in order (an orderly `Bye`).
     Closed,
     /// The link failed or the server refused; the text is for the user.
     Error(String),
@@ -570,9 +567,6 @@ impl Tabs {
         let mut effects = Vec::new();
         self.retire(index, &mut effects);
         if self.shown == Some(id) {
-            // A shown tab that had no session (a session was handed on by
-            // `retire`): the neighbour rule still picks the nearest running
-            // tab.
             match self.neighbour(index) {
                 Some(next) => self.show(None, next, &mut effects),
                 None => {
@@ -644,7 +638,6 @@ impl Tabs {
         match cause {
             Cause::User => tab.record_pending = true,
             Cause::Restore => tab.record_pending = false,
-            // The retry is the same wish as the attempt it replaces.
             Cause::Retry => {}
         }
         tab.status = match (

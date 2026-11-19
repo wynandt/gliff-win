@@ -1,0 +1,115 @@
+#!/usr/bin/env python3
+"""Fails when a tracked file names an upstream Gliff revision other than the
+one pinned in the workspace Cargo.toml.
+
+The pin is the `rev` of every `git = "https://github.com/omacom/gliff"`
+dependency in Cargo.toml; they must all agree. Any word of 7 to 40 lower-case
+hex digits with at least one letter and one digit is read as a revision. It
+passes when it is a prefix of the pin, when it starts with `0000` (a padded
+hex constant), or when scripts/lint-upstream-cite.allow lists it. Cite an
+upstream symbol by name, not by line number: line numbers move between
+releases (docs/development.md, "Comments").
+
+Skipped: Cargo.lock, the workflows and scripts/lint-workflows (their action
+pins are checked by lint-workflows), and the captured ssh text under tests.
+
+Usage: scripts/lint-upstream-cite             scan the files git knows
+       scripts/lint-upstream-cite --self-test
+"""
+
+import os
+import re
+import subprocess
+import sys
+
+REPO = "https://github.com/omacom/gliff"
+DEP = re.compile(r'git\s*=\s*"' + re.escape(REPO) + r'"[^}\n]*\brev\s*=\s*"([0-9a-f]{40})"')
+WORD = re.compile(r"(?<![0-9A-Za-z_])[0-9a-f]{7,40}(?![0-9A-Za-z_])")
+SKIP = re.compile(r"^(Cargo\.lock|\.github/workflows/.*|scripts/lint-workflows|crates/[^/]+/tests/ssh_corpus/.*)$")
+
+
+def pin_of(cargo_toml):
+    """The one pinned revision, or None when the git dependencies disagree or none exist."""
+    revs = set(DEP.findall(cargo_toml))
+    return revs.pop() if len(revs) == 1 else None
+
+
+def allowed_words(text):
+    words = set()
+    for line in text.splitlines():
+        line = line.strip()
+        if line and not line.startswith("#"):
+            words.add(line.split()[0])
+    return words
+
+
+def violations(text, pin, allow):
+    """(line number, word) for each revision in text that is not the pin."""
+    bad = []
+    for number, line in enumerate(text.splitlines(), 1):
+        for word in WORD.findall(line):
+            if not re.search(r"[a-f]", word) or not re.search(r"[0-9]", word):
+                continue
+            if pin.startswith(word) or word.startswith("0000") or word in allow:
+                continue
+            bad.append((number, word))
+    return bad
+
+
+def tracked_text_files():
+    out = subprocess.run(["git", "grep", "-I", "-l", "-e", "", "--", "."], capture_output=True, text=True, check=True).stdout
+    return [p for p in out.splitlines() if not SKIP.match(p) and os.path.exists(p)]
+
+
+def scan():
+    with open("Cargo.toml", encoding="utf-8") as f:
+        pin = pin_of(f.read())
+    if pin is None:
+        print("lint-upstream-cite: Cargo.toml must pin every omacom/gliff dependency to one rev")
+        return 1
+    with open("scripts/lint-upstream-cite.allow", encoding="utf-8") as f:
+        allow = allowed_words(f.read())
+    status = 0
+    for path in tracked_text_files():
+        if path in ("scripts/lint-upstream-cite", "scripts/lint-upstream-cite.allow"):
+            continue
+        with open(path, encoding="utf-8", errors="replace") as f:
+            for number, word in violations(f.read(), pin, allow):
+                print(f"{path}:{number}: {word} is not the pinned upstream revision {pin[:7]}")
+                status = 1
+    return status
+
+
+def self_test():
+    pin = "58c742452ded3f10a2ce61f60eb4845f18205e29"
+    toml = f'a = {{ git = "{REPO}", rev = "{pin}" }}\nb = {{ git = "{REPO}", rev = "{pin}" }}\n'
+    status = 0
+    if pin_of(toml) != pin:
+        print("self-test: pin not read"); status = 1
+    other = "1" * 39 + "a"
+    if pin_of(toml + f'c = {{ git = "{REPO}", rev = "{other}" }}\n') is not None:
+        print("self-test: two pins accepted"); status = 1
+    bad = ["models upstream " + "0896" + "62fd", "gliff at " + "32bb" + "062", "rev " + other]
+    good = ["upstream " + pin[:7], "upstream " + pin, "KLID 0000040c", "an ed25519 key", "word deadbeef", "1234567", "sha 1839f39"]
+    for case in bad:
+        if not violations(case, pin, {"1839f39", "ed25519"}):
+            print(f"self-test: missed {case!r}"); status = 1
+    for case in good:
+        if violations(case, pin, {"1839f39", "ed25519"}):
+            print(f"self-test: flagged {case!r}"); status = 1
+    print("lint-upstream-cite self-test: " + ("ok" if status == 0 else "FAILED"))
+    return status
+
+
+def main():
+    if sys.argv[1:] == ["--self-test"]:
+        return self_test()
+    if sys.argv[1:]:
+        print(__doc__.split("Usage:")[1], file=sys.stderr)
+        return 2
+    os.chdir(subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True, check=True).stdout.strip())
+    return scan()
+
+
+if __name__ == "__main__":
+    sys.exit(main())

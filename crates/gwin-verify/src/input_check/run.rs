@@ -105,9 +105,6 @@ pub fn run_cases(h: &mut impl Harness, cases: &[Case]) -> Vec<CaseResult> {
 fn run_case(h: &mut impl Harness, case: &Case) -> (CaseResult, bool) {
     let (result, reached) = try_case(h, case);
     if case.risky {
-        // Best effort; what it fixes shows in the next case's own checks.
-        // It runs on every path, since a failed case may have left a window
-        // open too.
         let _ = h.act(&Act::Dismiss);
     }
     (result, reached)

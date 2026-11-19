@@ -754,8 +754,6 @@ impl Settings {
             keymap,
             release_chord: self.release_chord.clone(),
             stand_in: match self.super_l {
-                // The chord is also the fallback when the registry route
-                // cannot be used.
                 SuperL::Registry | SuperL::Chord => Some(self.super_l_chord.clone()),
                 SuperL::Off => None,
             },

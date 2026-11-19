@@ -48,12 +48,10 @@ fn watch() -> ChordWatch {
     ChordWatch::new(Chord::ctrl_alt_home(), SwitchChords::NONE)
 }
 
-/// The watch with the default switch chords too.
 fn switching() -> ChordWatch {
     ChordWatch::new(Chord::ctrl_alt_home(), SwitchChords::standard())
 }
 
-/// True when `key` completed the release chord.
 fn released(watch: &mut ChordWatch, key: &RawKey) -> bool {
     watch.push(key) == Some(Decision::Release)
 }
@@ -112,7 +110,6 @@ fn ctrl_alt_home_completes_on_the_home_down_and_an_auto_repeat_does_not_again() 
 #[test]
 fn altgr_is_not_ctrl_and_alt() {
     let mut w = watch();
-    // Windows sends a fake left Ctrl, then the right Alt, within a few ms.
     w.push(&ctrl(Press::Down, 1000));
     w.push(&right_alt(Press::Down, 1002));
     assert!(
@@ -131,9 +128,6 @@ fn a_real_ctrl_with_a_right_alt_pressed_later_completes() {
 
 #[test]
 fn only_a_ctrl_and_a_right_alt_with_their_own_codes_make_the_altgr_pair() {
-    // A key with Ctrl's virtual key but another scan code, or Ctrl's scan
-    // code under another virtual key, is not the fake Ctrl of AltGr: the
-    // real Ctrl held before it stays in the chord.
     for (vk, scan) in [(0xa2, 0x1e), (0x11, 0x1d)] {
         let mut w = watch();
         w.push(&ctrl(Press::Down, 1000));
@@ -144,7 +138,6 @@ fn only_a_ctrl_and_a_right_alt_with_their_own_codes_make_the_altgr_pair() {
             "vk {vk:#x} scan {scan:#x}"
         );
     }
-    // A key that is not the right Alt, right after the Ctrl, is no AltGr.
     for (vk, prefix) in [(0xa4, Prefix::None), (0xa4, Prefix::E0)] {
         let mut w = watch();
         w.push(&ctrl(Press::Down, 1000));
@@ -196,13 +189,11 @@ fn page_up(press: Press, t: u32) -> RawKey {
     key(0x21, 0x49, Prefix::E0, press, t)
 }
 
-/// A main-row digit: virtual key 0x30 + n, scan code 1 + n.
 fn digit(n: u16, press: Press, t: u32) -> RawKey {
     let scan = if n == 0 { 11 } else { 1 + n };
     key(0x30 + n, scan, Prefix::None, press, t)
 }
 
-/// A keypad digit: virtual key 0x60 + n.
 fn keypad_digit(n: u16, press: Press, t: u32) -> RawKey {
     key(0x60 + n, 0x4f, Prefix::None, press, t)
 }
@@ -290,9 +281,6 @@ fn the_auto_repeat_of_a_switch_trigger_does_not_switch_again() {
 
 #[test]
 fn the_release_chord_is_tested_before_a_switch_chord() {
-    // A release chord that shares its modifiers with a switch chord and is
-    // the same key would be refused by settings; here the same trigger is
-    // forced to show the order.
     let both = SwitchChords {
         next: Some(Chord::ctrl_alt_home()),
         ..SwitchChords::NONE
@@ -362,7 +350,6 @@ fn changing_the_chords_keeps_the_keys_that_are_down() {
 
 #[test]
 fn altgr_and_a_digit_does_not_switch_as_a_pushed_sequence() {
-    // Windows sends a fake left Ctrl, then the right Alt, within a few ms.
     let mut w = switching();
     w.push(&ctrl(Press::Down, 1000));
     w.push(&right_alt(Press::Down, 1002));
@@ -376,8 +363,6 @@ fn altgr_and_a_digit_does_not_switch_as_a_pushed_sequence() {
 
 #[test]
 fn altgr_and_a_digit_does_not_switch_as_a_seed() {
-    // A grab that starts while AltGr is held: Windows holds left Ctrl and
-    // right Alt and there is no timing to tell the Ctrl is fake.
     let mut w = switching();
     w.seed([0xa2, 0xa5]);
     assert_eq!(w.push(&digit(4, Press::Down, 0)), None);
@@ -566,7 +551,6 @@ mod taking {
     fn a_grab_that_ends_with_a_trigger_held_does_not_take_its_next_press() {
         let mut taker = Taker::new();
         taker.fate(HookMode::Grab, true, NEXT, PAGE_DOWN, Press::Down);
-        // The grab ended; the Up goes to Windows.
         assert_eq!(
             taker.fate(HookMode::Off, true, None, PAGE_DOWN, Press::Up),
             Fate::Normal
@@ -581,9 +565,6 @@ mod taking {
 #[test]
 fn reinstall_seeds_chord_watch() {
     use crate::grab_state::HookMode;
-    // Ctrl and Alt went down while the hook was not looking (the gap of a
-    // reinstall). The new watch must know, or Home does not release the
-    // grab, and the key a user presses to get out does nothing.
     let held = [0xa2u16, 0xa4];
     let mut fresh = ChordWatch::new(Chord::ctrl_alt_home(), SwitchChords::NONE);
     assert!(
@@ -615,12 +596,10 @@ fn a_chord_no_session_answers_is_taken_in_by_the_ui_tick() {
     let mut gate = HookGate::new();
     gate.request(HookMode::Grab);
     gate.chord_fired();
-    // The session answers within a tick or two: the tick stays out of it.
     for _ in 1..OVERDUE_TICKS {
         assert!(!gate.overdue(), "the answer may still come");
     }
     assert_eq!(gate.request(HookMode::Grab), HookMode::Off, "still refused");
-    // No answer (an ended session, a tab that is not shown): the UI acts.
     assert!(gate.overdue(), "overdue");
     gate.acknowledge();
     assert!(!gate.overdue(), "acknowledged");
@@ -629,7 +608,6 @@ fn a_chord_no_session_answers_is_taken_in_by_the_ui_tick() {
         HookMode::Grab,
         "a click re-grabs"
     );
-    // An answered chord never turns overdue.
     gate.chord_fired();
     gate.acknowledge();
     assert!(!(0..OVERDUE_TICKS).any(|_| gate.overdue()));

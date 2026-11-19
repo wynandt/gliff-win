@@ -3,8 +3,8 @@
 //!
 //! This owns OpenH264 itself rather than `gliff_sw::Decoder`, whose only
 //! output is BGRA, because the display path converts on the GPU
-//! (see `docs/architecture.md`). It mirrors `gliff_sw::Decoder` (upstream
-//! 089662fd `gliff-sw/src/lib.rs:390-477`) in everything else: the decoder
+//! (see `docs/architecture.md`). It mirrors `gliff_sw::Decoder` in everything
+//! else: the decoder
 //! config, the held-picture counter, the flush rule, the even crop and the
 //! Dual420 pairing rule (both decoders are fed every unit; one picture
 //! without the other is an error).
@@ -134,8 +134,6 @@ impl CpuDecoder {
             }
         };
         let Some(frame) = frame else {
-            // Nothing came out, so nothing is drainable: correct any drift
-            // the counter picked up from failed decodes (as upstream).
             self.held = 0;
             return Ok(None);
         };
@@ -148,7 +146,6 @@ impl CpuDecoder {
     /// in-band.
     pub fn reset(&mut self, chroma: ChromaMode) -> Result<(), DecodeError> {
         self.inner = new_openh264()?;
-        // `session::Core` refuses any other chroma before a reset.
         self.aux = match chroma {
             ChromaMode::Dual420 => Some(new_openh264()?),
             _ => None,

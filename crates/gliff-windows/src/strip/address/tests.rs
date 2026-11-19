@@ -31,7 +31,6 @@ fn the_plus_opens_the_bar_and_asks_for_the_keyboard() {
     let mut bar = Address::new();
     assert_eq!(bar.input(Event::Open, 2), vec![Act::Focus]);
     assert!(bar.is_open());
-    // Not typing until the field says it has the keyboard.
     assert!(!bar.typing());
     bar.input(Event::Focus(true), 2);
     assert!(bar.typing());
@@ -158,7 +157,6 @@ fn opening_the_list_does_not_count_as_losing_the_keyboard() {
     bar.input(Event::List(true), 2);
     bar.input(Event::Focus(false), 2);
     assert!(bar.is_open());
-    // The list closing without a pick hands the keyboard back.
     assert_eq!(bar.input(Event::List(false), 2), vec![Act::Focus]);
     bar.input(Event::Focus(true), 2);
     assert!(bar.typing());
@@ -188,7 +186,6 @@ fn a_window_with_no_tab_opens_the_bar_by_itself() {
     let mut bar = Address::new();
     assert_eq!(bar.tabs_changed(0), vec![Act::Focus]);
     assert!(bar.is_open());
-    // Said again, nothing more to do.
     assert_eq!(bar.tabs_changed(0), vec![]);
 }
 
@@ -238,8 +235,6 @@ fn a_connected_tab_leaves_a_folded_bar_alone() {
 
 #[test]
 fn text_set_by_the_program_is_not_typing() {
-    // A picked host is put in the field by the program; the field reports
-    // the same text back.
     let mut bar = open_bar(1);
     bar.input(Event::Pick("me@host".into()), 1);
     bar.input(Event::Text("me@host".into()), 1);

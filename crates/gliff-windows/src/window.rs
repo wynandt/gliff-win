@@ -478,8 +478,6 @@ impl App {
                 matches!(event, UiEvent::Connected(_)) && self.shown == Some(session);
             self.on_event(session, event);
             if connected_here {
-                // The tab on show is up: the bar gives the keyboard back to
-                // the picture, so the grab goes on without an Enter or Esc.
                 self.address_event(AddressEvent::Connected);
             }
         }
@@ -583,8 +581,6 @@ impl App {
                     self.input.grab_released();
                 }
             }
-            // The runner gives an end to the model, which answers with the
-            // tab's new state.
             UiEvent::Ended(_) => {}
         }
         if shown && config_changed && self.sync_overlay() {
@@ -631,8 +627,6 @@ impl App {
         self.sync_overlay();
         let drawn = self.present_due();
         if !drawn && !has_last {
-            // Nothing to show of this session yet: black, not the last
-            // session's picture.
             self.redraw();
         }
     }
@@ -714,7 +708,6 @@ impl App {
             if IsIconic(self.hwnd).as_bool() {
                 let _ = ShowWindow(self.hwnd, SW_RESTORE);
             }
-            // Windows may refuse; the other launch asked for the right.
             let _ = SetForegroundWindow(self.hwnd);
         }
     }
@@ -737,8 +730,6 @@ impl App {
             return false;
         };
         view.waker.take_frame();
-        // No presenter (a recreate failed): leave the picture in the slot
-        // for the heartbeat's retry rather than dropping it unrecorded.
         let Some(presenter) = self.presenter.as_mut() else {
             return false;
         };
@@ -764,7 +755,6 @@ impl App {
         let now = Instant::now();
         let ms = elapsed_ms(self.started, now);
         self.log.stage(self.stages.current(now), now);
-        // A picture shown again has no decode time to measure.
         if !repeat {
             self.log
                 .record(picture.frame.decoded_at(), now, outcome, slot.dropped());
@@ -808,8 +798,6 @@ impl App {
                 Filter::Point,
             ),
         };
-        // A redraw is a Present too: it uses up the waitable's slot, so the
-        // next picture waits for the waitable instead of queueing behind it.
         self.ready = false;
         match presenter.redraw(viewport, filter) {
             Ok(PresentOutcome::DeviceLost) => self.recreate(),
@@ -861,7 +849,6 @@ impl App {
     fn on_size(&mut self) {
         let full = client_size(self.hwnd);
         if full.0 == 0 || full.1 == 0 {
-            // Minimised: keep everything as it was.
             return;
         }
         self.sync_strip();
@@ -999,8 +986,7 @@ impl App {
     }
 
     fn toggle_fullscreen(&mut self) {
-        // SetWindowPos inside sends WM_SIZE; it is deferred until this
-        // arm returns.
+        // Platform: SetWindowPos sends WM_SIZE before it returns.
         match self.fullscreen.toggle(self.hwnd) {
             Ok(screen) => {
                 crate::logging::line(&format!("fullscreen: {screen:?}"));
@@ -1019,13 +1005,11 @@ impl App {
     /// Fits the strip to the window, the scale and the tabs, and draws it.
     fn sync_strip(&mut self) {
         let fullscreen = self.fullscreen.screen() == Screen::Fullscreen;
-        // A window with no tab opens the bar, and keeps it.
         let acts = self.strip.address.tabs_changed(self.tabs.len());
         self.run_address_acts(acts);
         self.strip.sync(&self.tabs, self.dpi, fullscreen);
         self.strip.hold_bar(self.strip.address.is_open());
         self.sync_panel();
-        // While the field has the keyboard the grab lets go of it.
         let typing = self.strip.address.typing();
         if self.typing_sent.update(typing) {
             self.input.grab_mut().typing(typing);
@@ -1041,7 +1025,6 @@ impl App {
             let failure = tab.failure()?;
             Some((tab.id(), failure_panel::content(failure, tab.target())))
         });
-        // Close hides the panel until the tab is shown again or changes.
         if self.panel_dismissed.is_some() && self.panel_dismissed != failed.as_ref().map(|f| f.0) {
             self.panel_dismissed = None;
         }
@@ -1142,7 +1125,6 @@ impl App {
     pub(crate) fn strip_show(&mut self, id: crate::tabs::TabId) {
         let effects = self.tabs.click(id);
         self.apply(effects);
-        // A click on a tab hands the keyboard back to the picture.
         self.strip.defer(Later::FocusMain);
     }
 
@@ -1261,7 +1243,6 @@ impl App {
                 _ => return,
             }
         }
-        // The file is written whole, so it gets the tabs as they are now.
         *self.files.config.tabs_mut() = self.tabs.tab_set();
         if let Err(e) = self.files.config.save() {
             crate::logging::line(&format!("config: connection choice not saved: {e}"));
@@ -1335,11 +1316,9 @@ impl App {
         crate::logging::line("close: sending Bye");
         self.closing = true;
         self.begin_closing();
-        // The tabs stay as they were: what was open is open at the next start.
         self.set.close_all();
         self.shown = None;
         self.set_timer(TIMER_CLOSE, CLOSE_WAIT);
-        // The sessions may already be over.
         self.drain_events();
     }
 
@@ -1384,7 +1363,6 @@ impl App {
     /// write the stats file.
     fn on_heartbeat(&mut self) {
         if self.presenter.is_none() && !self.closing {
-            // The new swap chain's waitable restarts presenting.
             self.recreate();
         }
         let now = Instant::now();
@@ -1573,8 +1551,6 @@ impl App {
     /// One message. `None` sends it on to `DefWindowProcW` (with no
     /// borrow held).
     fn on_message(&mut self, msg: u32, wparam: WPARAM, lparam: LPARAM) -> Option<LRESULT> {
-        // Input first: with the grab on, a key message that reaches the
-        // window (F11 included) belongs to the remote machine.
         let view = View {
             geometry: self
                 .shown
@@ -1584,10 +1560,6 @@ impl App {
             top: i32::try_from(self.top()).unwrap_or(0),
             dpi: self.dpi,
         };
-        // Full screen: the pointer at the top edge brings the strip out. The
-        // strip's own timer reads the pointer when it leaves (no
-        // `WM_MOUSELEAVE` here: the strip is a child, and moving onto it
-        // would look like leaving).
         if msg == WM_MOUSEMOVE {
             self.strip
                 .pointer(Pointer::At(i32::from((lparam.0 >> 16) as u16 as i16)));
@@ -1596,12 +1568,10 @@ impl App {
             return Some(result);
         }
         match msg {
-            // A hidden session's picture waits in its slot until its tab is shown.
             WM_APP_FRAME => {
                 if self.shown.is_some_and(|id| id.get() as usize == wparam.0) {
-                    // Inside a modal loop the main loop never sees the
-                    // waitable, so look here: each picture goes out as it
-                    // arrives, not on the next timer tick.
+                    // Platform: Windows runs its own message loop during a drag or a menu, so the
+                    // main loop does not see the waitable.
                     if self.modal.is_some() {
                         self.poll_waitable();
                     }
@@ -1673,7 +1643,6 @@ impl App {
             }
             WM_ERASEBKGND => Some(LRESULT(1)),
             WM_KEYDOWN if wparam.0 == usize::from(VK_F11.0) => {
-                // Bit 30: the key was already down (auto-repeat).
                 if lparam.0 & (1 << 30) == 0 {
                     self.toggle_fullscreen();
                 }
@@ -1783,7 +1752,6 @@ fn replay() {
             true
         });
         if !handled {
-            // Still borrowed further up the stack: that frame replays.
             DEFERRED.with(|d| d.borrow_mut().insert(0, deferred));
             return;
         }
@@ -1806,9 +1774,6 @@ pub fn forward_menu_loop(child: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) 
 
 /// The window procedure.
 pub extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
-    // A click on the picture while the address bar's edit field has the
-    // keyboard takes it back. The focus moves here, with the state free, so
-    // the edit field's own focus messages reach it.
     if matches!(
         msg,
         WM_LBUTTONDOWN | WM_RBUTTONDOWN | WM_MBUTTONDOWN | WM_XBUTTONDOWN
@@ -1837,9 +1802,7 @@ pub extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPA
             let deferred = match msg {
                 WM_SIZE => Some(Deferred::Size),
                 WM_DESTROY => Some(Deferred::Destroy),
-                // Windows may end the process as soon as this returns, so
-                // the setting goes back now (it needs no window state);
-                // the rest of the shutdown follows when the state is free.
+                // Platform: Windows may end the process as soon as WM_ENDSESSION returns.
                 WM_ENDSESSION if wparam.0 != 0 => {
                     crate::lockreg::restore_now();
                     Some(Deferred::EndSession)

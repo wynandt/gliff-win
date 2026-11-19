@@ -1,5 +1,3 @@
-//! The per-stage arithmetic the gate relies on.
-
 use std::time::Duration;
 use std::time::Instant;
 
@@ -12,8 +10,6 @@ fn at(t0: Instant, ms: u64) -> Instant {
     t0 + Duration::from_millis(ms)
 }
 
-/// Shows a picture every `every` ms in [from, to), each decoded 4 ms
-/// earlier, with the slot's drop counter at `dropped`.
 fn run(log: &mut PresentLog, t0: Instant, from: u64, to: u64, every: u64, dropped: u64) {
     let mut t = from;
     while t < to {
@@ -32,7 +28,6 @@ fn a_stage_measures_after_its_settle() {
     let t0 = Instant::now();
     let mut log = PresentLog::new(t0);
     log.stage(Stage::Windowed, t0);
-    // 50 fps for 25 s; the first 5 s are settling.
     run(&mut log, t0, 0, 25_000, 20, 0);
     let s = log.summary(at(t0, 25_000));
     let w = &s.stages[1];
@@ -52,7 +47,6 @@ fn slot_drops_count_as_decoded_not_presented() {
     let mut log = PresentLog::new(t0);
     log.stage(Stage::Fullscreen, t0);
     run(&mut log, t0, 0, 5_000, 20, 7);
-    // In the window the slot replaces 100 pictures.
     let mut t: u64 = 5_000;
     let mut dropped = 7;
     while t < 15_000 {
@@ -165,15 +159,11 @@ fn the_summary_round_trips_through_json() {
 
 #[test]
 fn closing_freezes_the_fullscreen_window_at_the_close() {
-    // Regression: the exit stats file is written after
-    // Bye and the ssh wait, so an open fullscreen stage used to run on to
-    // that moment and fail `stall_fullscreen` with a healthy stream.
     let t0 = Instant::now();
     let mut log = PresentLog::new(t0);
     log.stage(Stage::Fullscreen, t0);
     run(&mut log, t0, 0, 25_000, 20, 0);
     log.stage(Stage::Closing, at(t0, 25_000));
-    // Teardown: no pictures for 4 s, then the final file.
     let s = log.summary(at(t0, 29_000));
     let fs = &s.stages[1];
     assert_eq!(fs.stage, Stage::Fullscreen, "{s:?}");

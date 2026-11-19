@@ -42,7 +42,6 @@ fn embed_icon() {
     let ico_out = out.join("gliff.ico");
     fs::copy(&ico, &ico_out).unwrap_or_else(|e| panic!("copy {}: {e}", ico.display()));
     let rc = out.join("gliff.rc");
-    // Resource ID 1 is the ID `app_icon` loads.
     fs::write(&rc, "1 ICON \"gliff.ico\"\r\n")
         .unwrap_or_else(|e| panic!("write {}: {e}", rc.display()));
 

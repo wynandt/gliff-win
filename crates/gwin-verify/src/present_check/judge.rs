@@ -93,8 +93,6 @@ pub struct Observed {
 pub fn judge(observed: &Observed, expect: &Expect) -> Line {
     let mut reasons: Vec<String> = Vec::new();
     let mut warnings: Vec<String> = Vec::new();
-    // The final file has the whole run; the fullscreen heartbeat stands in
-    // if the client never wrote it.
     let stats = observed.last.as_ref().unwrap_or(&observed.fullscreen);
     let fs = &observed.fullscreen;
 
@@ -292,8 +290,6 @@ fn judge_stage(
     if s.presented_fps < expect.present_of_decoded * s.decoded_fps {
         reasons.push(format!("present_fps_{name}"));
     }
-    // Compared at the 0.01 ms the line prints: 16.7f32 widens to
-    // 16.700000762, which is the budget, not over it.
     if hundredths(f64::from(s.latency_p95_ms)) > hundredths(expect.max_latency_p95_ms) {
         reasons.push(format!("latency_{name}"));
     }

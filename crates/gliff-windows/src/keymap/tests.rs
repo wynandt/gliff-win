@@ -1,6 +1,3 @@
-//! The table against the keycodemapdb oracle, the Windows quirks, and the
-//! chord and held-key logic.
-
 use super::Chord;
 use super::ChordError;
 use super::Evdev;
@@ -16,7 +13,6 @@ use super::evdev;
 
 const FIXTURE: &str = include_str!("../../tests/fixtures/set1-evdev.tsv");
 
-/// (scan, prefix, evdev, name) for every fixture row.
 fn oracle() -> Vec<(u16, Prefix, u16, String)> {
     FIXTURE
         .lines()
@@ -42,7 +38,6 @@ fn oracle() -> Vec<(u16, Prefix, u16, String)> {
         .collect()
 }
 
-/// A virtual key that never disambiguates anything: `VK_OEM_CLEAR`.
 const VK_ANY: u16 = 0xfe;
 
 #[test]
@@ -50,9 +45,6 @@ fn table_matches_the_oracle_except_the_documented_overrides() {
     let mut checked = 0;
     for (scan, prefix, code, name) in oracle() {
         let expected = match (prefix, scan) {
-            // E0 2A (a fake left Shift) is dropped on purpose. E0 36 is where
-            // a real right Shift arrives, so it is `KEY_RIGHTSHIFT`, not the
-            // oracle's `KEY_BASSBOOST`.
             (Prefix::E0, 0x2a) => None,
             (Prefix::E0, 0x36) => Some(Evdev::RIGHT_SHIFT),
             _ => Some(Evdev(code)),
@@ -67,9 +59,6 @@ fn table_matches_the_oracle_except_the_documented_overrides() {
     assert_eq!(checked, 235, "every oracle row was compared");
 }
 
-/// Measured with a hook probe on a built-in keyboard: a real right Shift is
-/// vk 0xA1, scan 0x36, with the extended flag; a real left Shift is vk 0xA0,
-/// scan 0x2A without it.
 #[test]
 fn a_real_right_shift_is_extended_and_is_forwarded() {
     assert_eq!(
@@ -90,10 +79,6 @@ fn a_real_right_shift_is_extended_and_is_forwarded() {
     assert_eq!(Evdev::RIGHT_SHIFT, Evdev(54), "KEY_RIGHTSHIFT");
 }
 
-/// Windows tags the fake shifts it makes around a keypad key with the
-/// simulated bit, 0x200, in the scan code the hook reports: 0x22A for the
-/// left Shift and 0x236 for the right one (documented, and what AutoHotkey
-/// tests for; not measured on the probe keyboard, where Num Lock was off).
 #[test]
 fn shifts_tagged_as_simulated_are_dropped_with_or_without_the_extended_flag() {
     for prefix in [Prefix::None, Prefix::E0] {
@@ -161,8 +146,6 @@ fn windows_quirks() {
 
 #[test]
 fn copilot_key_is_f23() {
-    // The Copilot key is LWin + LShift + F23. The oracle's F23 is scan 0x6d;
-    // a keyboard that reports another scan code falls back to the VK.
     assert_eq!(
         evdev(0x86, 0x6d, Prefix::None),
         Some(Evdev(193)),
@@ -192,8 +175,6 @@ fn copilot_key_is_f23() {
 
 #[test]
 fn gate_chord_keys_are_all_mapped() {
-    // The scan codes of the keys in the gate's 20 chords: letters, digits,
-    // modifiers, Enter, arrows, F-keys, Home/End, Tab, Escape, Space.
     for scan in [
         0x1e, 0x30, 0x2e, 0x12, 0x1c, 0x39, 0x0f, 0x01, 0x02, 0x0b, 0x3b, 0x58, 0x1d, 0x2a, 0x38,
         0x36,

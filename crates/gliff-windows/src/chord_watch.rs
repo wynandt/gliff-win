@@ -94,7 +94,6 @@ struct Jump {
 
 fn jump_chords(modifiers: ModifierSet) -> Vec<Jump> {
     if modifiers.is_empty() {
-        // A bare digit would take every digit key.
         return Vec::new();
     }
     (1..=9u8)
@@ -204,7 +203,8 @@ impl ChordWatch {
                 .ctrl_down_ms
                 .is_some_and(|t| key.time_ms.wrapping_sub(t) <= DEADLINE_MS)
         {
-            // AltGr: the Ctrl that came just before is Windows' fake one.
+            // Platform: Windows sends a fake left Ctrl just before AltGr.
+            // See docs/windows-quirks.md#keyboard.
             self.keys.apply(KeyEvent {
                 key: Evdev::LEFT_CTRL,
                 press: Press::Up,
@@ -309,8 +309,6 @@ impl Taker {
         press: Press,
     ) -> Fate {
         if mode != HookMode::Grab {
-            // The grab ended with a trigger held: its Up goes to Windows, and
-            // the next Down must not be taken.
             self.taken = None;
         }
         if self.taken == Some(vk) {

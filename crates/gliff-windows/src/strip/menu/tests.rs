@@ -27,7 +27,6 @@ fn reconnecting() -> Status {
     }
 }
 
-/// A machine with nothing chosen and nothing locked.
 fn plain() -> Connection {
     Connection {
         screen: Screen::Mirror,
@@ -67,19 +66,14 @@ fn commands(status: &Status) -> Vec<Command> {
         .collect()
 }
 
-/// The rows of the Connection settings submenu, as text: a heading or a
-/// reason as `# text`, a row as `(o) text` or `[x] text`, with `~` when greyed.
 fn connection_rows(connection: &Connection) -> Vec<String> {
     rows_for(&Status::Streaming, connection, None)
 }
 
-/// The same rows when this window cannot hand Win+L to any machine.
 fn rows_unusable(connection: &Connection, reason: &str) -> Vec<String> {
     rows_from(tab_menu(&Status::Streaming, connection, None, Some(reason)))
 }
 
-/// The same rows for a tab with this status whose session started with `live`.
-/// A row that is a command of its own shows as `=> text`.
 fn rows_for(status: &Status, connection: &Connection, live: Option<&Running>) -> Vec<String> {
     rows_from(tab_menu(status, connection, live, None))
 }
@@ -240,7 +234,6 @@ fn the_chevron_lists_every_tab_with_its_dot_chord_and_check() {
     assert_eq!(list.len(), 11);
     assert_eq!(list[0].label, "\u{25CF} u@h1\tCtrl+Alt+1");
     assert_eq!(list[8].label, "\u{25CF} u@h9\tCtrl+Alt+9");
-    // The chords stop at 9.
     assert_eq!(list[9].label, "\u{25CF} u@h10");
     assert_eq!(
         list.iter()
@@ -442,7 +435,6 @@ fn a_locked_row_is_greyed_and_gives_its_reason() {
             "# Applies the next time this tab connects",
         ]
     );
-    // Only the screen locked: the share row still works.
     let screen_only = Connection {
         share_lock: None,
         share_clipboard: true,
@@ -450,8 +442,6 @@ fn a_locked_row_is_greyed_and_gives_its_reason() {
     };
     let rows = connection_rows(&screen_only);
     assert!(rows.contains(&"[x] Share clipboard".to_owned()), "{rows:?}");
-    // A route this window cannot use: the row keeps its tick, so it can be
-    // turned off, and says why under it; a flag's reason still comes first.
     let unusable = "Not available: the registry refused it. Win+L locks Windows.";
     let chosen = Connection {
         send_win_l: true,
@@ -475,7 +465,6 @@ fn a_locked_row_is_greyed_and_gives_its_reason() {
     );
 }
 
-/// What the live session of `plain()` started with.
 fn started_like_plain() -> Running {
     plain().running()
 }
@@ -535,19 +524,16 @@ fn the_reconnect_row_does_what_the_reconnect_item_does() {
             label: "Reconnect now to apply",
         })
     );
-    // The same command the top-level Reconnect runs: a new session now.
     assert_eq!(commands(&Status::Streaming)[0], Command::Reconnect);
 }
 
 #[test]
 fn with_nothing_pending_the_static_line_stays() {
-    // The session started with what is saved.
     let rows = rows_for(&Status::Streaming, &plain(), Some(&started_like_plain()));
     assert_eq!(
         rows.last().map(String::as_str),
         Some("# Applies the next time this tab connects")
     );
-    // Changed and changed back.
     let live = own_screen().running();
     let rows = rows_for(&Status::Streaming, &own_screen(), Some(&live));
     assert_eq!(
@@ -558,8 +544,6 @@ fn with_nothing_pending_the_static_line_stays() {
 
 #[test]
 fn a_tab_with_no_live_session_keeps_the_static_line() {
-    // Stopped, waiting to retry, or given up: the next connect applies the
-    // choice anyway, so there is nothing to offer.
     for status in [Status::Stopped, reconnecting(), Status::GaveUp("x".into())] {
         let rows = rows_for(&status, &own_screen(), Some(&started_like_plain()));
         assert_eq!(

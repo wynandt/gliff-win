@@ -12,8 +12,6 @@ fn a_picture_survives_png() {
     }
 }
 
-/// A PNG that is only a signature and a header claiming `width` x `height`
-/// RGBA pixels, with no image data.
 fn header_only_png(width: u32, height: u32) -> Vec<u8> {
     let mut out = Vec::new();
     let mut encoder = png::Encoder::new(&mut out, width, height);
@@ -45,7 +43,6 @@ fn an_opaque_picture_is_an_rgb_png_and_a_translucent_one_rgba() {
 
 #[test]
 fn a_dib_survives_with_every_row_padding() {
-    // 32-bit rows need no padding; the 24-bit hand-made one below does.
     for width in 1..=7 {
         let picture = Picture::opaque(width, 5, 9);
         assert_eq!(Picture::from_dib(&picture.to_dib()).expect("read"), picture);
@@ -54,8 +51,6 @@ fn a_dib_survives_with_every_row_padding() {
 
 #[test]
 fn a_24_bit_dib_with_padded_rows_is_read() {
-    // 3x2, bottom-up, 9 bytes a row padded to 12: red, green, blue / white,
-    // black, grey.
     let mut dib = Vec::new();
     for value in [40u32, 3, 2] {
         dib.extend_from_slice(&value.to_le_bytes());

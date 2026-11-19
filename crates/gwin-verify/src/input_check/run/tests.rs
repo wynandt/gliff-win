@@ -11,20 +11,16 @@ use crate::input_check::cases::Expect;
 use crate::input_check::cases::Remote;
 use crate::input_check::remote_log::Entry;
 
-/// A harness whose remote log grows by scripted entries when an act runs.
 #[derive(Default)]
 struct Fake {
     log: Vec<Entry>,
-    /// What each `Pause` act appends, popped in order.
     on_pause: Vec<Vec<&'static str>>,
     starts: Vec<Vec<String>>,
     stops: usize,
     fail_start: bool,
     fail_act: bool,
-    /// Reads of the remote log after this many succeed no more.
     log_reads_allowed: Option<usize>,
     log_reads: usize,
-    /// The client is not the foreground window.
     away: bool,
     acts: Vec<Act>,
 }
@@ -183,8 +179,6 @@ fn a_risky_chord_that_never_reaches_the_remote_stops_the_other_risky_ones() {
         ..case(name, &[], want)
     };
     let mut h = Fake {
-        // The first chord logs and the second reaches nothing; the third is
-        // skipped (it takes no pause), so the plain case gets the last one.
         on_pause: vec![vec!["A"], vec![], vec![]],
         ..Fake::default()
     };
@@ -235,9 +229,6 @@ fn dismissals(h: &Fake) -> usize {
     h.acts.iter().filter(|a| matches!(a, Act::Dismiss)).count()
 }
 
-/// Two risky chords: the first goes wrong as `h` is set up, so the second must
-/// be skipped, and the first must have been followed by a dismissal. (The first
-/// may still pass its own expectations: the guard is about what Windows saw.)
 fn first_of_two_risky_cases_goes_wrong(mut h: Fake) {
     let results = run_cases(&mut h, &[risky("one", &["A"]), risky("two", &["B"])]);
     assert!(
@@ -258,7 +249,6 @@ fn a_risky_chord_whose_act_fails_trips_the_guard_and_is_dismissed() {
 #[test]
 fn a_risky_chord_whose_log_cannot_be_read_trips_the_guard_and_is_dismissed() {
     first_of_two_risky_cases_goes_wrong(Fake {
-        // The read before the keys works, the one after does not.
         log_reads_allowed: Some(1),
         on_pause: vec![vec!["A"]],
         ..Fake::default()

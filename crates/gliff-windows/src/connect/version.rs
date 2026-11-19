@@ -1,8 +1,5 @@
 //! The server version: what `gliff-server --version` prints, the lowest
 //! version this client accepts, and the one extra ssh call that asks.
-//!
-//! The call runs after a server-class failure or when the person presses
-//! "Check again" (design 11.4). Nothing runs it at start.
 
 use std::fmt;
 

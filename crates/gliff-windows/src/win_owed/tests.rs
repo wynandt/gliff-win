@@ -10,10 +10,6 @@ use crate::modifiers::to_release_where;
 const L: u16 = 0x4c;
 const F: u16 = 0x46;
 
-/// Issue #35, the second report: with the lock switched off, Win+L in a grab.
-/// The hook swallows Win's Down and Up (they go to the remote); Windows took
-/// Win as down ahead of the hook, and `GetAsyncKeyState` says no key is down.
-/// The grab-end release must still give Windows the Win key's Up.
 #[test]
 fn win_l_in_a_grab_leaves_windows_owed_the_win_up_at_the_grab_end() {
     let mut real = Physical::new();

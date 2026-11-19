@@ -122,6 +122,12 @@ Never change ssh policy or provision host trust for a test.
   time, in its own change. Speak the stock protocol unchanged. Do not add a
   protocol feature in this client until upstream has shipped it. Advertise
   only features this client implements (`session::FEATURES`).
+- Do not write comments, except the kinds listed in
+  [Comments](docs/development.md#comments): API contract docs, `// SAFETY:`,
+  `// Platform:` and `// Upstream:` constraints, lint markers and lint
+  reasons. If code needs explaining, rename it, extract it, give it a type, or
+  add a test. Do not copy a workaround because a comment explains it.
+  `scripts/lint-comments` and `scripts/lint-upstream-cite` enforce this.
 - Docs are written for a reader who has this repository and nothing else.
   Use "Windows machine", "remote machine", and "build machine". See
   [Docs rules](docs/development.md#docs-rules). Scan a pull request

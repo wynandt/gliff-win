@@ -1,9 +1,3 @@
-//! The client's session driver (`gliff_windows::session::driver`) end to
-//! end on the build machine: the real loop through `scripts/fake-ssh` to
-//! `gwin-fake-server`, with a counting [`Waker`] standing in for
-//! `PostMessageW` and the test thread standing in for the UI thread.
-
-// The loop runs through bash wrappers (`scripts/fake-ssh`): build machine only.
 #![cfg(unix)]
 
 use std::path::Path;
@@ -46,8 +40,6 @@ impl Waker for Counting {
     }
 }
 
-/// fake-ssh behind a one-line wrapper that sets `env` (shell assignments such
-/// as `GWIN_FAKE_SERVER=wedge`), so no test changes the process environment.
 fn ssh_for(dir: &Path, env: &str) -> PathBuf {
     let fake_ssh = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../scripts/fake-ssh");
     let wrapper = dir.join("ssh");
@@ -75,7 +67,6 @@ fn session(name: &str, fake: &str, server_path: &str) -> (SessionHandle, Arc<Cou
     session_with(name, &format!("GWIN_FAKE_SERVER={fake}"), server_path)
 }
 
-/// A session whose ssh is fake-ssh run with `env`.
 fn session_with(name: &str, env: &str, server_path: &str) -> (SessionHandle, Arc<Counting>) {
     let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!("driver-{name}"));
     let _ = std::fs::remove_dir_all(&dir);
@@ -102,8 +93,6 @@ fn session_with(name: &str, env: &str, server_path: &str) -> (SessionHandle, Arc
 
 const SERVER: &str = env!("CARGO_BIN_EXE_gwin-fake-server");
 
-/// Polls events like the UI thread would, taking pictures as they come,
-/// until `want` matches one or `within` passes.
 fn wait_for(
     handle: &SessionHandle,
     seen: &mut Vec<UiEvent>,
@@ -337,8 +326,6 @@ fn dropping_the_handle_says_bye() {
     );
     let before = waker.events.load(Ordering::Relaxed);
     drop(handle);
-    // The thread is detached now; its last act is the final wake, after
-    // ssh exited.
     let until = Instant::now() + Duration::from_secs(10);
     while waker.events.load(Ordering::Relaxed) < before + 2 && Instant::now() < until {
         std::thread::sleep(Duration::from_millis(20));
@@ -356,11 +343,8 @@ fn dropping_the_handle_says_bye() {
 
 #[test]
 fn the_end_reports_what_the_slot_replaced() {
-    // Regression: the exit stats read the slot's drop
-    // counter after the handle was gone and always wrote 0.
     let (handle, _) = session("drops", "", SERVER);
     let until = Instant::now() + Duration::from_secs(15);
-    // A UI that never takes: every picture after the first is replaced.
     while handle.stats().frames < 10 && Instant::now() < until {
         std::thread::sleep(Duration::from_millis(5));
     }
@@ -373,7 +357,6 @@ fn the_end_reports_what_the_slot_replaced() {
     );
 }
 
-/// Three button presses: input a working server answers with a picture.
 fn click_thrice(handle: &SessionHandle) {
     for _ in 0..3 {
         for press in [Press::Down, Press::Up] {
@@ -391,7 +374,6 @@ fn a_server_that_loses_its_output_is_resynced_when_input_goes_unanswered() {
     let (mut seen, mut pictures) = (Vec::new(), 0);
     pictures_for(&handle, &mut pictures, 5, Duration::from_secs(15));
     assert!(pictures >= 5, "pictures before the fault: {seen:?}");
-    // The fake loses its output 1 s after the Resize; wait for the silence.
     std::thread::sleep(Duration::from_millis(1500));
     while handle.slot().take().is_some() {}
     click_thrice(&handle);
@@ -448,8 +430,6 @@ fn a_server_that_keeps_answering_is_never_resynced() {
     assert_eq!(end.stats.resyncs, 0, "{:?}", end.stats);
 }
 
-/// A real ssh failure (a file of the corpus) played by fake-ssh, and what the
-/// session says about it.
 fn fails_with(name: &str, file: &str, exit: i32) -> (EndReason, SessionEnd) {
     let corpus = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../gliff-windows/tests/ssh_corpus/openssh-10.0p2-linux")
@@ -480,7 +460,6 @@ fn each_way_ssh_fails_ends_the_session_with_its_class_and_the_log_says_so() {
     let log_dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("driver-client-log");
     let _ = std::fs::remove_dir_all(&log_dir);
     let log = gliff_windows::logging::init(&log_dir).expect("client log");
-    // (corpus file, ssh exit, class, what the log must say)
     let table = [
         (
             "host_unknown",
@@ -554,7 +533,6 @@ fn a_server_that_exits_badly_after_the_stream_started_is_not_a_connect_failure()
     );
 }
 
-/// The version check through the real runner and fake-ssh to the fake server.
 fn check_through_fake_ssh(
     name: &str,
     env: &str,

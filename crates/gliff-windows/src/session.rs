@@ -79,8 +79,7 @@ pub fn client_caps(panel: (u32, u32), colour: Colour) -> ClientCaps {
     }
 }
 
-/// The first message. The keymap is empty (the server's default) until
-/// keyboard input decides how to send the Windows layout.
+/// The first message.
 pub fn hello(caps: ClientCaps, keymap: String) -> ClientMsg {
     ClientMsg::Hello {
         version: PROTOCOL_VERSION,
@@ -122,8 +121,6 @@ impl Histogram {
     /// Records one sample; negative and NaN samples count as 0 ms.
     pub fn record(&mut self, ms: f32) {
         let ms = if ms.is_nan() { 0.0 } else { ms.max(0.0) };
-        // Bucket i holds (i, i + 1] * 0.1 ms; 0 ms goes in bucket 0. The
-        // float-to-int cast saturates.
         let us = (f64::from(ms) * 1000.0).round() as u64;
         let index = usize::try_from(us.div_ceil(BUCKET_US))
             .unwrap_or(usize::MAX)
@@ -154,8 +151,6 @@ impl Histogram {
         for (i, n) in self.buckets.iter().enumerate() {
             seen += u64::from(*n);
             if seen >= rank {
-                // The overflow bucket has no upper edge, and no edge may
-                // claim more than was seen.
                 return if i == BUCKETS - 1 {
                     self.max_ms
                 } else {
@@ -240,7 +235,7 @@ mod tests {
     fn quantiles_are_bucket_upper_edges() {
         let mut h = Histogram::default();
         for ms in 1..=100 {
-            h.record(ms as f32 / 10.0); // 0.1 ..= 10.0 ms
+            h.record(ms as f32 / 10.0);
         }
         assert_eq!(h.count(), 100);
         assert_eq!(h.quantile(0.5), 5.0);
@@ -258,7 +253,6 @@ mod tests {
 
     #[test]
     fn a_quantile_never_exceeds_the_largest_sample() {
-        // Seen on the build machine: p95 0.5 ms next to a max of 0.24 ms.
         let mut h = Histogram::default();
         h.record(0.24);
         assert_eq!(h.quantile(0.95), 0.24);
@@ -288,8 +282,6 @@ mod tests {
 
     #[test]
     fn a_p95_just_under_the_present_budget_stays_under_it() {
-        // Regression: with 0.5 ms buckets 16.6 ms was
-        // stored as 17.0 and failed the 16.7 ms gate.
         let mut h = Histogram::default();
         for _ in 0..100 {
             h.record(16.6);

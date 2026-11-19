@@ -1,6 +1,3 @@
-//! The I420 and 4:4:4 decoder against `gliff_sw::Decoder`, upstream's BGRA
-//! one.
-
 use gliff_proto::msg::ChromaMode;
 use gliff_sw::Decoder;
 use gliff_sw::Encoder;
@@ -8,7 +5,6 @@ use gliff_sw::EncoderSettings;
 
 use super::CpuDecoder;
 
-/// A moving gradient with sharp edges, so chroma siting and the crop show.
 fn source(width: u32, height: u32, t: u32) -> Vec<u8> {
     let mut px = Vec::with_capacity((width * height * 4) as usize);
     for y in 0..height {
@@ -32,7 +28,6 @@ fn clip(width: u32, height: u32, frames: u32) -> Vec<Vec<u8>> {
         .collect()
 }
 
-/// Access units as (main, aux); aux is empty unless `dual` (Dual420).
 fn pairs(width: u32, height: u32, frames: u32, dual: bool) -> Vec<(Vec<u8>, Vec<u8>)> {
     let mut encoder = Encoder::new(
         EncoderSettings {
@@ -56,8 +51,6 @@ fn pairs(width: u32, height: u32, frames: u32, dual: bool) -> Vec<(Vec<u8>, Vec<
 
 #[test]
 fn to_bgra_matches_gliff_sw_byte_for_byte() {
-    // 1278x718 is neither a multiple of 16 nor of 4 (cropping and
-    // odd chroma rows in the coded size). Dual420 is recombined to 4:4:4.
     for (chroma, (w, h)) in [ChromaMode::Single420, ChromaMode::Dual420]
         .into_iter()
         .flat_map(|c| [(c, (640, 400)), (c, (1278, 718))])

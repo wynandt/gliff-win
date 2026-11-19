@@ -209,9 +209,6 @@ pub fn restore_if_owned(
 /// incomplete marker is removed: left alone it would make every later start
 /// fail to read it.
 pub fn recover(registry: &mut dyn Registry, processes: &dyn Processes) -> Recovery {
-    // Held across the look and the restore: a client that is writing its
-    // marker holds the registry too, so a marker seen half written is a
-    // dead one's.
     let _hold = registry.hold();
     let marker = match registry.read_marker() {
         Ok(StoredMarker::Complete(marker)) => marker,
@@ -345,7 +342,6 @@ impl<R: Registry> LockPolicy<R> {
         match (want, self.state) {
             (_, State::Disabled) => Change::Nothing,
             (Want::On, State::Held) if self.restore_failed => {
-                // The marker is still ours and holds the right prior.
                 let _hold = self.registry.hold();
                 match self.registry.set_on() {
                     Ok(()) => {
@@ -377,7 +373,6 @@ impl<R: Registry> LockPolicy<R> {
     /// Call on a timer while a clear is pending ([`Self::clear_pending`]).
     pub fn tick(&mut self, now_ms: u32) -> Change {
         match self.clear_at {
-            // A wrapping "now is at or past the deadline".
             Some(at) if now_ms.wrapping_sub(at) < u32::MAX / 2 => self.restore(now_ms),
             _ => Change::Nothing,
         }
@@ -403,8 +398,6 @@ impl<R: Registry> LockPolicy<R> {
     }
 
     fn turn_on(&mut self) -> Change {
-        // From the look to the last write: nothing else restores or turns on
-        // in between.
         let _hold = self.registry.hold();
         let prior = match self.registry.read_value() {
             Ok(Some(1)) => return self.found_on(),
@@ -416,13 +409,10 @@ impl<R: Registry> LockPolicy<R> {
             owner: self.owner,
             prior,
         };
-        // Write-ahead: the marker exists before the value changes.
         if let Err(e) = self.registry.write_marker(marker) {
-            // It may have stopped midway; take what is there back.
             return self.fail_and_take_marker_back(e);
         }
         if let Err(e) = self.registry.set_on() {
-            // The value did not change; take the marker back.
             return self.fail_and_take_marker_back(e);
         }
         self.state = State::Held;
@@ -476,8 +466,6 @@ impl<R: Registry> LockPolicy<R> {
                 Change::Nothing
             }
             Err(e) => {
-                // The marker stays, so the watchdog and the next start can
-                // still finish it; try again soon.
                 self.clear_at = Some(now_ms.wrapping_add(RETRY_MS));
                 self.restore_failed = true;
                 Change::Failed(e)
@@ -516,7 +504,6 @@ impl<R: Registry> LockPolicy<R> {
                 }
             }
             Ok(StoredMarker::Absent) => self.stray_marker = false,
-            // Ours, or someone else's by now: the normal restore deals with it.
             Ok(StoredMarker::Complete(_)) => self.stray_marker = false,
             Err(_) => {}
         }

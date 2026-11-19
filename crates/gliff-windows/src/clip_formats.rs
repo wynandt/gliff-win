@@ -146,7 +146,6 @@ pub fn offer_mimes(formats: &[WinFormat]) -> Vec<String> {
     let has = |wanted: &WinFormat| formats.contains(wanted);
     let mut mimes: Vec<String> = Vec::new();
     if has(&WinFormat::UnicodeText) {
-        // Upstream's filter adds the other text flavours behind this one.
         mimes.push(proto::TEXT_MIME.to_owned());
     }
     if has(&WinFormat::Html) {
@@ -192,9 +191,7 @@ pub fn is_private(formats: &[WinFormat], dword: &mut dyn FnMut(&str) -> Option<u
 }
 
 /// The most raw bytes worth copying off the clipboard for `format`, so that a
-/// huge item is refused before it is copied. A text body is read as UTF-16,
-/// twice the size of its UTF-8, and any other body is no larger than the item
-/// limit, with room for a header. A bitmap is bounded by its pixel limit,
+/// huge item is refused before it is copied. A bitmap is bounded by its pixel limit,
 /// since its PNG is far smaller than the bitmap.
 pub fn raw_limit(format: &WinFormat) -> usize {
     match format {
@@ -227,9 +224,6 @@ pub fn local_body(
         }
         raw
     } else if base == PNG_MIME {
-        // The registered PNG is the program's own encoding and keeps its
-        // alpha; the bitmap formats are the fallback, also when the PNG
-        // cannot be read.
         let png = if formats.contains(&WinFormat::Png) {
             fetch(WinFormat::Png).ok()
         } else {

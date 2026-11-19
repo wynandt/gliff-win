@@ -13,31 +13,18 @@ use crate::present_check::fixtures::PANEL;
 use crate::present_check::fixtures::good_stats;
 use crate::present_check::judge::ClientExit;
 
-/// How the fake client behaves.
 #[derive(Clone, Copy, PartialEq)]
 enum Behaviour {
     Good,
-    /// Never opens a window.
     NoWindow,
-    /// Ignores `WM_CLOSE`.
     HangsOnClose,
-    /// The screen read-back fails.
     CaptureFails,
-    /// The read-back works but sees only black (GDI missing a flip-model
-    /// scanout).
     CaptureBlack,
-    /// No pattern window on the output (the remote machine
-    /// script never placed it).
     NoDamageSource,
-    /// The pattern window is there windowed but gone by fullscreen.
     DamageSourceLost,
-    /// `--placement skip`.
     Unprobed,
 }
 
-/// A client on a fake clock: the window shows a picture 1 s after
-/// launch, a resize shows 600 ms after the call, and the final stats file
-/// is [`good_stats`].
 struct Fake {
     behaviour: Behaviour,
     now: Duration,
@@ -199,7 +186,6 @@ impl Harness for Fake {
     }
 }
 
-/// A plan whose screenshot is removed when the test ends.
 struct TestPlan(Plan);
 
 impl Drop for TestPlan {
@@ -246,8 +232,6 @@ fn a_good_client_passes_in_the_section_6_order() {
         ],
         "the steps of a present run"
     );
-    // 1 s to the first picture, then per stage the resize poll (600 ms,
-    // in 250 ms steps), the 5 s settle and the 20 s measurement.
     assert_eq!(
         fake.now,
         Duration::from_millis(1000 + 2 * (750 + 25_000)),
@@ -266,10 +250,6 @@ fn a_good_client_passes_in_the_section_6_order() {
     }
 }
 
-/// A real failure: no pattern window on the output, so a static
-/// desktop gave the damage-driven server almost nothing to send and the
-/// stall and pattern gates failed for the setup. The run now stops before
-/// measuring and says so.
 #[test]
 fn no_damage_source_stops_before_measuring() {
     let mut fake = Fake::new(Behaviour::NoDamageSource);
@@ -360,8 +340,6 @@ fn a_failed_capture_fails_pattern_and_still_closes() {
 
 #[test]
 fn an_all_black_capture_is_named_apart_from_a_wrong_pattern() {
-    // GDI may not see an independent-flip
-    // scanout. The gate must say so, not report a colour failure.
     let mut fake = Fake::new(Behaviour::CaptureBlack);
     let line = run(&mut fake, &plan("black").0);
     assert_eq!(reasons(&line), ["capture_black"], "{}", line.to_json());

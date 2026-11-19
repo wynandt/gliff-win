@@ -6,10 +6,10 @@
 /// The HLSL source, embedded by the presenter and checked here.
 pub const PRESENT_HLSL: &str = include_str!("present.hlsl");
 
-/// gliff-sw's fixed-point scale (`convert.rs:32`, `FRAC = 13`).
+/// gliff-sw's fixed-point scale (`gliff_sw::convert`'s `FRAC = 13`).
 pub const FIXED_ONE: f32 = 8192.0;
 
-/// gliff-sw's inverse constants (`convert.rs:48-52`), by HLSL name.
+/// gliff-sw's inverse constants, by HLSL name.
 pub const INVERSE: [(&str, i16); 5] = [
     ("KY", 9539),
     ("KRV", 14686),

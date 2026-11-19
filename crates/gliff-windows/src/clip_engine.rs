@@ -176,7 +176,6 @@ impl Engine {
     /// A clipboard message from the remote side, with its payload.
     pub fn on_peer_msg(&self, msg: ClipboardMsg, payload: Bytes) {
         if let ClipboardMsg::Abort { id } = &msg {
-            // The ids this client numbers are odd, the remote side's even.
             clip_log::emit(Log::AbortReceived {
                 id: *id,
                 serve: id % 2 == 0,
@@ -202,12 +201,6 @@ impl Engine {
             files_valid,
         });
         let files = if files_valid { files } else { Vec::new() };
-        // An offer takes over the clipboard, and so replaces the local offer,
-        // only when Windows would write something of it. An offer with
-        // nothing usable (the server's empty one at connect) leaves the
-        // clipboard as it is, as upstream's client does. Revoking then would
-        // refuse the reads the server's history watcher makes of the offer it
-        // was just sent, and each refusal is a toast on the server.
         if clip_core::remote_write(&mime_types, &files, false).is_some() {
             self.revoke_local(RevokeWhy::RemoteOffer);
         }
@@ -244,8 +237,6 @@ impl Engine {
         }
         match item {
             ClipboardItem::Mime(mime_type) => {
-                // The Windows thread reads the live clipboard, which may hold
-                // flavours deliberately left out of the offer.
                 if resolve_mime(&mime_type, &self.local_mimes.borrow()).is_none() {
                     return refuse(&self.transfers, id, Cause::NotOffered);
                 }
@@ -266,8 +257,6 @@ impl Engine {
                         Ok(Err(_)) => return refuse(&transfers, id, Cause::ReadUnanswered),
                         Err(_) => return refuse(&transfers, id, Cause::ReadTimeout),
                     };
-                    // A revocation while the clipboard was read has nothing
-                    // to abort yet, so it is caught here instead.
                     if current.get() != Some(serial) {
                         return refuse(&transfers, id, Cause::RevokedWhileReading);
                     }
@@ -331,12 +320,11 @@ impl Engine {
             Command::FetchFiles { serial, result } => self.fetch_files(serial, result),
             Command::CancelTransfer(id) => {
                 let paste = self.cancels.borrow_mut().remove(&id);
-                if let Some((paste, cancelled)) = paste {
-                    // A paste that already ended has dropped its handle.
-                    if Rc::strong_count(&cancelled) > 1 {
-                        cancelled.set(true);
-                        clip_log::emit(Log::PasteCancelled { paste });
-                    }
+                if let Some((paste, cancelled)) = paste
+                    && Rc::strong_count(&cancelled) > 1
+                {
+                    cancelled.set(true);
+                    clip_log::emit(Log::PasteCancelled { paste });
                 }
                 self.jobs.cancel(id);
             }
@@ -344,7 +332,6 @@ impl Engine {
     }
 
     fn revoke_local(&self, why: RevokeWhy) {
-        // A revocation with nothing offered and nothing served is not news.
         let serial = self.local_serial.get();
         let serving = self.serving.get();
         if serial.is_some() || serving > 0 {
@@ -480,7 +467,6 @@ impl Engine {
     /// Remember a running paste so that cancelling its job can say so.
     fn track(&self, job: u32, tracked: Tracked) {
         let mut cancels = self.cancels.borrow_mut();
-        // A paste that ended dropped its log, which held the other handle.
         cancels.retain(|_, (_, cancelled)| Rc::strong_count(cancelled) > 1);
         cancels.insert(job, tracked);
     }
@@ -540,7 +526,6 @@ pub async fn spool_files(
         }
     }
     partial.keep();
-    // The top level is what `top_level` selects: no `/` in the path.
     Ok(files
         .iter()
         .zip(&relative)

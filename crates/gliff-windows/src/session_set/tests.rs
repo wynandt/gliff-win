@@ -1,5 +1,3 @@
-//! The runner with fake sessions and a fake clipboard.
-
 use std::cell::Cell;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
@@ -35,7 +33,6 @@ use crate::tabs::SessionId;
 use crate::tabs::Status;
 use crate::tabs::Tabs;
 
-/// The fake clock's start.
 fn base() -> Instant {
     static START: OnceLock<Instant> = OnceLock::new();
     *START.get_or_init(Instant::now)
@@ -45,7 +42,6 @@ fn host(text: &str) -> HostTarget {
     text.parse().expect("a host")
 }
 
-/// What the fakes saw and what the test makes them do.
 #[derive(Default)]
 struct World {
     commands: RefCell<BTreeMap<u32, UnboundedReceiver<UiCmd>>>,
@@ -57,7 +53,6 @@ struct World {
 }
 
 impl World {
-    /// The commands a session got so far, as short names.
     fn commands_of(&self, session: u32) -> Vec<String> {
         let mut out = Vec::new();
         let mut map = self.commands.borrow_mut();
@@ -177,7 +172,6 @@ struct Fixture {
 }
 
 impl Fixture {
-    /// Moves the fake clock on.
     fn advance(&self, ms: u64) {
         self.clock.set(self.clock.get() + Duration::from_millis(ms));
     }
@@ -504,7 +498,6 @@ fn a_bare_start_reconnects_what_was_open_and_shows_what_was_shown() {
     assert!(matches!(applied.presented, Some(Presented::Session(_))));
 }
 
-/// The session ends with a lost link (the kind a retry can fix).
 fn lose(fx: &Fixture, session: SessionId) {
     fx.world.event(
         session.get(),
@@ -554,7 +547,6 @@ fn a_start_that_fails_again_and_again_waits_each_time_and_then_stops() {
     let a = session_of(&fx.tabs, "a@x");
     lose(&fx, a);
     fx.set.poll(&mut fx.tabs);
-    // Poll every second for a long while; the starts are bounded.
     for _ in 0..600 {
         fx.advance(1_000);
         fx.set.poll(&mut fx.tabs);

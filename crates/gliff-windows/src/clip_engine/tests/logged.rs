@@ -1,11 +1,3 @@
-//! What the engine writes to the log, for the causes of an Abort and for
-//! content that must never be there.
-//!
-//! Each test runs a whole scenario on the test thread, captures the lines
-//! `clip_log` emitted meanwhile and compares them with the lines a reader of
-//! the log would see. The lines are printed too: `cargo test -- --nocapture`
-//! shows what each cause looks like.
-
 use std::cell::Cell;
 use std::cell::RefCell;
 use std::future::Future;
@@ -35,13 +27,10 @@ use crate::clip_log::Cause;
 use crate::clip_log::RevokeWhy;
 use crate::clip_log::testing;
 
-/// Runs `test` and returns the log lines it caused, with durations replaced
-/// by `N` so the lines can be compared.
 fn logged(test: impl Future<Output = ()>) -> Vec<String> {
     let ((), lines) = testing::capture(|| run(test));
     for line in &lines {
         println!("{line}");
-        // Every line of every test must have only the forms of a log line.
         testing::assert_well_formed(line);
     }
     lines.iter().map(|line| without_durations(line)).collect()
@@ -60,8 +49,6 @@ fn without_durations(line: &str) -> String {
 fn offer_line() -> &'static str {
     "clipboard: offer sent serial=1 generation=7 mimes=text/plain;charset=utf-8 files=0 file_bytes=0"
 }
-
-// What aborts a transfer, as the log shows it.
 
 #[test]
 fn a_clipboard_that_moved_before_the_read_aborts_the_fetch() {
@@ -212,15 +199,9 @@ fn requests_that_name_no_current_item_are_refused_with_their_cause() {
     );
 }
 
-/// The peer gives up on a request while the Windows thread is still reading
-/// the clipboard, as a server does that drops a fetch at its own deadline.
-/// The log shows `abort received` and no `abort sent`: this side is not the
-/// one that cancelled, and the other side's toast is not "the peer aborted".
 #[test]
 fn a_peer_that_drops_its_fetch_during_the_read_is_logged_as_the_peer() {
     let lines = logged(async {
-        // The clock only moves when every task waits, so the order of the
-        // events does not depend on the machine's speed.
         tokio::time::pause();
         let mut rig = rig("log-peer-cut");
         let serial = rig.offer(&[TEXT]).await;
@@ -252,10 +233,6 @@ fn a_peer_that_drops_its_fetch_during_the_read_is_logged_as_the_peer() {
     );
 }
 
-/// The log of a real session start: this client offers its clipboard, the
-/// server's own empty offer crosses it, and the server's history watcher then
-/// reads the offer it was sent. The empty offer replaces nothing, so the
-/// requests are served; no `abort sent` (a toast on the server) is logged.
 #[test]
 fn the_servers_empty_offer_at_connect_does_not_abort_its_watchers_reads() {
     let lines = logged(async {
@@ -288,9 +265,6 @@ fn the_servers_empty_offer_at_connect_does_not_abort_its_watchers_reads() {
     );
 }
 
-/// The same crossing with an offer that does carry something: it takes over
-/// the clipboard, so the local offer is revoked and a read of it is refused.
-/// This abort is a real failure and still surfaces.
 #[test]
 fn a_usable_remote_offer_still_aborts_a_read_of_the_replaced_local_offer() {
     let lines = logged(async {
@@ -313,10 +287,6 @@ fn a_usable_remote_offer_still_aborts_a_read_of_the_replaced_local_offer() {
     );
 }
 
-// Pastes.
-
-/// A cancelled paste ends as `cancelled`, not as `dropped` (the session
-/// ended); a cancel of a paste that is over, or of none, says nothing.
 #[test]
 fn a_cancelled_paste_is_logged_as_cancelled_and_a_stray_cancel_is_not() {
     let lines = logged(async {
@@ -398,10 +368,6 @@ fn a_paste_that_the_peer_aborts_says_who() {
     );
 }
 
-// Content never reaches the log.
-
-/// A string that every kind of clipboard data below carries. Neither it nor
-/// anything made of it may appear in a line.
 const SENTINEL: &str = "Zq7-sentinel-4417";
 
 fn assert_clean(lines: &[String], dir_name: &str) {
@@ -409,8 +375,6 @@ fn assert_clean(lines: &[String], dir_name: &str) {
     let lower = SENTINEL.to_lowercase();
     let upper = SENTINEL.to_uppercase();
     for line in lines {
-        // `logged` already checked the form of the raw line; this names the
-        // strings that were fed in.
         for banned in [SENTINEL, lower.as_str(), upper.as_str(), dir_name, "folder"] {
             assert!(!line.contains(banned), "{banned:?} is in {line:?}");
         }
@@ -422,12 +386,10 @@ fn nothing_a_clipboard_holds_reaches_the_log() {
     let name = format!("{SENTINEL} folder");
     let leaf = format!("{SENTINEL}.txt");
     let mime = format!("text/{SENTINEL}");
-    // A table name with a parameter that carries a name is not the table name.
     let with_parameter = format!("text/plain;charset=utf-8;filename={SENTINEL}");
     let lines = logged(async {
         let mut rig = rig("log-sentinel");
 
-        // Local files and flavours, served and refused.
         let tree = rig.dir.path().join(&name);
         std::fs::create_dir_all(&tree).expect("create");
         std::fs::write(tree.join(&leaf), SENTINEL).expect("write");
@@ -470,7 +432,6 @@ fn nothing_a_clipboard_holds_reaches_the_log() {
         rig.engine
             .on_command(Command::RevokeLocal(RevokeWhy::LocalChange));
 
-        // Remote files and flavours, pasted, refused and failing.
         let remote = vec![
             dir(&name),
             file(&format!("{name}/{leaf}"), SENTINEL.len() as u64),

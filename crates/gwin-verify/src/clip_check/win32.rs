@@ -322,8 +322,6 @@ impl Harness for Win32Harness {
     fn launch(&mut self) -> anyhow::Result<()> {
         let l = &self.launch;
         std::fs::create_dir_all(&l.log_dir)?;
-        // `--super-l registry` changes a Windows setting; this gate has no
-        // use for it, and names its mode so it never depends on a default.
         let child = crate::client_config::client_command(&l.client, &l.log_dir)
             .context("preparing the client's config folder")?
             .args(["--super-l", "off"])

@@ -198,7 +198,6 @@ pub fn from_annexb(data: &[u8], size: Size, source: String) -> anyhow::Result<Cl
             "the first access unit has no {name} (NAL types {first:?}); a decoder cannot start"
         );
     }
-    // libx264 picks 6.0 for 3840x2400 at 60 fps; OpenH264 stops at 5.2.
     for nal in h264::nal_units(data)
         .into_iter()
         .filter(|nal| nal.first().is_some_and(|b| b & 0x1f == 7))
@@ -259,7 +258,7 @@ fn text_pixel(x: u32, y: u32) -> bool {
         return false;
     }
     let glyph = hash(cell, line);
-    let bit = (row / 2) * 5 + col; // a 5x5 glyph drawn 1x2
+    let bit = (row / 2) * 5 + col;
     (glyph >> (bit % 25)) & 1 == 1 && hash(cell ^ 0x55, line) % 100 < 70
 }
 
@@ -295,7 +294,6 @@ impl Desktop {
         self.y.copy_from_slice(&self.background);
         self.u.fill(128);
         self.v.fill(128);
-        // A terminal pane in the right half scrolls one text line per frame.
         let (pane_x, pane_w, pane_h) = (w / 2, w / 2, h / 2);
         let scroll = frame * 16;
         for y in 0..pane_h {
@@ -304,7 +302,6 @@ impl Desktop {
                 self.y[(y * w + pane_x + x) as usize] = if lit { 200 } else { 20 };
             }
         }
-        // A gradient window (a quarter of the height) bounces across.
         let side = (h / 4).max(2) & !1;
         let span_x = w.saturating_sub(side).max(1);
         let span_y = h.saturating_sub(side).max(1);
@@ -400,7 +397,6 @@ mod tests {
     #[test]
     fn annexb_splits_at_delimiters_and_keeps_four_byte_codes() {
         let aud = [0, 0, 0, 1, 0x09, 0xf0];
-        // A real libx264 SPS, level rewritten to 5.2, then a PPS.
         let sps = [
             0, 0, 0, 1, 0x67, 0x64, 0x00, 0x34, 0xac, 0xd9, 0x40, 0x3c, 0x00, 0x4b, 0x6c, 0x04,
             0x40, 0x00, 0x00, 0x03, 0x00, 0x40, 0x00, 0x00, 0x0c, 0x83, 0xc2, 0x01, 0x06, 0x58,
@@ -424,7 +420,6 @@ mod tests {
 
     #[test]
     fn annexb_without_parameter_sets_up_front_is_refused() {
-        // What libx264 `repeat-headers=0` into a raw .h264 produced: AUD + IDR.
         let data = [0, 0, 0, 1, 0x09, 0x10, 0, 0, 1, 0x65, 0x88];
         let size = Size {
             width: 2,
@@ -437,7 +432,6 @@ mod tests {
     #[test]
     fn annexb_above_level_5_2_is_refused() {
         let data = [
-            // A real libx264 High 6.0 SPS (see gliff_windows::h264 tests).
             0, 0, 0, 1, 0x09, 0x10, 0, 0, 1, 0x67, 0x64, 0x00, 0x3c, 0xac, 0xd9, 0x40, 0x3c, 0x00,
             0x4b, 0x6c, 0x04, 0x40, 0x00, 0x00, 0x03, 0x00, 0x40, 0x00, 0x00, 0x0c, 0x83, 0xc2,
             0x01, 0x06, 0x58, 0, 0, 1, 0x68, 0xee, 0, 0, 1, 0x65, 0x88,

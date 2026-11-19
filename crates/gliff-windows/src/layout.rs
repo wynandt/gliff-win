@@ -1,7 +1,5 @@
 //! Where the picture goes in the client area: a port of upstream's
-//! `paintable::layout` (gliff 089662fd `crates/gliff/src/paintable.rs:14-70`)
-//! and `hypr_ipc::clean_mode` (`crates/hypr-ipc/src/lib.rs:197-209`), with
-//! upstream's tests, plus the Windows ends: the device-pixel viewport, the
+//! `paintable::layout` and `hypr_ipc::clean_mode`, with upstream's tests, plus the Windows ends: the device-pixel viewport, the
 //! sampling filter and the one DPI-to-scale conversion, and the pointer
 //! mapping `to_remote`.
 
@@ -73,7 +71,7 @@ impl Layout {
 
 /// A client-area point in logical pixels to the remote output's logical
 /// coordinates, which is what `PointerMotion` carries (upstream's
-/// `to_remote`, `gliff/src/main.rs:1336-1355`). It inverts the layout to view
+/// `to_remote`). It inverts the layout to view
 /// pixels, stretches them to the coded stream size (a reduced-resolution
 /// stream fills the view rectangle), clamps to the stream, and divides by the
 /// stream scale. `geometry` is the picture last *presented*, not the latest
@@ -161,10 +159,6 @@ pub fn layout(view: (u32, u32), device: f64, width: f64, height: f64) -> Option<
         return None;
     }
     let fit = (width * device / vw).min(height * device / vh);
-    // The smallest even mode gives the compositor's alignment step at this
-    // scale. Allow that much slack plus rounding when preserving exact
-    // integer sampling; fractional scales can need more than ten device
-    // pixels (upstream's comment).
     let alignment = clean_mode(2, 2, device.clamp(0.5, 4.0) as f32).0;
     let integer = fit.floor();
     let slack = (width * device - vw * integer).min(height * device - vh * integer);

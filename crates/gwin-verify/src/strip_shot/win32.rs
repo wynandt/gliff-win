@@ -46,8 +46,6 @@ fn one(
     pal: &Palette,
 ) -> anyhow::Result<(String, Vec<String>)> {
     let fonts = Fonts::new();
-    // A first surface measures the names; the strip is then laid out and
-    // drawn on a surface of its size.
     let probe = Surface::new(None, 1, 1, pal.strip).ok_or_else(|| anyhow::anyhow!("no bitmap"))?;
     let built = scene::build(
         scene,

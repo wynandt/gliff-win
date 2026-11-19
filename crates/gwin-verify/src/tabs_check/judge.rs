@@ -165,8 +165,6 @@ fn check_step(
                 step.name, entry.id, entry.keys_down, entry.buttons_down
             ));
         }
-        // Every session decodes and acks while hidden, so a switch is
-        // instant: its acks must have grown since the last snapshot.
         if let Some(was) = before.iter().find(|b| b.id == entry.id)
             && entry.acks <= was.acks
         {

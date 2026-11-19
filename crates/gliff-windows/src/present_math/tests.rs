@@ -1,5 +1,3 @@
-//! The oracle: every (Y, U, V) against gliff-sw, and the HLSL constants.
-
 use super::INVERSE;
 use super::PRESENT_HLSL;
 use super::hlsl_line;
@@ -16,9 +14,6 @@ fn the_hlsl_carries_gliff_sws_constants() {
     }
 }
 
-/// All 2^24 triples, each once through `i420_to_bgra` (a 2x2 chroma block
-/// holds four Y): per U, a 128x512 picture whose chroma row is V and whose four
-/// pixels under chroma column c are Y = 4c..4c+3.
 #[test]
 fn every_triple_is_within_one_code_of_gliff_sw() {
     let (width, height) = (128usize, 512usize);

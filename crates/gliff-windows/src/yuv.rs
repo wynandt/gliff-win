@@ -346,7 +346,6 @@ mod tests {
 
     #[test]
     fn to_bgra_is_upstreams_conversion() {
-        // Limited-range white, black and BT.709 red (Y 63, U 102, V 240).
         for (yuv, bgr) in [
             ([235, 128, 128], [255, 255, 255]),
             ([16, 128, 128], [0, 0, 0]),

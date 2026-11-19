@@ -1,5 +1,3 @@
-//! The log's vocabulary: names, causes and formats.
-
 use std::io;
 use std::io::ErrorKind;
 use std::time::Duration;

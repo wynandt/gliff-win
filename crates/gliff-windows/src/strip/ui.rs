@@ -189,7 +189,6 @@ impl Ui {
                 if layout.max_scroll <= 0 || self.dragging() {
                     return Vec::new();
                 }
-                // A notch moves the strip by a fixed step.
                 let step = metrics.scroll_step;
                 vec![Action::Scroll(-delta * step / 120)]
             }

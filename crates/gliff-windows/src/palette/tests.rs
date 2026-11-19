@@ -12,7 +12,6 @@ fn hex_splits_the_bytes_and_colorref_reverses_them_for_gdi() {
 fn translucent_fills_become_the_solid_colour_they_make_over_the_strip() {
     let white = Rgb(255, 255, 255);
     let p = Palette::DARK;
-    // 0.14, 0.07 and 0.55 of 255, within one code of exact arithmetic.
     let near = |got: Rgb, alpha: f64| {
         let want = (48.0 + (255.0 - 48.0) * alpha).round() as i32;
         (i32::from(got.0) - want).abs() <= 1 && got.0 == got.1 && got.1 == got.2

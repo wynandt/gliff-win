@@ -66,7 +66,6 @@ pub fn init(dir: &Path) -> io::Result<PathBuf> {
     let file = OpenOptions::new().create(true).append(true).open(&path)?;
     let used = file.metadata().map_or(0, |m| m.len());
     prune(dir, KEEP_FILES);
-    // A second init keeps the first file; nothing to do with the new one.
     let _ = LOG.set(Mutex::new(Sink {
         file,
         budget: Budget { used, told: false },

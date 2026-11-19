@@ -12,12 +12,9 @@ const LALT: u16 = 0xa4;
 const TAB: u16 = 0x09;
 const F: u16 = 0x46;
 
-/// The virtual keys that are modifiers, generic and left/right.
 const MODIFIER_VKS: [u16; 11] = [
     0x10, 0x11, 0x12, 0x5b, 0x5c, 0xa0, 0xa1, 0xa2, 0xa3, 0xa4, 0xa5,
 ];
-
-// What a grab did before the ledger: the keys held when it started.
 
 #[test]
 fn the_up_of_a_key_that_was_down_before_the_grab_is_taken_once() {
@@ -112,14 +109,10 @@ fn a_replayed_key_is_taken_once_on_its_up() {
     );
 }
 
-// What the ledger adds: every Down Windows saw, across a reinstall.
-
 #[test]
 fn up_of_key_windows_saw_down_passes_after_reinstall() {
     let mut keys = KeyLedger::new();
     keys.seed([]);
-    // Win went down while the hook was not looking, in the reinstall gap.
-    // The new hook starts with the keys Windows holds down.
     keys.reinstall([LWIN]);
     assert_eq!(
         keys.route(LWIN, Press::Up),
@@ -128,8 +121,6 @@ fn up_of_key_windows_saw_down_passes_after_reinstall() {
     );
     assert_eq!(keys.route(LWIN, Press::Down), Route::Remote);
 
-    // The same when Windows' own list of held keys missed it: the Down was
-    // recorded when the hook passed it, and the ledger outlives the hook.
     keys.windows_saw(LCTRL, Press::Down);
     keys.reinstall([]);
     assert_eq!(
@@ -160,10 +151,7 @@ fn a_reinstall_keeps_what_the_remote_saw() {
 fn pass_without_target_records_down() {
     let mut keys = KeyLedger::new();
     keys.seed([]);
-    // No session was there: the hook let the Down through to Windows.
     keys.windows_saw(LCTRL, Press::Down);
-    // The session is back by the time of the Up, which would otherwise be
-    // swallowed and sent to the remote.
     assert_eq!(
         keys.route(LCTRL, Press::Down),
         Route::Windows { remote: false },
@@ -189,14 +177,11 @@ fn a_passed_up_ends_the_windows_side_of_the_key() {
 fn a_key_sent_from_the_window_then_reinstall_sends_its_up_to_both() {
     let mut keys = KeyLedger::new();
     keys.seed([]);
-    // The window got the Down and sent it to the remote; then the hook was
-    // installed again.
     keys.legacy(KeyId::of_hook(LWIN, false), Press::Down, true);
     keys.reinstall([LWIN]);
     assert_eq!(keys.route(LWIN, Press::Up), Route::Windows { remote: true });
     assert_eq!(keys.take_remote_held(), Vec::<u16>::new(), "Up ended it");
 
-    // The window could not send it: only Windows saw the Down.
     keys.legacy(KeyId::of_hook(LCTRL, false), Press::Down, false);
     assert_eq!(
         keys.route(LCTRL, Press::Up),
@@ -204,14 +189,10 @@ fn a_key_sent_from_the_window_then_reinstall_sends_its_up_to_both() {
     );
 }
 
-/// A key message's `lparam` for the left Ctrl: scan code 0x1d, not extended.
 const LCTRL_MESSAGE: isize = 0x1d << 16;
 
 #[test]
 fn a_generic_ctrl_down_from_the_window_meets_the_left_ctrl_up_from_the_hook() {
-    // The hook was silent: the window got the Ctrl Down as a key message,
-    // which names the generic Ctrl. The hook is back for the Up, which names
-    // the left one. The Up must go to Windows, or Windows holds Ctrl for good.
     let mut keys = KeyLedger::new();
     keys.seed([]);
     keys.legacy(KeyId::of_message(0x11, LCTRL_MESSAGE), Press::Down, true);
@@ -235,9 +216,6 @@ fn a_generic_ctrl_up_from_the_window_ends_the_left_ctrl_the_hook_saw() {
 
 #[test]
 fn a_hook_back_after_a_time_without_one_forgets_what_it_saw() {
-    // Win went down under a hook; the hook was taken out (no grab), and the
-    // user let go of Win with nothing looking. The next grab must not take
-    // Win for a key the user holds.
     let mut real = Physical::new();
     real.saw(LWIN, Press::Down);
     real.forget();
@@ -257,7 +235,6 @@ fn swallowed_down_then_mode_off_emits_remote_release() {
     keys.remote_saw(LCTRL, Press::Down);
     keys.remote_saw(TAB, Press::Down);
     keys.remote_saw(TAB, Press::Up);
-    // The grab ends.
     keys.forget_windows();
     assert_eq!(
         keys.take_remote_held(),
@@ -280,8 +257,6 @@ fn leaving_the_grab_forgets_the_windows_side_only() {
     assert_eq!(keys.windows_len(), 0);
     assert_eq!(keys.take_remote_held(), vec![F]);
 }
-
-// What the log may say.
 
 #[test]
 fn the_log_line_for_keys_down_has_a_count_and_modifier_groups() {
@@ -318,8 +293,6 @@ fn the_log_line_names_no_key_other_than_modifier_groups() {
             "vk {vk:#04x} left a trace in the line"
         );
     }
-    // Whatever is held, every word is from the fixed vocabulary, and the
-    // modifier groups come in a fixed order, not the order of the keys.
     let vocabulary = ["key", "keys", "down", "Win", "Ctrl", "Alt", "Shift"];
     let sets: [&[u16]; 4] = [
         &[F, LCTRL, 0x35, 0x74, LWIN, 0x1b, 0x20],
@@ -343,9 +316,6 @@ fn the_log_line_names_no_key_other_than_modifier_groups() {
         "the order of the keys does not show"
     );
 }
-
-// The last-resort net: a modifier Windows counts as down while the user's
-// own key is up is stuck; one the user holds is not.
 
 #[test]
 fn a_win_key_the_hook_saw_come_up_is_stuck_if_windows_still_holds_it() {
@@ -401,7 +371,6 @@ fn the_ledger_lists_what_windows_saw_go_down() {
 
 #[test]
 fn a_key_message_is_overtaken_only_by_a_later_event_of_the_same_key() {
-    // lparam: scan code in bits 16-23, the extended flag in bit 24.
     let left_shift = 0x2a << 16;
     let right_shift = 0x36 << 16;
     let mut real = Physical::new();

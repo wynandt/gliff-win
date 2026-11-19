@@ -19,8 +19,6 @@ fn host(text: &str) -> HostTarget {
     text.parse().expect("a target")
 }
 
-/// The merged settings and the locks for a command line and a `[settings]`
-/// table.
 fn world(flags: &[&str], file: &str) -> (Resolved, Locks) {
     let mut line = vec!["gliff-windows", "user@host"];
     line.extend_from_slice(flags);
@@ -78,7 +76,6 @@ fn a_machine_with_no_choice_runs_with_the_defaults() {
         c.desktop_mode(&resolved.settings),
         DesktopMode::mirror_focused()
     );
-    // Win+L stays with Windows unless chosen.
     assert_eq!(
         (c.send_win_l, c.send_win_l_origin, &c.send_win_l_lock),
         (false, Origin::Default, &None)
@@ -87,8 +84,6 @@ fn a_machine_with_no_choice_runs_with_the_defaults() {
 
 #[test]
 fn a_machine_with_no_choice_gets_exactly_what_the_settings_say() {
-    // Every mix of the file's `screen` and `output`, and the flags: with no
-    // choice the mode is the one `Settings::desktop_mode` has always given.
     for flags in [&[][..], &["--headless"], &["--output", "DP-2"]] {
         for file in [
             "",
@@ -128,8 +123,6 @@ fn a_choice_beats_the_file() {
         (false, Origin::Machine)
     );
 
-    // The file's `super_l = "registry"` sends Win+L to machines with no
-    // choice; a machine's own choice beats it either way.
     let send = |on: bool| Choice {
         send_win_l: Some(on),
         ..Choice::default()
@@ -186,7 +179,6 @@ fn a_flag_locks_the_choice_and_says_why() {
     let why = c.share_lock.clone().expect("locked");
     assert!(why.contains("--no-clipboard"), "{why}");
 
-    // Any `--super-l` flag decides Win+L for every machine.
     for (flag, value) in [("registry", true), ("chord", false), ("off", false)] {
         let choice = Choice {
             send_win_l: Some(!value),
@@ -259,7 +251,6 @@ fn the_flags_lock_nothing_they_do_not_decide() {
 
 #[test]
 fn the_file_turning_the_clipboard_off_locks_the_share_choice() {
-    // The clipboard is not started then, so no machine can share.
     let (c, _) = connection(&[], "share_clipboard = false", sharing(true));
     assert!(!c.share_clipboard);
     assert_eq!(c.share_origin, Origin::File);
@@ -322,7 +313,6 @@ screen = "own"
     let table: toml::Table = text.parse().expect("TOML");
     let mut notes = Vec::new();
     let choices = Choices::from_table(&table, &mut notes);
-    // The good choice loads; the bad value and the odd entries are noted, not lost.
     assert_eq!(choices.of(&host("me@one")).screen, Some(Screen::Own));
     assert_eq!(choices.of(&host("me@one")).share_clipboard, None);
     assert_eq!(notes.len(), 3, "{notes:?}");
@@ -332,7 +322,6 @@ screen = "own"
     );
     assert_eq!(choices.to_table(), table);
 
-    // A change to the machine keeps the rest.
     let mut choices = choices;
     choices.set_screen(&host("me@one"), Screen::Mirror);
     let written = choices.to_table();
@@ -356,7 +345,6 @@ fn the_rules_read_the_book_at_each_call() {
     book.borrow_mut().set_share_clipboard(&a, false);
     assert_eq!(rules.desktop_mode(&a), DesktopMode::Headless);
     assert!(!rules.shares_clipboard(&a));
-    // Another machine is not touched.
     let b = host("me@b");
     assert_eq!(rules.desktop_mode(&b), DesktopMode::mirror_focused());
     assert!(rules.shares_clipboard(&b));
@@ -377,7 +365,6 @@ fn nothing_is_pending_when_the_session_started_with_what_is_chosen() {
     assert!(!c.pending(&started(Screen::Mirror, true)));
     let (c, _) = connection(&[], "", own());
     assert!(!c.pending(&started(Screen::Own, true)));
-    // Win+L applies at once, so it never waits for a reconnect.
     let send = Choice {
         send_win_l: Some(true),
         ..Choice::default()
@@ -404,7 +391,6 @@ fn a_changed_clipboard_choice_is_pending() {
 
 #[test]
 fn a_choice_that_matches_the_default_is_not_pending() {
-    // Saved as mirror, but the session already mirrors: nothing would change.
     let (c, _) = connection(&[], "", mirror());
     assert!(!c.pending(&started(Screen::Mirror, true)));
     let (c, _) = connection(&[], "", sharing(true));
@@ -413,16 +399,12 @@ fn a_choice_that_matches_the_default_is_not_pending() {
 
 #[test]
 fn a_locked_row_never_counts_as_pending() {
-    // --headless locks the screen to own; a live value that differs (a
-    // session from before the lock) must not offer a reconnect, because the
-    // menu cannot change the row.
     let (c, _) = connection(&["--headless"], "", mirror());
     assert!(c.screen_lock.is_some());
     assert!(!c.pending(&started(Screen::Mirror, true)));
     let (c, _) = connection(&["--no-clipboard"], "", sharing(true));
     assert!(c.share_lock.is_some());
     assert!(!c.pending(&started(Screen::Mirror, true)));
-    // The other row still counts.
     let (c, _) = connection(&["--headless"], "", sharing(false));
     assert!(c.pending(&started(Screen::Own, true)));
 }

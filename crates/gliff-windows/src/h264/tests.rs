@@ -1,5 +1,3 @@
-//! SPS parsing against real encoder output.
-
 use gliff_sw::Encoder;
 use gliff_sw::EncoderSettings;
 
@@ -28,7 +26,6 @@ fn openh264_keyframe(width: u32, height: u32) -> Vec<u8> {
 
 #[test]
 fn openh264_sps_reads_baseline_and_the_cropped_size() {
-    // 1080 is not a multiple of 16, so this exercises frame cropping.
     let au = openh264_keyframe(1920, 1080);
     let sps = find_sps(&au)
         .expect("keyframe carries an SPS")
@@ -66,8 +63,6 @@ fn rewritten_level_is_read_back_and_rejected() {
 
 #[test]
 fn libx264_high_level_6_sps_parses() {
-    // ffmpeg -f lavfi -i testsrc2=s=3840x2400 -frames:v 1 -c:v libx264
-    // -profile:v high -level 6.0 (build machine ffmpeg).
     let nal = [
         0x67, 0x64, 0x00, 0x3c, 0xac, 0xd9, 0x40, 0x3c, 0x00, 0x4b, 0x6c, 0x04, 0x40, 0x00, 0x00,
         0x03, 0x00, 0x40, 0x00, 0x00, 0x0c, 0x83, 0xc2, 0x01, 0x06, 0x58,
@@ -126,18 +121,11 @@ fn truncated_sps_is_an_error_not_a_panic() {
     }
 }
 
-/// The server's SPS (High 5.2, POC type 0, one reference, no VUI) gains
-/// bitstream restrictions that rule out reordering, so a decoder may show
-/// each picture as it decodes it; the size it signals is unchanged, and
-/// units with no SPS, or an SPS that has a VUI, are left alone.
 #[test]
 fn sps_without_vui_gains_no_reorder_restriction() {
     let server_sps = [
         0x67, 0x64, 0x00, 0x34, 0xac, 0x1b, 0x1a, 0x80, 0x28, 0x00, 0xb5, 0x90, 0x00,
     ];
-    // The same SPS with vui_parameters_present_flag set, then
-    // bitstream_restriction_flag, max_num_reorder_frames 0 and
-    // max_dec_frame_buffering 1 (checked against FFmpeg's trace_headers).
     let restricted = [
         0x67, 0x64, 0x00, 0x34, 0xac, 0x1b, 0x1a, 0x80, 0x28, 0x00, 0xb5, 0xa0, 0x1b, 0x41, 0x10,
         0x8d, 0x40,
