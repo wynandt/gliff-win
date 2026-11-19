@@ -1,15 +1,13 @@
 //! CPU decode: OpenH264 to tight I420 for Single420, and to tight 4:4:4
 //! for Dual420 (two decoders, recombined here).
 //!
-//! This owns OpenH264 itself rather than `gliff_sw::Decoder`, whose only
-//! output is BGRA, because the display path converts on the GPU
-//! (see `docs/architecture.md`). It mirrors `gliff_sw::Decoder` in everything
-//! else: the decoder
-//! config, the held-picture counter, the flush rule, the even crop and the
-//! Dual420 pairing rule (both decoders are fed every unit; one picture
-//! without the other is an error).
-//! `to_bgra` of its output is byte-identical to `gliff_sw::Decoder`'s
-//! (tests below).
+//! Unlike `gliff_sw::Decoder`, whose only output is BGRA, this hands out
+//! planes for the GPU to convert (see `docs/architecture.md`). It matches
+//! `gliff_sw::Decoder` in everything else: the decoder config, the
+//! held-picture counter, the flush rule, the even crop and the Dual420
+//! pairing rule (both decoders are fed every unit; one picture without the
+//! other is an error). `to_bgra` of its output is byte-identical to
+//! `gliff_sw::Decoder`'s.
 //!
 //! Geometry is not tracked here; `session::Core` owns the one
 //! pending-geometry FIFO.

@@ -373,7 +373,7 @@ pub struct Core {
     /// A resync was sent and no picture has arrived since.
     resyncing: bool,
     /// The server's output is a private headless one (HelloAck's `headless`);
-    /// true until the HelloAck says otherwise, as before there was a mirror.
+    /// true until the HelloAck says otherwise.
     headless: bool,
     /// What `client_caps` offered; a StreamConfig for anything else ends
     /// the session.
@@ -851,7 +851,6 @@ fn validate_stream(
     }
 }
 
-/// The variant name, for errors (the payload can be large).
 /// The most characters of a server's error text that are kept: the text goes
 /// to the log and the screen, and a server may send a megabyte of it.
 const MAX_ERROR_CHARS: usize = 512;
@@ -882,6 +881,7 @@ fn is_clipboard(msg: &ServerMsg) -> bool {
     )
 }
 
+/// The variant name, for errors (the payload can be large).
 fn name(msg: &ServerMsg) -> &'static str {
     match msg {
         ServerMsg::HelloAck { .. } => "HelloAck",

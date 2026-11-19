@@ -1,7 +1,5 @@
 //! The client's log: one file per UTC day, `gliff-windows-YYYY-MM-DD.log`,
-//! under `--log-dir` (default `%LOCALAPPDATA%\gliff-windows\logs`). A plain
-//! appending writer, not `tracing-appender`: the client logs a few lines per
-//! session and per window event, never per frame.
+//! under `--log-dir` (default `%LOCALAPPDATA%\gliff-windows\logs`).
 
 use std::fs::File;
 use std::fs::OpenOptions;

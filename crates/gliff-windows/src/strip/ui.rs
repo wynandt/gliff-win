@@ -3,7 +3,7 @@
 //! out; nothing here touches Win32, so a click, a drag, a middle click and a
 //! wheel turn are tests of a list.
 //!
-//! The rules (section 3.2 of the tabs design): a click acts when the button
+//! The rules: a click acts when the button
 //! goes up on what it went down on, so a press that slides off cancels; a
 //! press on a tab that moves past the drag distance becomes a drag, dropped
 //! where the pointer is let go; the middle button acts on the whole tab as the

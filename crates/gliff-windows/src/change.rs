@@ -1,8 +1,6 @@
 //! "Did it change?" for the parts of the window that act on a state only
 //! when it is a new one: the strip lays out and repaints, and the address
-//! field moves, only when what they show is different from last time. Doing
-//! it every pass of the message loop keeps the thread busy and makes the
-//! field blink.
+//! field moves, only when what they show is different from last time.
 
 /// The last value seen.
 #[derive(Clone, Debug, Default)]

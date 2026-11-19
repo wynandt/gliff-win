@@ -1,14 +1,11 @@
 //! The release chord and the tab-switch chords, decided on the hook thread.
 //! Pure.
 //!
-//! The release chord used to be seen only by the session, after the hook had
-//! sent it the key: hook thread, session task, UI event, UI thread. While the
-//! session was busy or not yet connected (a slow ssh), the hook already
-//! swallowed every key and the chord did nothing. So the hook watches for it
-//! itself and takes the keyboard back at once ([`HookGate::chord_fired`]); the
-//! session and the UI catch up afterwards. The switch chords are decided in
-//! the same place, by the same key tracking, so that they too work whichever
-//! way the modifiers were pressed and do not wait for a session.
+//! The hook watches for the release chord itself and takes the keyboard back at
+//! once ([`HookGate::chord_fired`]), even while the session is busy or not yet
+//! connected; the session and the UI catch up afterwards. The switch chords are
+//! decided in the same place, by the same key tracking, so that they too work
+//! whichever way the modifiers were pressed and do not wait for a session.
 //!
 //! [`ChordWatch`] sees every key the hook sees, including the ones that were
 //! already down when the grab began (which the session never sees). It returns

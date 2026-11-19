@@ -137,11 +137,9 @@ impl CursorImage {
         )
     }
 
-    /// The image if usable, else the system arrow. Hiding the pointer on a
-    /// headless session when the image is unusable lost it for good: the
-    /// compositor sends a transparent or flat image over some remote
-    /// windows and the video does not draw a cursor there either. The
-    /// cost is a possible second pointer when the video does draw one.
+    /// The image if usable, else the system arrow, never no pointer: the
+    /// compositor sends a transparent or flat image over some remote windows,
+    /// where the video draws no cursor either.
     pub fn pointer(&self) -> Pointer {
         if self.usable() {
             Pointer::Shape

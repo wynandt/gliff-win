@@ -6,7 +6,7 @@
 //!
 //! Upstream retries five times at a fixed 1500 ms and resets its count as
 //! soon as a session connects. This policy keeps the five retries and the
-//! give-up, and differs in two places (design 5.10): the wait doubles up to
+//! give-up, and differs in two places: the wait doubles up to
 //! a cap, and the count resets only after a session has stayed up for
 //! [`Policy::stable_after`], so a server that connects and drops at once
 //! ends in a give-up instead of a loop.

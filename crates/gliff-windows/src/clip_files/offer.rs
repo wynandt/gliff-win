@@ -1,11 +1,10 @@
 //! Checking the file list of a peer's offer, the same on every OS.
 //!
-//! Upstream's `validate_files` reads each path with the host's path parser.
-//! On Windows that parser sees `a:b?.txt` as a drive prefix and a name, so
-//! one legal Linux name made the client refuse a whole offer. The paths of an
-//! offer are `/`-separated text from another machine, so they are read here
-//! as text and never as host paths. What Windows cannot hold in a name is
-//! not refused: [`super::sanitize_component`] renames it on disk.
+//! The paths of an offer are `/`-separated text from another machine, so they
+//! are read here as text and never as host paths: upstream's `validate_files`
+//! uses the host's path parser, which on Windows reads `a:b?.txt` as a drive
+//! prefix and a name. What Windows cannot hold in a name is not refused:
+//! [`super::sanitize_component`] renames it on disk.
 //!
 //! This file must not use `std::path`; a test checks that.
 

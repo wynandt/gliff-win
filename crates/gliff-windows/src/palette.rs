@@ -1,11 +1,8 @@
-//! The colours the client draws itself: the tab strip, its dots, and later
-//! the failure panel. One struct holds all of them, so a second theme (a light
-//! one) adds a value and a choice and touches no drawing code. Only
-//! the dark values exist today.
+//! The colours the client draws itself: the tab strip, its dots and the
+//! failure panel, all in one [`Palette`]. Only the dark one exists.
 //!
-//! The values come from the design mockups, which are not in this repository.
-//! Translucent fills of the mockups are stored as the solid colour they
-//! make over the strip, because GDI fills with solid colours.
+//! Translucent fills are stored as the solid colour they make over the strip,
+//! because GDI fills with solid colours.
 
 /// An opaque colour.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

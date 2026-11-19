@@ -6,8 +6,7 @@
 //! Five settings can be chosen per machine, from the tab's menu: `screen`
 //! (Show as), `share_clipboard`, `sharp_colour`, `gpu_decode` and
 //! `send_win_l`. A choice is kept in `config.toml` as
-//! `[overrides."user@host"]`, the name the design for the settings window
-//! uses, so the file does not change when that window comes. The order for a
+//! `[overrides."user@host"]`. The order for a
 //! machine is: a flag, the machine's choice, the `[settings]` table, the
 //! default. A flag applies to every machine, so it locks the choice: the
 //! menu shows it greyed and says why.

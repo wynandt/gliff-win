@@ -4,9 +4,9 @@
 //! rules run in tests on any machine; the window only draws what this says
 //! and passes clicks to it.
 //!
-//! All pixel values are device pixels. The design's sizes are in logical
-//! pixels (96 dpi) and [`Metrics::at`] scales them; 100, 125, 150 and 200%
-//! give the strip heights 32, 40, 48 and 64 of the design.
+//! All pixel values are device pixels. Sizes are given in logical pixels
+//! (96 dpi) and [`Metrics::at`] scales them; 100, 125, 150 and 200% give
+//! strip heights of 32, 40, 48 and 64.
 
 use crate::connect::SshFailure;
 use crate::tabs::Status;
@@ -463,7 +463,7 @@ impl Layout {
     }
 }
 
-/// How a tab's dot looks (the design's section 3.4).
+/// How a tab's dot looks.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DotState {
     /// A hollow ring: no session and none wanted.

@@ -8,9 +8,8 @@
 //! plain key into a shortcut.
 //!
 //! The ledger keeps two facts per key: whether Windows saw its Down, and
-//! whether the remote machine did. It generalises the old set of keys that were
-//! down before a grab. It outlives a hook reinstall, so a key that went down
-//! in the gap still gets its Up. Pure.
+//! whether the remote machine did. It outlives a hook reinstall, so a key that
+//! went down in the gap still gets its Up. Pure.
 //!
 //! The ledger holds key codes in memory only. [`describe_down`] is the one
 //! way it is written to the log, and it writes a count and the names of the
@@ -310,8 +309,7 @@ impl Physical {
 
     /// Which of the keys Windows says are down may be released as stuck at
     /// the end of a grab: all but those the hook saw the user press and not
-    /// let go of. A key whose Down the hook never saw is let go of, as it
-    /// always was.
+    /// let go of. A key whose Down the hook never saw is let go of.
     pub fn stuck_at_grab_end(&self, windows_down: bool, vk: u16) -> bool {
         windows_down && self.seen(vk) != Seen::Down
     }

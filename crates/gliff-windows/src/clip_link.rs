@@ -7,7 +7,7 @@
 //! Windows thread blocks on one answer per render request.
 //!
 //! This module has no Windows code: the Windows thread is a [`Host`], and
-//! the session end is a closure, so both are replaced by fakes in tests.
+//! the session end is a closure.
 
 use std::path::PathBuf;
 use std::rc::Rc;

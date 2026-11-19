@@ -56,7 +56,7 @@ pub enum SshFailure {
 /// Classifies one failed ssh run. Pure: the stderr text and the exit code
 /// in, the class out.
 ///
-/// The order is the design's match order (11.4), most specific first, with
+/// The order is most specific first, with
 /// two decisions: a changed host key is tested before an unknown one (ssh
 /// prints "Host key verification failed" after both), and an unusable key
 /// file before a refused key (ssh prints both lines, and the file is the

@@ -1,5 +1,5 @@
-//! The failure panel: what the picture area of a tab that gave up shows
-//! (design 11.3). A title (the message's first sentence), the second
+//! The failure panel: what the picture area of a tab that gave up shows.
+//! A title (the message's first sentence), the second
 //! sentence, one primary button, **Details** beside it, and a link into the
 //! key guide where one helps.
 //!

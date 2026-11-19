@@ -1,12 +1,11 @@
 //! The pure decision behind the once-a-second foreground check.
 //!
-//! The keyboard grab follows `WM_SETFOCUS` and `WM_KILLFOCUS`. Windows does not
-//! always send the second one: a game that starts in front of the client took
-//! the foreground, the client heard nothing, and the hook went on swallowing
-//! every key until Ctrl+Alt+Del. So while the keyboard is grabbed by focus, the
-//! window asks which window is in front, about once a second, and this module
-//! says what that means. No Win32 here; the window turns what it read into a
-//! [`Relation`] and passes it in.
+//! The keyboard grab follows `WM_SETFOCUS` and `WM_KILLFOCUS`, and Windows does
+//! not always send the second one: a program that starts in front of the client
+//! can take the foreground without it. So while the keyboard is grabbed by
+//! focus, the window asks which window is in front, about once a second, and
+//! this module says what that means. No Win32 here; the window turns what it
+//! read into a [`Relation`] and passes it in.
 //!
 //! One rule keeps it safe: only another program's window counts against the
 //! grab, and only when it is seen twice in a row. No window, an unreadable
