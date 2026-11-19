@@ -11,6 +11,10 @@ rust-version.workspace = true
 [lints]
 workspace = true
 
+[lib]
+name = "gwin_verify"
+path = "src/lib.rs"
+
 [[bin]]
 name = "gwin-verify"
 path = "src/main.rs"
