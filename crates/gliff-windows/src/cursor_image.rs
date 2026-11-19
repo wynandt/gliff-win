@@ -54,6 +54,8 @@ pub enum Verdict {
     Transparent,
     /// Every pixel is the same colour (what Hyprland sends with no image).
     Flat,
+    /// The hotspot lies outside the image (upstream `remote_cursor`).
+    Hotspot,
 }
 
 impl Verdict {
@@ -64,6 +66,7 @@ impl Verdict {
             Self::Short => "short payload",
             Self::Transparent => "transparent",
             Self::Flat => "one flat colour",
+            Self::Hotspot => "hotspot outside the image",
         }
     }
 }
@@ -92,7 +95,7 @@ impl LogGate {
 
 impl CursorImage {
     /// Upstream's `remote_cursor` test: 1 to 1024 px a side, the whole
-    /// image present, and a visible shape.
+    /// image present, a hotspot inside the image, and a visible shape.
     pub fn usable(&self) -> bool {
         self.verdict() == Verdict::Usable
     }
@@ -104,6 +107,10 @@ impl CursorImage {
         }
         if (self.argb.len() as u64) < needed {
             return Verdict::Short;
+        }
+        let (hx, hy) = self.hot;
+        if hx < 0 || hy < 0 || (hx as u32) >= self.width || (hy as u32) >= self.height {
+            return Verdict::Hotspot;
         }
         let (pixels, _) = self.argb.as_chunks::<4>();
         if pixels.iter().all(|p| p[3] == 0) {
@@ -170,11 +177,15 @@ mod tests {
     use super::Pointer;
 
     fn image(width: u32, height: u32, argb: Vec<u8>) -> CursorImage {
+        image_at(width, height, (0, 0), argb)
+    }
+
+    fn image_at(width: u32, height: u32, hot: (i32, i32), argb: Vec<u8>) -> CursorImage {
         CursorImage {
             id: 1,
             width,
             height,
-            hot: (0, 0),
+            hot,
             argb: Bytes::from(argb),
         }
     }
@@ -191,6 +202,17 @@ mod tests {
     }
 
     #[test]
+    fn a_visible_shape_with_a_hotspot_outside_the_image_is_not_usable() {
+        use super::Verdict;
+        let mut pixels = vec![0u8; 2 * 2 * 4];
+        pixels[..4].copy_from_slice(&[0, 0, 0, 255]);
+        let img = image_at(2, 2, (2, 0), pixels);
+        assert_eq!(img.verdict(), Verdict::Hotspot);
+        assert!(!img.usable());
+        assert_eq!(img.pointer(), Pointer::Default);
+    }
+
+    #[test]
     fn the_verdict_names_why_an_image_is_or_is_not_usable() {
         use super::Verdict;
         assert_eq!(arrow().verdict(), Verdict::Usable);
@@ -202,6 +224,21 @@ mod tests {
         assert_eq!(image(2, 2, vec![0; 8]).verdict(), Verdict::Short);
         assert_eq!(image(0, 0, Vec::new()).verdict(), Verdict::BadSize);
         assert_eq!(image(1025, 1, vec![0; 4100]).verdict(), Verdict::BadSize);
+        let mut pixels = vec![0u8; 2 * 2 * 4];
+        pixels[..4].copy_from_slice(&[0, 0, 0, 255]);
+        assert_eq!(
+            image_at(2, 2, (2, 0), pixels.clone()).verdict(),
+            Verdict::Hotspot
+        );
+        assert_eq!(
+            image_at(2, 2, (0, 2), pixels.clone()).verdict(),
+            Verdict::Hotspot
+        );
+        assert_eq!(
+            image_at(2, 2, (-1, 0), pixels.clone()).verdict(),
+            Verdict::Hotspot
+        );
+        assert_eq!(image_at(2, 2, (1, 1), pixels).verdict(), Verdict::Usable);
     }
 
     #[test]
@@ -252,6 +289,11 @@ mod tests {
                     v
                 }),
             ),
+            ("hotspot", {
+                let mut v = vec![0u8; 2 * 2 * 4];
+                v[..4].copy_from_slice(&[0, 0, 0, 255]);
+                image_at(2, 2, (2, 1), v)
+            }),
         ];
         for (name, img) in cases {
             assert!(!img.usable(), "{name}");
