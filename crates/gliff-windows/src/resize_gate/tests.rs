@@ -1,5 +1,3 @@
-//! Resize settlement and latest-request deduplication.
-
 use std::time::Duration;
 use std::time::Instant;
 
@@ -54,7 +52,6 @@ fn a_size_that_changes_again_restarts_the_settle() {
         Some(ResizeGate::SETTLE),
         "a new size re-arms"
     );
-    // The first timer fires 200 ms after t0: 150 ms of the new size only.
     assert_eq!(
         g.on_settle(t0 + ResizeGate::SETTLE),
         Settled::Wait(Duration::from_millis(150))
@@ -148,7 +145,6 @@ fn the_last_request_is_not_repeated() {
 
 #[test]
 fn a_scale_change_at_the_same_size_is_sent() {
-    // Upstream gates size == view only when the scale is unchanged too.
     let (mut g, _) = gate();
     assert_eq!(
         g.on_dpi_changed((1920, 1200), 96),
@@ -162,7 +158,6 @@ fn sizes_under_64_are_skipped() {
     let (mut g, t0) = gate();
     assert_eq!(g.on_exit_size_move((63, 400), DPI), None);
     assert_eq!(g.on_exit_size_move((400, 62), DPI), None);
-    // A minimised window reports 0x0.
     let _ = g.on_size((0, 0), DPI, Moving::Free, t0);
     assert_eq!(g.on_settle(t0 + ResizeGate::SETTLE), Settled::Nothing);
     assert_eq!(g.requested(), req(1920, 1200, 2.0), "nothing changed");

@@ -73,8 +73,6 @@ fn text_on_the_clipboard_turns_paste_on_even_in_an_empty_field() {
 
 #[test]
 fn each_row_is_carried_out_by_the_edit_fields_own_message() {
-    // WM_CUT, WM_COPY and WM_PASTE, and EM_SETSEL over the whole text, as
-    // Ctrl+A does in the field.
     assert_eq!((message(EditCommand::Cut).msg, 0x0300), (0x0300, 0x0300));
     let copy = message(EditCommand::Copy);
     assert_eq!((copy.msg, copy.wparam, copy.lparam), (0x0301, 0, 0));

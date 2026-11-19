@@ -12,8 +12,6 @@ use crate::tabs::Status;
 use crate::tabs::Tabs;
 use std::time::Instant;
 
-/// Six logical pixels per character at the design's 13 px font, scaled with
-/// the font.
 struct Fixed;
 
 impl Measure for Fixed {
@@ -24,7 +22,6 @@ impl Measure for Fixed {
 
 const DPIS: [u32; 4] = [96, 120, 144, 192];
 
-/// Tabs 1..=n named `name`, `TabId`s from a real model so they are valid.
 fn items(names: &[&str]) -> Vec<TabItem> {
     let mut tabs = Tabs::new();
     for name in names {
@@ -83,7 +80,6 @@ fn a_few_tabs_keep_their_own_width_and_the_add_button_follows_the_last() {
     assert_eq!(a.rect.left, m.pad);
     assert_eq!(b.rect.left, a.rect.right + m.gap);
     assert!(b.rect.width() > a.rect.width(), "a longer name is wider");
-    // No minimum: a tab is its name and its padding, however short.
     let own = |text: &str| {
         m.label_pad + Fixed.text_width(text, l.text) + m.label_gap + m.slot + m.slot_margin
     };
@@ -110,7 +106,6 @@ fn the_font_shrinks_together_before_the_chevron_appears() {
     assert_eq!(narrow.chevron, None, "all five still fit");
     assert_eq!(narrow.max_scroll, 0);
     assert!(narrow.add.right <= narrow.fullscreen.left);
-    // Every name has the room it needs, at the font the strip chose.
     for (tab, item) in narrow.tabs.iter().zip(&tabs) {
         assert!(tab.label.width() >= Fixed.text_width(&item.label, narrow.text));
     }
@@ -131,8 +126,6 @@ fn when_even_the_smallest_font_does_not_fit_the_strip_scrolls_and_the_chevron_ap
     }
 }
 
-/// Addresses that differ only at the end, and long ones, the way a
-/// user with many similar machines meets them.
 fn look_alikes() -> Vec<TabItem> {
     let mut names: Vec<String> = (1..=12).map(|i| format!("user@203.0.113.{i}")).collect();
     names.extend((1..=4).map(|i| format!("deploy@build-server-eng-west.example.net-{i}")));
@@ -323,10 +316,8 @@ fn a_tab_scrolled_out_of_view_cannot_be_hit_and_the_chevron_can() {
     assert_eq!(l.hit(l.viewport.left - 1, mid_y), Hit::Nothing);
     let chevron = l.chevron.expect("chevron");
     assert_eq!(l.hit(chevron.left + 1, mid_y), Hit::Chevron);
-    // A tab partly under the add button is not reachable through it.
     let at_edge = l.hit(l.viewport.right + 1, mid_y);
     assert!(matches!(at_edge, Hit::Nothing | Hit::Add));
-    // A partly visible tab is hit only inside the viewport.
     for x in l.viewport.left..l.viewport.right {
         if let Hit::Tab(id) | Hit::Slot(id) = l.hit(x, mid_y) {
             assert!(tabs.iter().any(|t| t.id == id));
@@ -476,7 +467,6 @@ mod bar {
     fn the_bar_makes_the_tabs_overflow_sooner_than_the_add_button_does() {
         let m = Metrics::at(96);
         let tabs = many(4);
-        // A width where four tabs and a button fit but not four tabs and the bar.
         let width = (60..2000)
             .find(|w| {
                 lay(&m, *w, &tabs, 0).chevron.is_none() && lay_bar(&m, *w, &tabs).chevron.is_some()
@@ -493,7 +483,6 @@ mod bar {
         let y = (bar.go.top + bar.go.bottom) / 2;
         assert_eq!(l.hit(bar.go.left + 1, y), Hit::Go);
         assert_eq!(l.hit(bar.list.left + 1, y), Hit::List);
-        // The edit field and the border are not a button.
         assert_eq!(l.hit(bar.edit.left + 1, y), Hit::Nothing);
         let closed = lay(&m, 1000, &items(&["a@x"]), 0);
         assert_eq!(closed.hit(closed.add.left + 1, y), Hit::Add);

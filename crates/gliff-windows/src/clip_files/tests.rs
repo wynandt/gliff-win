@@ -16,7 +16,6 @@ use super::spool_paths;
 use super::top_level_units;
 use super::validate_offer;
 
-/// A fresh directory under the system temp dir, removed on drop.
 struct TempDir(PathBuf);
 
 impl TempDir {
@@ -64,8 +63,6 @@ fn dir(path: &str) -> ClipboardFile {
         dir: true,
     }
 }
-
-// Sanitizer.
 
 #[test]
 fn forbidden_characters_become_underscores() {
@@ -233,8 +230,6 @@ fn the_sanitized_offer_has_distinct_names_whatever_the_input() {
     assert_eq!(lower.len(), paths.len(), "{paths:?}");
 }
 
-// Long paths.
-
 #[test]
 fn long_drive_and_unc_paths_get_the_extended_prefix() {
     let tail = "a".repeat(250);
@@ -262,8 +257,6 @@ fn short_relative_and_unix_paths_are_left_alone() {
     let long_relative = PathBuf::from("a".repeat(300));
     assert_eq!(extended(&long_relative), long_relative);
 }
-
-// Walker.
 
 #[test]
 fn a_tree_is_listed_in_name_order_with_slash_paths() {
@@ -337,7 +330,6 @@ fn roots_with_one_name_are_offered_numbered() {
         extended(&second),
         "the content is the second's"
     );
-    // Offered twice, the same path is the same file.
     let twice = list_files(&[first.clone(), first]).expect("listed");
     assert_eq!(twice.entries[1].path, "same (2).txt");
 }
@@ -377,8 +369,6 @@ fn too_many_entries_fail_the_listing() {
     ));
 }
 
-// Spool.
-
 #[test]
 fn spools_are_separate_directories_and_vanish_on_drop() {
     let tmp = TempDir::new("spool");
@@ -393,7 +383,6 @@ fn spools_are_separate_directories_and_vanish_on_drop() {
     assert!(second.dir().exists());
 }
 
-/// A spool directory with a file in it, named as a run of `pid` would.
 fn leave(base: &Path, pid: u32, n: u32) -> PathBuf {
     let dir = base.join(format!("{pid}-{n}"));
     std::fs::create_dir_all(&dir).expect("a spool directory");
@@ -473,7 +462,6 @@ fn a_bad_hdrop_is_refused() {
 
 #[test]
 fn the_top_level_budget_follows_the_spool_directory_length() {
-    // 259 units in all, less the directory, a separator, within 32..=255.
     assert_eq!(
         top_level_units(Path::new("")),
         255,
@@ -485,10 +473,6 @@ fn the_top_level_budget_follows_the_spool_directory_length() {
     let huge = PathBuf::from(format!(r"C:\{}", "x".repeat(400)));
     assert_eq!(top_level_units(&huge), 32, "never below a usable name");
 }
-
-// Checking an offer. These read the paths as text, so they say the same on
-// every OS: Windows reads `a:b?.txt` as a drive and a name, and upstream's
-// check, which uses the host's path parser, refused the whole offer there.
 
 fn offer_of(paths: &[&str]) -> Vec<ClipboardFile> {
     paths.iter().map(|p| file(p, 1)).collect()
@@ -573,9 +557,6 @@ fn traversal_and_absolute_paths_are_refused_on_every_os() {
 
 #[test]
 fn backslashes_are_name_characters_that_the_sanitizer_removes() {
-    // A Linux name is bytes between `/`; a backslash in it is not a Windows
-    // separator once the sanitizer has run, so none of these can leave the
-    // spool or form a drive or a parent part.
     let paths = [
         "..\\x",
         "a\\..\\b",

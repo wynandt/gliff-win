@@ -93,8 +93,6 @@ fn the_server_messages_say_which_version_is_needed() {
     assert_eq!(missing.button, Button::CheckAgain);
 }
 
-/// There is no settings window, so the text must name what works today: the
-/// flag and the `config.toml` key.
 #[test]
 fn a_missing_server_names_the_flag_and_the_config_key_not_a_settings_window() {
     let missing = message(&SshFailure::ServerMissing, &target());
@@ -157,7 +155,6 @@ fn windows_ssh_with_no_words_for_a_failed_connect_is_an_unreachable_machine() {
         classify(text, Some(255), Phase::Session),
         SshFailure::Unreachable
     );
-    // Only a failed connect: an unknown error elsewhere stays unknown.
     let other = "ssh: something else: Unknown error\r\n";
     assert!(matches!(
         classify(other, Some(255), Phase::Session),
@@ -184,7 +181,6 @@ fn crlf_line_ends_do_not_change_the_class_or_the_words() {
 
 #[test]
 fn a_changed_host_key_is_not_taken_for_an_unknown_one() {
-    // ssh prints "Host key verification failed." after both.
     let text = "@@@ WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED! @@@\n\
                 Host key verification failed.\n";
     assert_eq!(
@@ -195,7 +191,6 @@ fn a_changed_host_key_is_not_taken_for_an_unknown_one() {
 
 #[test]
 fn an_unusable_key_file_is_not_taken_for_a_refused_key() {
-    // ssh prints "Permission denied (publickey)" after it too.
     let text = "WARNING: UNPROTECTED PRIVATE KEY FILE!\n\
                 user@h: Permission denied (publickey).\n";
     assert_eq!(
@@ -211,12 +206,10 @@ fn only_a_remote_shell_exit_means_the_server_is_missing() {
         classify(text, Some(127), Phase::Session),
         SshFailure::ServerMissing
     );
-    // Another exit code is the server's own business, not a missing server.
     assert!(matches!(
         classify(text, Some(1), Phase::Session),
         SshFailure::Other { .. }
     ));
-    // ssh's own failures exit 255, and a killed ssh has no exit at all.
     let own = "Load key \"k\": No such file or directory\n";
     for exit in [Some(255), None] {
         assert!(
@@ -283,8 +276,6 @@ fn the_log_line_has_the_class_the_exit_and_the_words() {
     assert!(killed.contains("ssh exit none"), "{killed}");
 }
 
-/// GitHub's heading anchor: lower case, letters digits hyphens and spaces
-/// kept, spaces to hyphens.
 fn anchor_of(heading: &str) -> String {
     heading
         .trim_start_matches('#')

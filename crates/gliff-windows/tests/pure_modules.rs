@@ -1,7 +1,3 @@
-//! The config folder, the settings, the history and the start-up report are
-//! the same on every platform: none of them may use the `windows` crate. The
-//! Win32 shell (`app.rs` and the modules it calls) reads their results.
-
 use std::fs;
 use std::path::Path;
 
@@ -29,10 +25,6 @@ fn sources_of(name: &str) -> Vec<(String, String)> {
         .collect()
 }
 
-/// The source with its comments and the text of its strings and characters
-/// blanked, so that a `//` inside a string does not hide the rest of its line
-/// and a comment cannot hide or fake a use. Line breaks stay, so a position in
-/// the result is a position in the source.
 fn code_only(source: &str) -> String {
     let chars: Vec<char> = source.chars().collect();
     let mut out = String::with_capacity(source.len());
@@ -90,7 +82,6 @@ fn code_only(source: &str) -> String {
             out.push(' ');
             i += 1;
         } else if c == '\'' && is_char_literal(&chars, i) {
-            // `'x'` closes at i + 2; `'\n'` and `'\''` close after the escape.
             let end = if chars[i + 1] == '\\' {
                 i + 3 + chars[i + 3..].iter().position(|&c| c == '\'').unwrap_or(0)
             } else {
@@ -106,8 +97,6 @@ fn code_only(source: &str) -> String {
     out
 }
 
-/// For a raw string starting at `at` (`r"`, `r#"`, `br"`, `cr#"`): the index of
-/// its `r` and the number of `#` in its opening.
 fn raw_string_at(chars: &[char], at: usize) -> Option<(usize, usize)> {
     let ident = |c: char| c.is_alphanumeric() || c == '_';
     let start = match (chars[at], chars.get(at + 1)) {
@@ -122,8 +111,6 @@ fn raw_string_at(chars: &[char], at: usize) -> Option<(usize, usize)> {
     (chars.get(start + 1 + hashes) == Some(&'"')).then_some((start, hashes))
 }
 
-/// A `'` starts a character literal, not a lifetime, when a closing `'`
-/// follows one character (or one escape).
 fn is_char_literal(chars: &[char], at: usize) -> bool {
     match chars.get(at + 1) {
         Some('\\') => chars[at + 2..].iter().take(10).any(|&c| c == '\''),
@@ -132,13 +119,6 @@ fn is_char_literal(chars: &[char], at: usize) -> bool {
     }
 }
 
-/// The lines in which `code` (see [`code_only`]) uses the `windows` crate or
-/// one of its support crates (`windows_core`, `windows_targets`, `windows_sys`
-/// and the like): the name as the root of a path, in a `use`, an
-/// `extern crate` or an expression, over one line or several. The `windows`
-/// module of the standard library (`std::os::windows::io`, also in
-/// `use std::os::{windows::io}`) and a method or a variable of that name
-/// are not uses.
 fn windows_uses(code: &str) -> Vec<usize> {
     let chars: Vec<char> = code.chars().collect();
     let ident = |c: char| c.is_alphanumeric() || c == '_';
@@ -172,7 +152,6 @@ fn windows_uses(code: &str) -> Vec<usize> {
     found
 }
 
-/// The index just after the last non-blank character before `at`.
 fn skip_back(chars: &[char], at: usize) -> usize {
     let mut end = at;
     while end > 0 && chars[end - 1].is_whitespace() {
@@ -189,7 +168,6 @@ fn skip_forward(chars: &[char], at: usize) -> usize {
     i
 }
 
-/// The identifier that ends at `end` (empty when there is none).
 fn word_before(chars: &[char], end: usize) -> String {
     let mut start = end;
     while start > 0 && (chars[start - 1].is_alphanumeric() || chars[start - 1] == '_') {
@@ -198,14 +176,11 @@ fn word_before(chars: &[char], end: usize) -> String {
     chars[start..end].iter().collect()
 }
 
-/// True when the name that follows `before` is a member of something else: of
-/// a path (`std::os::`, also through an open `{`) or a value (`items.`).
 fn is_member(chars: &[char], before: usize) -> bool {
     if before > 0 && chars[before - 1] == '.' {
         return true;
     }
     let mut end = before;
-    // Inside `{ .. }` of a use list, the path before the `{` is the parent.
     let mut depth = 0_i32;
     let mut at = before;
     while at > 0 {
@@ -224,7 +199,6 @@ fn is_member(chars: &[char], before: usize) -> bool {
     if end < 2 || chars[end - 2..end] != [':', ':'] {
         return false;
     }
-    // `use ::windows::..` starts at the root; `std::os::windows` does not.
     let word = word_before(chars, skip_back(chars, end - 2));
     !word.is_empty() && word != "use"
 }

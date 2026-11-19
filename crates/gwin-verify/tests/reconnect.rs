@@ -1,20 +1,3 @@
-//! A tab whose session ends, end to end on the build machine: the real
-//! `Tabs` and `SessionSet` over real session drivers. Each machine's `ssh` is
-//! a script that follows a plan, one action per attempt (the last repeats):
-//!
-//! - `ok`: the fake server, as `scripts/fake-ssh` runs it;
-//! - `die:N`: the fake server, killed after N seconds (a server that dies);
-//! - `refused`, `key_refused`, `host_changed`: real ssh output from
-//!   `crates/gliff-windows/tests/ssh_corpus`, exit 255.
-//!
-//! The delays are short (see [`FAST`]) so a test takes seconds, not minutes;
-//! the schedule itself is the model's, tested with a fake clock in
-//! `gliff-windows`. What these tests add is the real thing around it: a
-//! session that dies for real, the classified failure of real ssh text, and
-//! a close while a tab waits. Each prints the tab's status as it changed and
-//! the attempts the scripts saw (run with `--nocapture` to read them).
-
-// The loop runs through bash wrappers (`scripts/fake-ssh`): build machine only.
 #![cfg(unix)]
 
 use std::path::Path;
@@ -50,8 +33,6 @@ const SIZE: ResizeReq = ResizeReq {
     scale: 1.0,
 };
 
-/// Short delays: 100 ms, 200, 400, 400, 400, and five retries as in the
-/// real policy. A session counts as stable after 3 s.
 const FAST: Policy = Policy {
     first_delay: Duration::from_millis(100),
     max_delay: Duration::from_millis(400),
@@ -66,8 +47,6 @@ impl Waker for Quiet {
     fn event(&self) {}
 }
 
-/// The ssh script of one machine. It counts its calls in `<dir>/count`,
-/// reads its action from `<dir>/plan`, and logs each attempt to `<dir>/log`.
 fn write_ssh(dir: &Path, plan: &str) -> PathBuf {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let corpus = root.join("crates/gliff-windows/tests/ssh_corpus/openssh-10.0p2-linux");
@@ -105,7 +84,6 @@ esac
     wrapper
 }
 
-/// A window of machines with plans, and the UI thread's loop.
 struct Rig {
     set: SessionSet<SessionHandle>,
     tabs: Tabs,
@@ -196,7 +174,6 @@ impl Rig {
         }
     }
 
-    /// Prints a line for each tab whose status changed.
     fn note(&mut self) {
         let now: Vec<String> = self.names.iter().map(|n| self.describe(n)).collect();
         let ms = self.began.elapsed().as_millis();
@@ -208,7 +185,6 @@ impl Rig {
         self.last = now;
     }
 
-    /// Polls like the UI thread until `until` holds or `within` passes.
     fn run(&mut self, within: Duration, until: impl Fn(&Self) -> bool) -> bool {
         let deadline = Instant::now() + within;
         while Instant::now() < deadline {
@@ -227,11 +203,8 @@ impl Rig {
         false
     }
 
-    /// How many times this machine's ssh was run.
     fn attempts(&self, target: &str) -> usize {
         let dir = self.base.join(target.replace('@', "-"));
-        // The fake ssh rewrites the file in place, so a read can land between
-        // the truncate and the write and see nothing: read again.
         for _ in 0..50 {
             match std::fs::read_to_string(dir.join("count")) {
                 Err(_) => return 0,
@@ -311,7 +284,6 @@ fn ssh_refused_twice_then_recovering_is_reconnected() {
 fn a_refused_key_is_not_retried() {
     let mut rig = Rig::new("key", &[("a@one", "key_refused")]);
     assert!(rig.run(Duration::from_secs(30), |r| gave_up(r, "a@one").is_some()));
-    // Far longer than the schedule's whole span (about 1.5 s).
     rig.run(Duration::from_secs(4), |_| false);
     assert_eq!(rig.attempts("a@one"), 1, "no automatic retry");
     let text = gave_up(&rig, "a@one").expect("still failed");
@@ -323,13 +295,11 @@ fn a_refused_key_is_not_retried() {
         .find(|tab| tab.target().as_str() == "a@one")
         .expect("the tab")
         .id();
-    // A click on a tab that needs the person only selects it.
     let effects = rig.tabs.click(id);
     rig.set.run(&mut rig.tabs, effects);
     rig.run(Duration::from_secs(2), |_| false);
     assert_eq!(rig.attempts("a@one"), 1, "a click does not retry");
 
-    // "Try again" is the person's retry: one more attempt, again not repeated.
     let effects = rig.tabs.reconnect(id);
     rig.set.run(&mut rig.tabs, effects);
     assert!(rig.run(Duration::from_secs(30), |r| gave_up(r, "a@one").is_some()));

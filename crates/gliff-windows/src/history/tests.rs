@@ -1,5 +1,3 @@
-//! The recent hosts: the list's rules, then the file's.
-
 use std::fs;
 
 use super::HistoryFile;
@@ -344,7 +342,6 @@ fn the_history_never_touches_the_config_file() {
 #[test]
 fn a_file_that_cannot_be_read_is_left_alone_and_not_called_damaged() {
     let dir = TestDir::new();
-    // A folder in place of the file makes the read fail with an I/O error.
     fs::create_dir(file_in(&dir)).expect("folder");
     let (mut file, notes) = HistoryFile::load(&file_in(&dir), true);
     assert!(notes[0].contains("cannot be read"), "{notes:?}");
@@ -442,7 +439,6 @@ fn a_forget_that_failed_to_save_writes_when_it_is_asked_again() {
     let (mut file, _) = HistoryFile::load(&file_in(&dir), true);
     file.record(host("a@one")).expect("saved");
     file.record(host("a@two")).expect("saved");
-    // A folder in the way makes the save fail; the list in memory changed.
     fs::remove_file(file_in(&dir)).expect("remove");
     fs::create_dir(file_in(&dir)).expect("blocker");
     file.forget(&host("a@one")).expect_err("cannot save");

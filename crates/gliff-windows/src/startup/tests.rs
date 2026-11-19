@@ -201,7 +201,6 @@ fn the_report_shows_each_machines_saved_choice_and_where_it_came_from() {
             "send_win_l": {"value": false, "source": "default", "locked": false},
         })
     );
-    // A machine with a choice but no tab is listed too.
     assert_eq!(connection["me@c"]["screen"]["value"], "mirror");
     assert_eq!(connection["me@c"]["screen"]["source"], "machine");
 }
@@ -224,7 +223,6 @@ fn a_flag_shows_as_the_source_and_locks_the_machines_choice_in_the_report() {
         a["share_clipboard"],
         serde_json::json!({"value": false, "source": "flag", "locked": true})
     );
-    // The saved choice is still in the file, and loads.
     assert_eq!(
         fs::read_to_string(dir.path().join("config.toml")).expect("read"),
         TWO_MACHINES,

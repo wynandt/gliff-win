@@ -23,7 +23,6 @@ fn spec() -> SshSpec {
     }
 }
 
-/// Answers every call the same way and remembers what was asked.
 struct Canned {
     answer: RefCell<Option<Result<Output, ToolError>>>,
     asked: RefCell<Vec<Cmd>>,

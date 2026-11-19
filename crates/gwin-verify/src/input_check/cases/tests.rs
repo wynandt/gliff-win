@@ -30,7 +30,6 @@ use super::system_chords;
 use super::wheel;
 use crate::input_check::keys_plan;
 
-/// The committed table, so the test fails if a row becomes unsendable.
 const TABLE: &str = include_str!("../../../../../docs/phase4/super-chords.tsv");
 
 #[test]
@@ -277,7 +276,6 @@ fn the_thumb_buttons_are_checked_by_the_codes_each_mapping_sends() {
 
 #[test]
 fn every_wheel_step_is_followed_by_more_than_the_scroll_event_delay() {
-    // Hyprland's `binds:scroll_event_delay` defaults to 300 ms.
     let mut steps_without_wait = 0;
     for case in wheel() {
         let acts: Vec<_> = case
@@ -286,7 +284,6 @@ fn every_wheel_step_is_followed_by_more_than_the_scroll_event_delay() {
             .filter(|a| matches!(a, Act::WheelEvent { .. } | Act::Pause(_)))
             .collect();
         for (i, act) in acts.iter().enumerate() {
-            // Only a whole notch is a wheel step; anything finer is smooth.
             let Act::WheelEvent { delta, .. } = act else {
                 continue;
             };
@@ -403,12 +400,6 @@ fn every_system_chord_is_followed_by_the_modifier_probe() {
     }
 }
 
-/// Replays the default plan against the client's own [`GrabState`] and
-/// checks that every release case sends its chord to a client that is
-/// grabbed. A case that follows another with the same flags inherits the
-/// client the harness kept: after a release in focus mode, focusing the
-/// window again does not grab (only a click does), so a second chord would go
-/// to Windows and no Ctrl or Alt would be forwarded.
 #[test]
 fn a_release_case_sends_its_chord_to_a_client_that_is_grabbed() {
     let plan = keys_plan(&[]).expect("the default plan");
@@ -419,7 +410,6 @@ fn a_release_case_sends_its_chord_to_a_client_that_is_grabbed() {
         if running.as_ref() != Some(&case.flags) {
             let hover = case.flags.iter().any(|f| f == "hover");
             state = GrabState::new(if hover { Follow::Hover } else { Follow::Focus });
-            // A fresh client is focused with the pointer over it.
             state.handle(Event::Focus(Focus::Gained));
             state.handle(Event::Pointer(Pointer::Entered));
             running = Some(case.flags.clone());

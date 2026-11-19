@@ -25,7 +25,6 @@ fn strings(args: &[OsString]) -> Vec<String> {
         .collect()
 }
 
-/// A script standing in for ssh, in a fresh folder.
 #[cfg(unix)]
 fn script(name: &str, body: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("gwin-runner-{}-{name}", std::process::id()));
@@ -39,9 +38,6 @@ fn script(name: &str, body: &str) -> PathBuf {
 
 #[test]
 fn no_call_the_client_makes_weakens_ssh() {
-    // Section 11.7 of the design: the client never turns off host key
-    // checking, never forwards the agent, never forces or allows passwords,
-    // and never asks to be prompted.
     let spec = spec(Path::new("ssh"));
     let version = Cmd::version(&spec).expect("a valid spec");
     let all = [
@@ -106,9 +102,6 @@ mod real {
     use super::super::Tools;
     use super::{script, spec};
 
-    /// Writing a script and starting it must not overlap with another test
-    /// starting a process: a forked child that still holds the script's
-    /// write handle makes the start fail with "text file busy".
     static SERIAL: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     fn serial() -> std::sync::MutexGuard<'static, ()> {
@@ -138,7 +131,6 @@ mod real {
         );
         let cmd = Cmd::version(&spec(&ssh)).expect("a valid spec");
         let output = RealTools.run(&cmd).expect("it ran");
-        // Only the first part is kept, and the program still ran to the end.
         assert_eq!(output.stdout.len(), 64 * 1024);
         assert_eq!(output.stderr, "done\n");
         assert_eq!(output.exit, Some(0));

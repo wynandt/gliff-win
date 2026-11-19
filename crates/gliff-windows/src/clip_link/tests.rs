@@ -46,7 +46,6 @@ impl Drop for TempDir {
     }
 }
 
-/// A host that hands every event to the test.
 struct Recorder(Mutex<mpsc::Sender<HostEvent>>);
 
 impl Host for Recorder {
@@ -181,12 +180,10 @@ fn a_paste_fetches_the_body_from_the_server() {
 fn start_and_stop_clean_the_spool_but_never_a_running_clients() {
     let live = std::process::id();
     let rig = rig("sweep", |spool| {
-        // Process id 4294967000 does not exist.
         std::fs::create_dir_all(spool.join("4294967000-1")).expect("an old spool dir");
         std::fs::write(spool.join("4294967000-1").join("a.txt"), b"x").expect("an old file");
         std::fs::create_dir_all(spool.join(format!("{live}-77"))).expect("this process's dir");
     });
-    // Anything the thread has handled proves the start-up sweep has run.
     rig.engine.peer(
         ClipboardMsg::Offer {
             serial: 1,

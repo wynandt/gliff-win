@@ -40,8 +40,6 @@ enum Op {
     DeleteMarker,
 }
 
-/// An in-memory registry that records every call. Nothing here touches a
-/// real registry.
 #[derive(Debug, Default)]
 struct Fake {
     value: Option<u32>,
@@ -49,22 +47,15 @@ struct Fake {
     ops: Vec<Op>,
     fail_write_value: bool,
     fail_write_marker: bool,
-    /// The marker write stops after its first value, as a crash or a
-    /// failing registry call can leave it.
     fail_write_marker_midway: bool,
-    /// What a marker that stopped midway leaves behind.
     partial_marker: bool,
     fail_delete_marker: bool,
     fail_reads: bool,
-    /// How many holds ([`Registry::hold`]) are open now.
     holds: Rc<Cell<u32>>,
-    /// Writes made while nothing was held.
     unheld: Vec<Op>,
-    /// What an exiting process answers to a turn-on.
     refuse_set_on: bool,
 }
 
-/// An open hold on the fake registry.
 struct FakeHold(Rc<Cell<u32>>);
 
 impl Drop for FakeHold {
@@ -321,8 +312,6 @@ fn exit_is_immediate_and_idempotent() {
     );
     assert!(p.registry().ops.len() > n, "only a marker read");
 
-    // The marker went while the setting was held (the watchdog finished):
-    // there is nothing to restore, and the policy stops counting on it.
     let mut p = policy(Some(0));
     p.want(Want::On, 0);
     p.registry.marker = None;
@@ -377,7 +366,6 @@ fn a_failed_read_disables_the_route() {
 fn a_failed_restore_keeps_the_marker_and_retries() {
     let mut p = policy(None);
     p.want(Want::On, 0);
-    // The marker removal fails after the value is back.
     p.registry.fail_delete_marker = true;
     let c = p.exit();
     assert!(matches!(c, Change::Failed(_)), "{c:?}");
@@ -427,19 +415,16 @@ fn a_dead_clients_marker_is_repaired_at_start_in_every_mode() {
         fake
     };
     let none = Running(BTreeSet::new());
-    // The mode was switched to chord after the crash: no policy, yet repaired.
     let (lock, rec) = start_up(stale(), false, Some(ME), &none);
     assert!(
         lock.is_none() && matches!(rec, Recovery::Recovered(_)),
         "{rec:?}"
     );
-    // The same with no readable owner while the mode is registry.
     let (lock, rec) = start_up(stale(), true, None, &none);
     assert!(
         lock.is_none() && matches!(rec, Recovery::Recovered(_)),
         "{rec:?}"
     );
-    // Registry mode keeps the policy, and it sees the repair done.
     let (lock, rec) = start_up(stale(), true, Some(ME), &none);
     let lock = lock.expect("the policy");
     assert!(matches!(rec, Recovery::Recovered(_)), "{rec:?}");
@@ -447,7 +432,6 @@ fn a_dead_clients_marker_is_repaired_at_start_in_every_mode() {
         (lock.registry().value, lock.registry().marker),
         (None, None)
     );
-    // A live owner's marker is left alone in a mode that does not use it.
     let running = Running(BTreeSet::from([OTHER.pid]));
     let (_, rec) = start_up(stale(), false, Some(ME), &running);
     assert_eq!(rec, Recovery::OwnerAlive(OTHER));
@@ -547,7 +531,6 @@ impl OwnerExit for FakeExit {
 
 #[test]
 fn the_watchdog_restores_after_its_owner_ends() {
-    // The client was killed with the setting on: no exit() ran.
     let mut p = policy(None);
     p.want(Want::On, 0);
     let mut reg = std::mem::take(&mut p.registry);
@@ -631,7 +614,6 @@ fn a_half_marker_that_cannot_be_removed_is_said_so_and_removed_at_the_exit() {
     );
     assert_eq!(p.registry().value, None, "and the value never changed");
 
-    // The registry lets the delete through now: the exit path removes it.
     p.registry.fail_delete_marker = false;
     p.exit();
     assert!(
@@ -752,7 +734,6 @@ fn the_stored_prior_round_trips_and_reads_the_first_markers() {
     ] {
         assert_eq!(Prior::from_stored(prior.to_stored()), Ok(prior));
     }
-    // What the first markers held: 0 absent, 1 for a 0, 2 for a 1.
     assert_eq!(Prior::from_stored(1), Ok(Prior::Value(0)));
     assert_eq!(Prior::from_stored(2), Ok(Prior::Value(1)));
     assert!(Prior::from_stored(u64::from(u32::MAX) + 2).is_err());
@@ -825,12 +806,10 @@ fn a_wish_for_on_after_a_failed_clear_turns_the_setting_on_again() {
     let mut p = policy(None);
     p.want(Want::On, 0);
     p.want(Want::Off, 10);
-    // The value goes back, then the marker cannot be removed.
     p.registry.fail_delete_marker = true;
     assert!(matches!(p.tick(1_000), Change::Failed(_)));
     assert_eq!(p.registry().value, None, "locking works again");
     p.registry.fail_delete_marker = false;
-    // The pointer comes back before the retry.
     assert_eq!(p.want(Want::On, 1_100), Change::Set);
     assert_eq!(
         p.registry().value,
@@ -840,9 +819,6 @@ fn a_wish_for_on_after_a_failed_clear_turns_the_setting_on_again() {
     assert!(!p.clear_pending());
 }
 
-/// The window's side of the lock setting, end to end on the fake registry:
-/// the grab state's wish (focus, or a pointer resting on the window) behind
-/// the shown machine's *Send Win+L* switch.
 #[test]
 fn the_setting_is_on_only_while_the_window_has_the_keyboard_and_the_switch_is_on() {
     use crate::grab_state::Event;
@@ -858,19 +834,15 @@ fn the_setting_is_on_only_while_the_window_has_the_keyboard_and_the_switch_is_on
         gate.set(open, wish, true, 0)
     };
 
-    // Focused on a machine whose switch is off: nothing is written.
     event(&mut state, &mut gate, false, Event::Focus(Focus::Gained));
     assert_eq!(gate.policy().registry().writes(), vec![], "switch off");
 
-    // The switch goes on: the marker first, then the value.
     assert_eq!(gate.set(true, gate.wish(), true, 0), Change::Set);
     assert_eq!(
         gate.policy().registry().writes(),
         vec![Op::WriteMarker(marker(Prior::Absent)), Op::WriteValue(1)]
     );
 
-    // The shown tab changes to a machine with the switch off: the value is
-    // put back at once, with no tick and no delay.
     assert_eq!(gate.set(false, gate.wish(), true, 1), Change::Cleared);
     assert_eq!(
         gate.policy().registry().writes()[2..],
@@ -879,8 +851,6 @@ fn the_setting_is_on_only_while_the_window_has_the_keyboard_and_the_switch_is_on
     );
     assert_eq!(gate.policy().registry().value, None, "Win+L locks again");
 
-    // Back on a machine with the switch on, the window loses the keyboard
-    // and only the pointer rests on it: nothing is turned on.
     let mut state = GrabState::new(Follow::Focus);
     let mut gate = LockGate::new(policy(None));
     event(

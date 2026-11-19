@@ -1,9 +1,3 @@
-//! `gwin-verify stream` end to end on the build machine: the real binary through
-//! `scripts/fake-ssh` to `gwin-fake-server`, which models upstream
-//! 089662fd (see its header), with one fault per test. The second ssh
-//! runs `scripts/fake-bin/hyprctl`, answering from the files the fake
-//! server writes.
-
 use std::path::Path;
 use std::path::PathBuf;
 use std::process::Command;
@@ -15,25 +9,10 @@ fn fake_ssh() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../scripts/fake-ssh")
 }
 
-/// A test with the fps gates on runs alone (write lock): the gate is relative
-/// to the server's cap (60 after the ladder step), and software encoders and
-/// decoders running beside it starve it well below 95% of that. The tests
-/// with the gates off assert nothing about the clock, so they share the lock
-/// and run together (read lock).
 static STREAMS: RwLock<()> = RwLock::new(());
 
-/// The gates on the decoded fps, as `gwin-verify stream` has them by default.
-/// A test about the frame rate passes these; every other test runs with the
-/// gates off, because the fps over a few seconds of wall clock is a property of
-/// how busy the machine is, not of what that test asserts.
 const FPS_GATES: [&str; 4] = ["--min-fps", "30", "--fps-of-cap", "0.95"];
 
-/// Defaults small enough for the build machine; `extra` overrides any of them.
-///
-/// A test that turns the fps gates on needs the rate ladder to settle (5 s)
-/// and a few seconds of window (3 s) to measure the fps. A test that leaves
-/// them off asserts something that does not depend on the clock, so it
-/// needs only a stream that has started: 1 s of settle and 1 s of window.
 fn with_defaults<'a>(extra: &[&'a str]) -> Vec<&'a str> {
     let fps_gated = extra.contains(&"--min-fps");
     let (settle, window) = if fps_gated { ("5", "3") } else { ("1", "1") };
@@ -53,19 +32,16 @@ fn with_defaults<'a>(extra: &[&'a str]) -> Vec<&'a str> {
     args
 }
 
-/// Runs one stream check with fault `fake`; returns (exit ok, line, png).
 fn stream(name: &str, fake: &str, extra: &[&str]) -> (bool, Value, PathBuf) {
     stream_env(name, fake, &[], extra)
 }
 
-/// [`stream`] with extra environment for the fakes.
 fn stream_env(
     name: &str,
     fake: &str,
     env: &[(&str, &str)],
     extra: &[&str],
 ) -> (bool, Value, PathBuf) {
-    // A panicking test poisons the lock; the next one still runs.
     let _gated;
     let _ungated;
     if extra.contains(&"--min-fps") {
@@ -84,7 +60,6 @@ fn stream_env(
         );
     }
     let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!("stream-{name}"));
-    // A stale PNG from an earlier run must not pass for this one.
     let _ = std::fs::remove_dir_all(&dir);
     let hypr = dir.join("hypr");
     std::fs::create_dir_all(&hypr).expect("hypr dir");
@@ -156,8 +131,6 @@ fn a_good_server_passes_with_the_pattern_and_acks_equal_frames() {
     assert_eq!(line["pattern"]["cells_matched"], 32, "{line}");
     assert_eq!(line["exit_after_bye"], true, "{line}");
     assert!(png.exists(), "PNG written at {}", png.display());
-    // The fake drops its output on Bye like upstream, so an ok end probe
-    // proves it ran while the session was live.
     let placement = line["placement"].as_array().expect("placement array");
     assert_eq!(placement.len(), 2, "start and end probes: {line}");
     for p in placement {
@@ -167,7 +140,6 @@ fn a_good_server_passes_with_the_pattern_and_acks_equal_frames() {
 
 #[test]
 fn a_server_held_at_a_30_fps_cap_passes_at_30() {
-    // Seen against a real server: the ladder never left level 1 (rate.rs:324-376).
     let (success, line, _) = stream("hold30", "hold30", &FPS_GATES);
     assert!(success, "{line}");
     assert_eq!(line["stream_config"]["fps_cap"], 30, "{line}");
@@ -273,7 +245,6 @@ fn dropped_frames_are_missing_ids_and_break_decode() {
         codes.contains(&"decode_errors"),
         "broken references: {line}"
     );
-    // Nothing else may fail.
     assert!(
         codes
             .iter()

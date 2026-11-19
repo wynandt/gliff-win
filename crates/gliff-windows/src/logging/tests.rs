@@ -4,9 +4,7 @@ use super::timestamp;
 #[test]
 fn timestamps_are_utc_calendar_times() {
     assert_eq!(timestamp(0), "1970-01-01T00:00:00Z", "the epoch");
-    // `date -u -d @1792789200` = Fri Oct 23 2026 21:00:00 UTC.
     assert_eq!(timestamp(1_792_789_200), "2026-10-23T21:00:00Z", "today");
-    // 2024-02-29 12:00:00 UTC, a leap day.
     assert_eq!(timestamp(1_709_208_000), "2024-02-29T12:00:00Z", "leap day");
     assert_eq!(
         timestamp(951_868_799),
@@ -41,7 +39,6 @@ fn the_log_is_bounded_in_files_kept_and_in_size() {
         "gliff-windows-2026-10-02.log",
         "gliff-windows-2026-10-03.log",
         "gliff-windows-2026-10-04.log",
-        // Not the client's log files: never removed.
         "gliff-windows-2026-10-0x.log",
         "gliff-windows-2026-10-01.log.bak",
         "notes.txt",

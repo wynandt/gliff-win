@@ -72,9 +72,6 @@ const EVERY_MODIFIER: [u16; 8] = [29, 97, 42, 54, 56, 100, 125, 126];
 
 #[test]
 fn a_win_the_user_let_go_of_unseen_is_released_after_a_reinstall() {
-    // Win went to the remote; Windows took its Up for a shortcut (Win+L)
-    // and the hook never saw it, so it saw the user let go of nothing but
-    // the remote still holds Super. The reinstall must release it.
     let mut p = pipeline();
     assert_eq!(
         p.push(lwin(Press::Down, 1)),
@@ -307,7 +304,6 @@ mod stand_in {
         raw(0x5b, 0x5b, Prefix::E0, press, t)
     }
 
-    /// Ctrl and Alt down, as the remote sees them.
     fn held(p: &mut KeyPipeline) {
         p.push(lctrl(Press::Down, 1));
         p.push(lalt(Press::Down, 2));
@@ -341,7 +337,6 @@ mod stand_in {
         let mut p = with_chord();
         held(&mut p);
         p.push(l(Press::Down, 3));
-        // Focus is lost with L still down, and its Up is seen elsewhere.
         p.release_all();
         assert_eq!(
             p.push(l(Press::Down, 100)),
@@ -446,7 +441,6 @@ mod stand_in {
 
     #[test]
     fn altgr_l_is_not_the_chord() {
-        // AltGr is Right Alt plus a fake Left Ctrl, which the filter drops.
         let mut p = with_chord();
         p.push(lctrl(Press::Down, 0));
         p.push(raw(0xa5, 0x38, Prefix::E0, Press::Down, 1));
@@ -486,20 +480,19 @@ mod stand_in {
 fn release_all_ends_every_left_and_right_modifier_that_was_sent() {
     let mut p = pipeline();
     let mods = [
-        (0xa0, 0x2a, Prefix::None, 42), // left Shift
-        (0xa1, 0x36, Prefix::E0, 54),   // right Shift (extended, as a probe measured)
-        (0xa2, 0x1d, Prefix::None, 29), // left Ctrl
-        (0xa3, 0x1d, Prefix::E0, 97),   // right Ctrl
-        (0xa4, 0x38, Prefix::None, 56), // left Alt
-        (0xa5, 0x38, Prefix::E0, 100),  // right Alt
-        (0x5b, 0x5b, Prefix::E0, 125),  // left Super
-        (0x5c, 0x5c, Prefix::E0, 126),  // right Super
+        (0xa0, 0x2a, Prefix::None, 42),
+        (0xa1, 0x36, Prefix::E0, 54),
+        (0xa2, 0x1d, Prefix::None, 29),
+        (0xa3, 0x1d, Prefix::E0, 97),
+        (0xa4, 0x38, Prefix::None, 56),
+        (0xa5, 0x38, Prefix::E0, 100),
+        (0x5b, 0x5b, Prefix::E0, 125),
+        (0x5c, 0x5c, Prefix::E0, 126),
     ];
     let mut t = 100;
     for (vk, scan, prefix, _) in mods {
         p.push(raw(vk, scan, prefix, Press::Down, t));
         t += 50;
-        // Lets a lone Ctrl through, so none is waiting for an AltGr.
         p.tick(t);
         t += 50;
     }

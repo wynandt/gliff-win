@@ -92,7 +92,6 @@ mod focus {
             (o.mode, o.release, o.lock),
             (HookMode::Off, Release::All, Want::Off)
         );
-        // Focus changes do not re-arm it.
         let o = run(&mut s, &[LOSE, GAIN]);
         assert_eq!(
             o.mode,
@@ -105,8 +104,6 @@ mod focus {
 
     #[test]
     fn released_but_hovering_gives_win_l_back_to_windows() {
-        // Released, the window no longer has the keyboard: Win+L locks
-        // Windows again (after the setting's delay), pointer or not.
         let mut s = state();
         run(&mut s, &[GAIN, ENTER]);
         let o = run(&mut s, &[Event::ReleaseChord]);
@@ -221,7 +218,6 @@ mod secure_desktop_and_lock {
 
 #[test]
 fn enter_leave_focus_sequences_never_leave_the_setting_on_without_the_keyboard() {
-    // Every sequence of up to three events keeps lock == (mode == Grab).
     let events = [
         GAIN,
         LOSE,
@@ -256,8 +252,6 @@ fn enter_leave_focus_sequences_never_leave_the_setting_on_without_the_keyboard()
     }
 }
 
-/// The address bar's field (section 4 of the tabs design): while it is open
-/// and has the keyboard, keys belong to it, whatever the grab follows.
 mod typing {
     use super::*;
 
@@ -282,12 +276,10 @@ mod typing {
         let mut s = GrabState::new(Follow::Hover);
         run(&mut s, &[ENTER]);
         let o = run(&mut s, &[START]);
-        // Not even Super+L is taken: a field wants the keys it is given.
         assert_eq!(
             (o.mode, o.release, o.lock),
             (HookMode::Off, Release::All, Want::Off)
         );
-        // Moving about while typing changes nothing.
         assert_eq!(run(&mut s, &[LEAVE, ENTER]).mode, HookMode::Off);
         assert_eq!(run(&mut s, &[END]).mode, HookMode::Grab);
     }
@@ -492,7 +484,6 @@ fn a_poll_enter_that_a_leave_message_undoes_is_not_made_up_again_without_a_move(
     let mut w = PointerWatch::default();
     assert_eq!(w.observe(false, Some(true)), None);
     assert_eq!(w.observe(false, Some(true)), Some(Pointer::Entered));
-    // Windows says the pointer left (it is over a child window).
     w.left_by_message();
     for _ in 0..50 {
         assert_eq!(
@@ -501,7 +492,6 @@ fn a_poll_enter_that_a_leave_message_undoes_is_not_made_up_again_without_a_move(
             "no mouse message came: the poll does not enter again"
         );
     }
-    // A real move comes, and the poll may be believed again.
     w.moved_by_message();
     assert_eq!(w.observe(false, Some(true)), None);
     assert_eq!(w.observe(false, Some(true)), Some(Pointer::Entered));
@@ -524,7 +514,6 @@ fn a_leave_message_after_a_real_move_does_not_stop_the_poll() {
 fn a_pointer_over_a_child_window_is_not_over_the_window() {
     use super::Hit;
     use super::pointer_over;
-    // Windows sends WM_MOUSELEAVE for a child, so the poll must agree.
     assert_eq!(pointer_over(Hit::Window, true), Some(true));
     assert_eq!(pointer_over(Hit::Window, false), Some(false));
     assert_eq!(pointer_over(Hit::OwnChild, true), Some(false));

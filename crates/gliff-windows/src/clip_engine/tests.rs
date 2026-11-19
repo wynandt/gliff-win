@@ -1,6 +1,3 @@
-//! The engine against upstream's transfer engine playing the remote side
-//! (`Side::Server`), wired through in-memory channels.
-
 use std::cell::Cell;
 use std::cell::RefCell;
 use std::path::Path;
@@ -40,7 +37,6 @@ mod logged;
 
 const TEXT: &str = "text/plain;charset=utf-8";
 
-/// A fresh directory under the system temp dir, removed on drop.
 struct TempDir(PathBuf);
 
 impl TempDir {
@@ -74,14 +70,10 @@ fn run(test: impl std::future::Future<Output = ()>) {
     LocalSet::new().block_on(&runtime, test);
 }
 
-/// Both ends of a connection: the engine under test and a stand-in for the
-/// remote side, with what each reports.
 struct Rig {
     engine: Rc<Engine>,
     server: Transfers,
-    /// Offers and requests that reached the remote side.
     events: mpsc::UnboundedReceiver<Event>,
-    /// What the engine told the Windows thread.
     host: mpsc::UnboundedReceiver<HostEvent>,
     dir: TempDir,
 }
@@ -125,8 +117,6 @@ fn rig(label: &str) -> Rig {
 }
 
 impl Rig {
-    /// Offer these flavours from the engine and return the serial the remote
-    /// side saw.
     async fn offer(&mut self, mimes: &[&str]) -> u32 {
         self.offer_files(mimes, LocalFiles::default()).await
     }
@@ -143,7 +133,6 @@ impl Rig {
         }
     }
 
-    /// The next read the engine asked of the Windows thread.
     async fn next_read(&mut self) -> (String, u64, oneshot::Sender<Result<Vec<u8>, Cause>>) {
         loop {
             match self.host.recv().await.expect("the engine is alive") {
@@ -170,7 +159,6 @@ impl Rig {
         }
     }
 
-    /// Hand the remote side's events to a responder task.
     fn take_events(&mut self) -> mpsc::UnboundedReceiver<Event> {
         let (_, empty) = mpsc::unbounded_channel();
         std::mem::replace(&mut self.events, empty)
@@ -185,8 +173,6 @@ impl Rig {
         }
     }
 
-    /// The remote side fetches an item of the engine's offer, the Windows
-    /// thread answering a read with `answer`.
     async fn remote_fetch(
         &mut self,
         mime: &str,
@@ -209,7 +195,6 @@ impl Rig {
         fetched.map(|_| body.take())
     }
 
-    /// Make the remote side offer, and wait until the engine reported it.
     async fn remote_offer(
         &mut self,
         serial: u32,
@@ -229,7 +214,6 @@ impl Rig {
         (mimes, files)
     }
 
-    /// Ask the engine to paste a flavour of the remote offer.
     fn paste(&self, mime: &str, serial: u32) -> oneshot::Receiver<Result<Vec<u8>, Cause>> {
         let (result, receiver) = oneshot::channel();
         self.engine.on_command(Command::FetchMime {
@@ -248,7 +232,6 @@ impl Rig {
     }
 }
 
-/// Answer the remote side's file requests from `contents`, counting them.
 fn serve_files(
     server: Transfers,
     mut events: mpsc::UnboundedReceiver<Event>,
@@ -290,8 +273,6 @@ fn dir(path: &str) -> ClipboardFile {
         dir: true,
     }
 }
-
-// Local to remote.
 
 #[test]
 fn a_request_before_any_offer_is_refused() {
@@ -447,7 +428,6 @@ fn a_body_at_the_limit_is_served_whole() {
     });
 }
 
-/// A paste target that holds the first chunk until it is released.
 struct StallSink {
     started: Rc<Notify>,
     released: Rc<Cell<bool>>,
@@ -580,8 +560,6 @@ fn local_files_are_served_from_disk() {
     });
 }
 
-// Remote to local.
-
 #[test]
 fn a_remote_offer_is_reported_and_replaces_the_local_one() {
     run(async {
@@ -596,8 +574,6 @@ fn a_remote_offer_is_reported_and_replaces_the_local_one() {
     });
 }
 
-/// Fetch the text of `serial` and answer the read, failing instead of
-/// hanging when the engine refuses the request and never asks for a read.
 async fn served(rig: &mut Rig, serial: u32) -> Vec<u8> {
     let fetched = tokio::time::timeout(
         std::time::Duration::from_secs(5),
@@ -608,16 +584,11 @@ async fn served(rig: &mut Rig, serial: u32) -> Vec<u8> {
     fetched.expect("the request is served")
 }
 
-/// The server offers its clipboard when a session starts, and when it has
-/// nothing to offer the offer is empty. Upstream's client does not let an
-/// empty offer touch the local clipboard, so the local offer stays valid.
 #[test]
 fn an_empty_remote_offer_leaves_the_local_offer_in_place() {
     run(async {
         let mut rig = rig("remote-empty");
         let local = rig.offer(&[TEXT]).await;
-        // The engine still reports it, so Windows can drop promises of an
-        // older remote offer that are still its own.
         let (mimes, files) = rig.remote_offer(1, &[], vec![]).await;
         assert!(mimes.is_empty() && files.is_empty());
         let body = served(&mut rig, local).await;
@@ -720,7 +691,6 @@ fn a_transfer_with_no_progress_is_abandoned_after_the_idle_timeout() {
     });
 }
 
-/// A source that never has anything, and says so when it is dropped.
 struct Silent(Rc<Cell<bool>>);
 
 impl ChunkSource for Silent {
@@ -865,11 +835,6 @@ fn a_replaced_offers_spool_is_kept_for_the_grace_period() {
     });
 }
 
-// Files: the fake file system. Trees are built in a temporary directory and
-// compared byte for byte.
-
-/// `len` bytes that do not repeat within a chunk: a linear congruential
-/// stream from `seed`.
 fn pattern(len: usize, seed: u32) -> Vec<u8> {
     let mut state = seed;
     (0..len)
@@ -880,8 +845,6 @@ fn pattern(len: usize, seed: u32) -> Vec<u8> {
         .collect()
 }
 
-/// The tree both directions are tried with: nested folders, a Unicode name,
-/// an empty file, an empty folder and a file of several chunks.
 fn tree() -> Vec<(ClipboardFile, Vec<u8>)> {
     let big = pattern(16 << 20, 9);
     let small = pattern(1000, 3);
@@ -897,8 +860,6 @@ fn tree() -> Vec<(ClipboardFile, Vec<u8>)> {
     ]
 }
 
-/// What is on disk under `root`, as (path with `/`, bytes; `None` for a
-/// folder), sorted.
 fn on_disk(root: &Path) -> Vec<(String, Option<Vec<u8>>)> {
     fn walk(path: &Path, rel: &str, out: &mut Vec<(String, Option<Vec<u8>>)>) {
         let meta = std::fs::symlink_metadata(path).expect("metadata");
@@ -923,7 +884,6 @@ fn on_disk(root: &Path) -> Vec<(String, Option<Vec<u8>>)> {
     out
 }
 
-/// The same, for the entries an offer lists with these contents.
 fn expected(entries: &[(ClipboardFile, Vec<u8>)]) -> Vec<(String, Option<Vec<u8>>)> {
     let mut out: Vec<_> = entries
         .iter()
@@ -948,8 +908,6 @@ fn spool_entries(rig: &Rig) -> usize {
         .unwrap_or(0)
 }
 
-/// Answer file requests from `contents`, but refuse the one for `refused`
-/// and every one after it.
 fn serve_files_until(
     server: Transfers,
     mut events: mpsc::UnboundedReceiver<Event>,
@@ -1190,7 +1148,6 @@ fn names_windows_refuses_and_collisions_land_apart_with_every_byte() {
         let mut seen = on_disk(&spool);
         seen.sort();
         let names: Vec<&str> = seen.iter().map(|(n, _)| n.as_str()).collect();
-        // Every file is there once, whatever Windows had to call it.
         let mut sizes: Vec<usize> = seen
             .iter()
             .filter_map(|(_, bytes)| bytes.as_ref().map(Vec::len))
@@ -1256,7 +1213,6 @@ fn a_failure_in_the_middle_lists_nothing_and_leaves_no_partial_file() {
         let files: Vec<ClipboardFile> = entries.iter().map(|(f, _)| f.clone()).collect();
         rig.remote_offer(2, &[], files).await;
         let contents: Vec<Vec<u8>> = entries.iter().map(|(_, b)| b.clone()).collect();
-        // The 16 MiB file (index 5) is refused after the small ones arrived.
         serve_files_until(rig.server.clone(), rig.take_events(), contents, 5);
         let error = rig
             .paste_files(2)
@@ -1276,7 +1232,6 @@ fn a_paste_after_a_failure_starts_over_and_succeeds() {
             .await;
         let events = rig.take_events();
         let server = rig.server.clone();
-        // The first run: b.txt is refused. Every request after is answered.
         let first = Rc::new(Cell::new(true));
         tokio::task::spawn_local(async move {
             let mut events = events;
@@ -1325,7 +1280,6 @@ fn cancelling_a_files_paste_leaves_no_partial_file_and_no_answer() {
             .await;
         let mut events = rig.take_events();
         let pasted = rig.paste_files(2);
-        // a.txt arrives; b.txt never does.
         let Some(Event::Request { id, .. }) = events.recv().await else {
             panic!("expected the first request");
         };
@@ -1362,7 +1316,6 @@ fn rapid_remote_copies_paste_the_last_one_and_the_old_paste_fails() {
         let Some(Event::Request { id: old_id, .. }) = events.recv().await else {
             panic!("expected the old request");
         };
-        // The user copies again before the old transfer is answered.
         rig.remote_offer(3, &[], vec![file("new.txt", 3)]).await;
         let stale = rig.paste_files(2).await.expect("answered");
         assert!(stale.is_err(), "the old offer cannot be pasted any more");
@@ -1374,7 +1327,6 @@ fn rapid_remote_copies_paste_the_last_one_and_the_old_paste_fails() {
             .serve(new_id, BytesSource(Bytes::from_static(b"new")));
         let paths = new.await.expect("answered").expect("the last copy pastes");
         assert_eq!(std::fs::read(&paths[0]).expect("new"), b"new");
-        // The old transfer finishing late changes nothing the user sees.
         rig.server
             .serve(old_id, BytesSource(Bytes::from_static(b"old")));
         let _ = old.await;
@@ -1401,8 +1353,6 @@ fn an_empty_file_and_an_empty_folder_are_spooled() {
 }
 
 impl Rig {
-    /// The remote side requests an item, expecting a refusal, so the
-    /// Windows thread is never asked and nothing answers.
     async fn remote_fetch_unanswered(
         &mut self,
         mime: &str,

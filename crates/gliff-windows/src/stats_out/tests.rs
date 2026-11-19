@@ -1,5 +1,3 @@
-//! The file format the gate reads.
-
 use std::collections::BTreeMap;
 use std::time::Instant;
 
@@ -178,13 +176,10 @@ fn a_resize_is_applied_by_its_config_then_shown() {
     let mut log = super::ResizeLog::default();
     log.sent(req(1280, 800, 1.0), 10);
     log.sent(req(2560, 1600, 2.0), 1000);
-    // The first config is for the first Resize; a picture before the
-    // second config is at the old view.
     log.on_config((1280, 800), 1000, 40);
     log.on_picture((1280, 800), 60);
     log.on_picture((1280, 800), 70);
     log.on_picture((1280, 800), 1100);
-    // A config at the right view but another scale applies nothing.
     log.on_config((2560, 1600), 1000, 1150);
     log.on_config((2560, 1600), 2000, 1200);
     log.on_picture((2560, 1600), 1230);

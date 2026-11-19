@@ -198,7 +198,6 @@ fn the_windowed_resize_must_land_within_three_seconds() {
     let last = slow.last.as_mut().expect("good has a last file");
     last.resizes[0].first_picture_ms = Some(3001);
     last.resizes[1].first_picture_ms = Some(4401);
-    // The first matching record is judged.
     assert_eq!(reasons(&slow), ["resize"], "3001 ms to the picture");
     let mut never = good();
     let last = never.last.as_mut().expect("good has a last file");
@@ -260,7 +259,6 @@ fn write_fixture() {
 
 #[test]
 fn a_p95_on_the_budget_passes_after_widening_to_f64() {
-    // Regression: 16.7f32 widens to 16.700000762.
     let mut observed = good();
     let last = observed.last.as_mut().expect("good has a last file");
     last.present.stages[3].latency_p95_ms = 16.7;

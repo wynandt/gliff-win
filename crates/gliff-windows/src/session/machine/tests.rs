@@ -1,5 +1,3 @@
-//! `Core` behaviour, one upstream rule per test.
-
 use gliff_proto::msg::OutputInfo;
 
 use super::Action;
@@ -124,7 +122,6 @@ const G1080: Geometry = Geometry {
     scale_milli: 1000,
 };
 
-/// A core past HelloAck and the first 1920x1080 config.
 fn streaming() -> Core {
     let mut core = Core::new(PANEL);
     let _ = core.on_server(hello_ack(PROTOCOL_VERSION), Bytes::new(), Bytes::new());
@@ -304,8 +301,6 @@ fn a_new_stream_size_resets_and_clears_the_fifo() {
         Some(&Action::ResetDecoder(ChromaMode::Single420)),
         "size change resets: {actions:?}"
     );
-    // The held 1080p unit is gone with the old decoder, so a picture
-    // now carries the new geometry.
     let _ = core.on_server(frame(1), au(), Bytes::new());
     let out = core.decoded(done(1, Ok(Some(picture(3840)))));
     assert!(
@@ -521,10 +516,8 @@ fn decoded_always_acks_first() {
 fn a_picture_carries_the_geometry_of_its_own_unit() {
     let mut core = streaming();
     let _ = core.on_server(frame(0), au(), Bytes::new());
-    // OpenH264 holds the first High-profile picture one unit.
     let first = core.decoded(done(0, Ok(None)));
     assert_eq!(first, vec![ack(0)], "held picture: ack only");
-    // A scale-only config lands between the two units.
     let _ = core.on_server(
         config((1920, 1080), (3840, 2160), 2000, 30),
         Bytes::new(),
@@ -564,8 +557,6 @@ fn decode_error_clears_the_fifo_and_requests_a_keyframe() {
         (1, 1),
         "counted"
     );
-    // FIFO cleared: the next picture takes the current geometry and
-    // the id of the unit just fed.
     let _ = core.on_server(frame(2), au(), Bytes::new());
     let next = core.decoded(done(2, Ok(Some(picture(1920)))));
     assert!(
@@ -644,8 +635,6 @@ fn a_resync_sends_new_sizes_and_clears_modifiers_the_user_does_not_hold() {
         width: PANEL.width - ResizeReq::NUDGE,
         ..PANEL
     };
-    // The user holds Left Shift (evdev 42); the remote may have lost the Up of
-    // any other modifier while it stalled.
     core.on_ui(UiCmd::Key(crate::altgr::RawKey {
         vk: 0xa0,
         scan: 0x2a,
@@ -700,7 +689,6 @@ fn a_resync_sends_new_sizes_and_clears_modifiers_the_user_does_not_hold() {
     );
 }
 
-/// A mirrored session: the server's output is a real one.
 fn mirroring() -> Core {
     let mut core = Core::new(PANEL);
     let _ = core.on_server(
@@ -843,7 +831,6 @@ fn server_errors_end_the_session() {
         }),
         "server error"
     );
-    // The text is bounded and cannot fake a log line.
     let mut verbose = Core::new(PANEL);
     let actions = verbose.on_server(
         ServerMsg::Error {
@@ -1055,11 +1042,6 @@ mod input {
         assert_eq!(core.on_ui(key_a(Press::Up)), Vec::new(), "nothing is held");
     }
 
-    /// What the hook does with each key of the grab for a local chord, as
-    /// `hook::Ctx::grab` does it: the key goes to the core, to Windows, or
-    /// nowhere; a taken chord sends `ReleaseInput` first. Returns the keys
-    /// Windows gets, in order, as `(vk, pressed)` (replayed modifiers and the
-    /// trigger included, passed real keys too).
     fn through_the_hook(
         core: &mut Core,
         chords: &mut crate::local_chords::LocalChords,
@@ -1115,8 +1097,6 @@ mod input {
                 k(LWIN, Press::Up),
             ],
         );
-        // The remote saw the two modifiers go down, then let go of both when
-        // the chord completed, and never saw S or the real Ups.
         assert_eq!(
             sent,
             vec![
@@ -1132,7 +1112,6 @@ mod input {
                 .any(|a| matches!(a, Action::Send(ClientMsg::Key { keycode: 31, .. }, _))),
             "S never reaches the remote"
         );
-        // Windows got the chord replayed once, then the real Ups.
         assert_eq!(
             windows,
             vec![
@@ -1283,7 +1262,6 @@ mod input {
             axis: Axis::Horizontal,
             delta: -120,
         });
-        // A part of a notch scrolls smoothly: no step, and then its end.
         for _ in 0..2 {
             core.on_ui(UiCmd::Wheel {
                 axis: Axis::Horizontal,

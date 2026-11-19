@@ -26,8 +26,6 @@ fn utf16(text: &str) -> Vec<u8> {
     text.encode_utf16().flat_map(u16::to_le_bytes).collect()
 }
 
-// Text.
-
 #[test]
 fn text_stops_at_the_nul_and_drops_carriage_returns() {
     let mut raw = utf16("one\r\ntwo\rthree\r\n");
@@ -39,7 +37,7 @@ fn text_stops_at_the_nul_and_drops_carriage_returns() {
 #[test]
 fn text_keeps_astral_characters_and_marks_lone_surrogates() {
     assert_eq!(utf16_to_utf8_lf(&utf16("héllo 😀 日本")), "héllo 😀 日本");
-    let lone = [0x3D, 0xD8, b'a', 0]; // U+D83D, 'a'
+    let lone = [0x3D, 0xD8, b'a', 0];
     assert_eq!(utf16_to_utf8_lf(&lone), "\u{FFFD}a");
     assert_eq!(utf16_to_utf8_lf(&[b'a', 0, 7]), "a", "odd byte is dropped");
 }
@@ -51,8 +49,6 @@ fn text_to_windows_is_nul_terminated_and_keeps_line_feeds() {
     assert_eq!(utf16_to_utf8_lf(&raw), "a\nb 😀");
     assert_eq!(raw, [utf16("a\nb 😀"), vec![0, 0]].concat());
 }
-
-// HTML.
 
 fn offsets(cf: &str) -> (usize, usize, usize, usize) {
     let value = |key: &str| -> usize {
@@ -138,9 +134,6 @@ fn html_from_windows_survives_a_bad_header() {
     assert!(!cf_html_to_fragment(b"").is_empty(), "the meta tag alone");
 }
 
-// Images.
-
-/// A DIB as `BITMAPINFOHEADER` plus pixel rows, built by hand.
 fn info_header(width: i32, height: i32, bits: u16, compression: u32, colors: u32) -> Vec<u8> {
     let mut h = Vec::new();
     for value in [40u32, width as u32, height as u32] {
@@ -167,10 +160,9 @@ fn decode_png(png: &[u8]) -> (png::OutputInfo, Vec<u8>) {
 
 #[test]
 fn dib_24_bit_bottom_up_is_flipped_and_swizzled() {
-    // 2x2, rows padded to 8 bytes. Bottom row first: red, green; then blue, white.
     let mut dib = info_header(2, 2, 24, 0, 0);
-    dib.extend_from_slice(&[0, 0, 255, 0, 255, 0, 0, 0]); // B,G,R: red; green
-    dib.extend_from_slice(&[255, 0, 0, 255, 255, 255, 0, 0]); // blue; white
+    dib.extend_from_slice(&[0, 0, 255, 0, 255, 0, 0, 0]);
+    dib.extend_from_slice(&[255, 0, 0, 255, 255, 255, 0, 0]);
     let (info, pixels) = decode_png(&dib_to_png(&dib).expect("convert"));
     assert_eq!(info.color_type, png::ColorType::Rgb);
     assert_eq!(
@@ -183,8 +175,8 @@ fn dib_24_bit_bottom_up_is_flipped_and_swizzled() {
 #[test]
 fn dib_top_down_keeps_row_order() {
     let mut dib = info_header(1, -2, 24, 0, 0);
-    dib.extend_from_slice(&[0, 0, 255, 0]); // red
-    dib.extend_from_slice(&[0, 255, 0, 0]); // green
+    dib.extend_from_slice(&[0, 0, 255, 0]);
+    dib.extend_from_slice(&[0, 255, 0, 0]);
     let (_, pixels) = decode_png(&dib_to_png(&dib).expect("convert"));
     assert_eq!(pixels, [255, 0, 0, 0, 255, 0]);
 }
@@ -200,7 +192,7 @@ fn dib_32_bit_rgb_is_opaque_even_with_a_zero_fourth_byte() {
 
 #[test]
 fn dib_bitfields_with_alpha_mask_keeps_alpha() {
-    let mut dib = info_header(2, -1, 32, 6, 0); // BI_ALPHABITFIELDS
+    let mut dib = info_header(2, -1, 32, 6, 0);
     for mask in [0x00FF_0000u32, 0x0000_FF00, 0x0000_00FF, 0xFF00_0000] {
         dib.extend_from_slice(&mask.to_le_bytes());
     }
@@ -224,11 +216,11 @@ fn dib_bitfields_with_all_zero_alpha_is_opaque() {
 
 #[test]
 fn dib_16_bit_565_masks_scale_to_8_bits() {
-    let mut dib = info_header(1, 1, 16, 3, 0); // BI_BITFIELDS
+    let mut dib = info_header(1, 1, 16, 3, 0);
     for mask in [0xF800u32, 0x07E0, 0x001F] {
         dib.extend_from_slice(&mask.to_le_bytes());
     }
-    dib.extend_from_slice(&0xF81Fu16.to_le_bytes()); // magenta
+    dib.extend_from_slice(&0xF81Fu16.to_le_bytes());
     dib.extend_from_slice(&[0, 0]);
     let (_, pixels) = decode_png(&dib_to_png(&dib).expect("convert"));
     assert_eq!(pixels, [255, 0, 255]);
@@ -237,9 +229,9 @@ fn dib_16_bit_565_masks_scale_to_8_bits() {
 #[test]
 fn dib_4_bit_palette_is_read_high_nibble_first() {
     let mut dib = info_header(2, 1, 4, 0, 2);
-    dib.extend_from_slice(&[0, 0, 255, 0]); // index 0: red (B,G,R,_)
-    dib.extend_from_slice(&[255, 0, 0, 0]); // index 1: blue
-    dib.extend_from_slice(&[0x10, 0, 0, 0]); // pixels: 1, 0
+    dib.extend_from_slice(&[0, 0, 255, 0]);
+    dib.extend_from_slice(&[255, 0, 0, 0]);
+    dib.extend_from_slice(&[0x10, 0, 0, 0]);
     let (_, pixels) = decode_png(&dib_to_png(&dib).expect("convert"));
     assert_eq!(pixels, [0, 0, 255, 255, 0, 0]);
 }
@@ -249,11 +241,9 @@ fn dib_errors_are_reported_not_panicked() {
     let image = |r: Result<Vec<u8>, ConvertError>| matches!(r, Err(ConvertError::Image(_)));
     assert!(image(dib_to_png(&[])));
     assert!(image(dib_to_png(&[0; 10])));
-    // The header promises more pixels than there are.
     let mut short = info_header(10, 10, 24, 0, 0);
     short.extend_from_slice(&[0; 30]);
     assert!(image(dib_to_png(&short)));
-    // RLE, huge and empty sizes.
     assert!(image(dib_to_png(&info_header(1, 1, 8, 1, 0))));
     assert!(image(dib_to_png(&info_header(100_000, 100_000, 24, 0, 0))));
     assert!(image(dib_to_png(&info_header(0, 1, 24, 0, 0))));
@@ -274,7 +264,6 @@ fn make_png(color: png::ColorType, width: u32, height: u32, data: &[u8]) -> Vec<
 
 #[test]
 fn png_to_dibv5_has_a_v5_header_and_bottom_up_bgra() {
-    // Top row red, bottom row half-transparent blue.
     let png = make_png(
         png::ColorType::Rgba,
         1,
@@ -314,8 +303,6 @@ fn png_to_dibv5_expands_gray_and_rgb() {
 
 #[test]
 fn png_to_dibv5_rejects_a_header_that_claims_an_impossible_size() {
-    // Only a header, claiming u32::MAX x u32::MAX RGBA pixels: the decoded
-    // size does not even fit in a usize.
     let mut out = Vec::new();
     let mut encoder = png::Encoder::new(&mut out, u32::MAX, u32::MAX);
     encoder.set_color(png::ColorType::Rgba);
@@ -343,8 +330,6 @@ fn a_picture_survives_png_to_dib_and_back() {
     assert_eq!((info.width, info.height), (4, 3));
     assert_eq!(decoded, pixels);
 }
-
-// Formats and offers.
 
 #[test]
 fn offers_put_text_first_and_dedupe() {
@@ -488,9 +473,6 @@ fn local_body_over_the_limit_is_refused_and_missing_data_is_reported() {
         local_body("text/plain", &formats, 10, &mut empty),
         Err(ConvertError::Missing(_))
     ));
-    // What is copied off the clipboard before that check is bounded too, but
-    // not below what a body of the limit needs: text as UTF-16, or a bitmap
-    // at the pixel limit.
     let item = usize::try_from(gliff_proto::clipboard::MAX_ITEM).expect("fits");
     assert!(raw_limit(&WinFormat::UnicodeText) >= 2 * item);
     assert!(raw_limit(&WinFormat::Dib) >= 4 * 64 * 1024 * 1024);
@@ -569,10 +551,6 @@ fn rendering_makes_the_windows_bytes() {
     assert!(render(Render::PngToDib, b"junk").is_err());
 }
 
-// Images: padding, sizes and the preferred format.
-
-/// A 24-bit bottom-up DIB of `width` x `height` whose pixel (x, y) from the
-/// top is `pixel(x, y)` as (r, g, b); rows are padded to 4 bytes.
 fn rgb_dib(width: usize, height: usize, mut pixel: impl FnMut(usize, usize) -> [u8; 3]) -> Vec<u8> {
     let mut dib = info_header(width as i32, height as i32, 24, 0, 0);
     let stride = (width * 3).div_ceil(4) * 4;
@@ -589,7 +567,6 @@ fn rgb_dib(width: usize, height: usize, mut pixel: impl FnMut(usize, usize) -> [
 
 #[test]
 fn every_padding_of_a_24_bit_row_is_read_exactly() {
-    // Widths 1 to 4 pad a row with 1, 2, 3 or no bytes.
     for width in 1..=9usize {
         let pixel = |x: usize, y: usize| [(x * 20 + y) as u8, (y * 30) as u8, (x * 9) as u8];
         let dib = rgb_dib(width, 3, pixel);
@@ -622,8 +599,6 @@ fn an_opaque_picture_comes_back_without_an_alpha_channel() {
 
 #[test]
 fn a_screen_sized_picture_converts_both_ways() {
-    // 4K at 24 bits is 24 MiB; as 32-bit pixels it is over the item limit,
-    // so a copy of it only fits as PNG.
     let (width, height) = (3840usize, 2160usize);
     let pixel = |x: usize, y: usize| [(x / 16) as u8, (y / 9) as u8, ((x ^ y) / 64) as u8];
     let dib = rgb_dib(width, height, pixel);
@@ -635,7 +610,6 @@ fn a_screen_sized_picture_converts_both_ways() {
     );
     let back = png_to_dibv5(&png).expect("back to a bitmap");
     assert_eq!(back.len(), 124 + width * height * 4);
-    // Spot-check corners: the DIB is bottom-up, B-G-R-A.
     let at = |x: usize, y: usize| {
         let offset = 124 + ((height - 1 - y) * width + x) * 4;
         [back[offset + 2], back[offset + 1], back[offset]]
@@ -652,7 +626,6 @@ fn a_screen_sized_picture_converts_both_ways() {
 
 #[test]
 fn a_decoded_picture_over_the_old_decoder_limit_is_read() {
-    // 8K by 4K as RGBA is 128 MiB, over the PNG crate's default of 64 MiB.
     let (width, height) = (8192u32, 4096u32);
     let pixels = vec![200u8; width as usize * height as usize * 4];
     let png = make_png(png::ColorType::Rgba, width, height, &pixels);
@@ -662,7 +635,6 @@ fn a_decoded_picture_over_the_old_decoder_limit_is_read() {
 
 #[test]
 fn a_picture_whose_png_is_over_the_item_limit_is_refused() {
-    // Noise does not compress, so the PNG is about as big as the bitmap.
     let mut seed = 0x1234_5678u32;
     let dib = rgb_dib(64, 64, |_, _| {
         seed = seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
@@ -681,7 +653,6 @@ fn a_picture_whose_png_is_over_the_item_limit_is_refused() {
 
 #[test]
 fn a_bitmap_over_the_pixel_limit_is_refused_before_it_is_allocated() {
-    // 16384 x 16384 is 256 Mpx; the header alone says so.
     let header = info_header(16384, 16384, 24, 0, 0);
     assert!(matches!(dib_to_png(&header), Err(ConvertError::Image(_))));
     let mut too_big = Vec::new();
@@ -708,7 +679,6 @@ fn an_unreadable_registered_png_falls_back_to_the_bitmap() {
     let mut read = |f: &WinFormat| (*f == WinFormat::DibV5).then(|| dib.clone());
     let body = local_body("image/png", &formats, 1 << 20, &mut read).expect("converted");
     assert_eq!(decode_png(&body).1, [0, 0, 0, 1, 0, 0]);
-    // The plain bitmap is the last resort.
     let mut only_dib = |f: &WinFormat| (*f == WinFormat::Dib).then(|| dib.clone());
     assert!(local_body("image/png", &formats, 1 << 20, &mut only_dib).is_ok());
 }

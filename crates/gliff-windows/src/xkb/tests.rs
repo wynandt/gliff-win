@@ -60,11 +60,9 @@ fn the_table_rows() {
 
 #[test]
 fn an_unlisted_klid_falls_back_to_its_language() {
-    // German (Austria) keyboard: not in the table, German language.
     let r = from_klid("00000c07");
     assert_eq!(r.layout, XkbLayout::new("de", None));
     assert_eq!(r.source, Source::Language);
-    // A layout variant id in the high half, English (US) language.
     let r = from_klid("a0010409");
     assert_eq!(r.layout, XkbLayout::new("us", None));
     assert_eq!(r.source, Source::Language);
@@ -154,7 +152,6 @@ fn a_changed_layout_is_sent_once_with_its_reason() {
 fn two_klids_with_one_layout_send_once() {
     let mut t = KeymapTracker::default();
     t.start("00000409");
-    // Same text: an unlisted English (US) KLID resolves to us.
     assert!(t.check("a0010409", Reason::InputLang).is_none());
 }
 

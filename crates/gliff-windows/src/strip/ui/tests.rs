@@ -60,7 +60,6 @@ impl Strip {
         ui.input(&self.layout, &self.m, input)
     }
 
-    /// A point inside tab `n` (0-based), off its slot.
     fn body(&self, n: usize) -> (i32, i32) {
         let t = &self.layout.tabs[n];
         (t.rect.left + 6, (t.rect.top + t.rect.bottom) / 2)
@@ -110,7 +109,6 @@ fn the_middle_button_is_the_dot_button_on_the_whole_tab() {
         s.click(&mut ui, Button::Middle, s.slot(0)),
         [Action::Dot(s.ids[0])]
     );
-    // A press on one tab and a release on another does nothing.
     let (a, b) = (s.body(0), s.body(1));
     s.send(&mut ui, Input::Down(Button::Middle, a.0, a.1));
     assert!(
@@ -128,7 +126,6 @@ fn the_right_button_opens_the_menu_where_it_was_let_go() {
         s.click(&mut ui, Button::Right, at),
         [Action::Menu(s.ids[1], at)]
     );
-    // Not on empty strip.
     assert!(
         s.click(&mut ui, Button::Right, (s.layout.fullscreen.left - 40, 16))
             .is_empty()
@@ -141,7 +138,6 @@ fn a_press_that_slides_off_cancels_the_click() {
     let mut ui = Ui::default();
     let (a, b) = (s.body(0), s.slot(0));
     s.send(&mut ui, Input::Down(Button::Left, a.0, a.1));
-    // Onto the slot of the same tab: not the same thing.
     assert!(
         s.send(&mut ui, Input::Up(Button::Left, b.0, b.1))
             .is_empty()
@@ -200,11 +196,9 @@ fn a_press_that_moves_far_enough_is_a_drag_dropped_where_it_is_let_go() {
     let mut ui = Ui::default();
     let from = s.body(0);
     s.send(&mut ui, Input::Down(Button::Left, from.0, from.1));
-    // Under the distance: not yet.
     s.send(&mut ui, Input::Move(from.0 + s.m.drag - 1, from.1));
     assert!(!ui.dragging());
     assert_eq!(ui.drag(&s.layout), None);
-    // Past it.
     let over = s.layout.tabs[2].rect.right - 4;
     s.send(&mut ui, Input::Move(over, from.1));
     assert!(ui.dragging());
@@ -232,7 +226,6 @@ fn a_drag_between_tabs_drops_before_the_next_tab() {
     let mut ui = Ui::default();
     let from = s.body(2);
     s.send(&mut ui, Input::Down(Button::Left, from.0, from.1));
-    // Left of the middle of the second tab: before it.
     let to = s.layout.tabs[1].rect.left + 4;
     s.send(&mut ui, Input::Move(to, from.1));
     assert_eq!(
@@ -287,7 +280,6 @@ fn only_one_button_is_held_at_a_time() {
     let mut ui = Ui::default();
     let at = s.body(0);
     s.send(&mut ui, Input::Down(Button::Left, at.0, at.1));
-    // A second button goes down and up: ignored; the left one still counts.
     s.send(&mut ui, Input::Down(Button::Right, at.0, at.1));
     assert!(
         s.send(&mut ui, Input::Up(Button::Right, at.0, at.1))
@@ -307,7 +299,6 @@ fn the_wheel_scrolls_only_when_the_tabs_overflow() {
     let many = strip(12, 600);
     assert!(many.layout.max_scroll > 0);
     let step = many.m.scroll_step;
-    // Away from the person: back toward the first tab.
     assert_eq!(
         many.send(&mut ui, Input::Wheel(120)),
         [Action::Scroll(-step)]

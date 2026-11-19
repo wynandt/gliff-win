@@ -1,5 +1,3 @@
-//! The hub with fake engines and a fake Windows thread.
-
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Duration;
@@ -18,7 +16,6 @@ use crate::clip_log::Cause;
 use crate::clip_log::RevokeWhy;
 use crate::tabs::SessionId;
 
-/// What reached the Windows thread, as short lines.
 #[derive(Default)]
 struct FakeWindows(Mutex<Vec<String>>);
 
@@ -54,7 +51,6 @@ struct Fixture {
     engines: Vec<mpsc::UnboundedReceiver<EngineIn>>,
 }
 
-/// Three engines, ids 1 to 3, session `shown` shown.
 fn fixture(shown: u32) -> Fixture {
     let (hub, input) = ClipHub::new().expect("the router thread");
     let windows = Arc::new(FakeWindows::default());
@@ -92,10 +88,6 @@ fn kinds(rx: &mut mpsc::UnboundedReceiver<EngineIn>) -> Vec<&'static str> {
     out
 }
 
-/// Everything each engine received so far. A cancel for a transfer of each
-/// engine goes in last; the router handles messages in order, so once an
-/// engine has that cancel, everything sent before it has been handled. The
-/// marker is dropped from the result.
 fn drained(fixture: &mut Fixture) -> Vec<Vec<&'static str>> {
     let progress = || Progress {
         label: "marker".to_owned(),
@@ -111,7 +103,6 @@ fn drained(fixture: &mut Fixture) -> Vec<Vec<&'static str>> {
             progress: progress(),
         });
     }
-    // The fake Windows thread saw the ids the hub made up; read them back.
     let lines = fixture.windows.lines();
     for line in &lines[lines.len() - fixture.hosts.len()..] {
         let global: u32 = line

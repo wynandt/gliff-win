@@ -9,8 +9,6 @@ use crate::input_check::cases::Place;
 use crate::input_check::cases::Window;
 use crate::input_check::remote_log::Entry;
 
-/// A fake machine: a registry the *client* model writes, and a maintainer
-/// who presses what is asked. `behaviour` switches in failures.
 #[derive(Default)]
 struct Fake {
     reading: Option<Reading>,
@@ -19,63 +17,36 @@ struct Fake {
     watchdog: bool,
     locked: bool,
     log: Vec<Entry>,
-    /// Entries a prompt makes the remote log, popped in order.
     presses: Vec<Vec<&'static str>>,
-    // Behaviours.
     stale_marker: bool,
     watchdog_broken: bool,
     never_restores_on_close: bool,
-    /// The client ignores `--test-panic` (it keeps running on F23).
     ignores_panic_flag: bool,
-    /// Win+E opened nothing new (an old Explorer window is not proof).
     no_new_explorer: bool,
     panic_armed: bool,
-    /// The client is the foreground window.
     front: bool,
-    /// The next this many `focus` calls to the client do not take (something
-    /// else keeps the foreground).
     ignored_client_focus: usize,
-    /// As above for the text field.
     ignored_notepad_focus: usize,
-    /// The foreground leaves the client once, when the panic leg first reads
-    /// the registry.
     front_leaves_at_panic_read: bool,
     locks_while_held: bool,
     writes: usize,
-    // The remote machine and the countdown.
-    /// Order of what the harness did, for the ordering tests.
     events: Vec<String>,
-    /// Every countdown: the instruction and its seconds.
     countdowns: Vec<(String, u32)>,
     flags_seen: Vec<Vec<String>>,
-    /// The remote machine is not in the test submap, and `arm` cannot fix it.
     cannot_arm: bool,
-    /// The remote machine was armed by hand before the run.
     armed_by_hand: bool,
     armed: bool,
     disarmed: bool,
-    /// The test submap is lost after the first countdown.
     loses_submap: bool,
-    /// Win+L never locks the machine, even with the setting released.
     never_locks: bool,
-    /// The machine stays locked (nobody unlocks it).
     stays_locked: bool,
     releases: usize,
-    /// The client puts the value back only after this many registry reads
-    /// (a tick and a delay in the real one); 0 is at once.
     late_restore_reads: usize,
     restore_in: usize,
-    /// The raw lines the remote log carries beside the binds, added to
-    /// every press.
     raw_lines: Vec<&'static str>,
-    /// The next this many `focus` calls fail with an error.
     focus_errors: usize,
-    /// The client does not exit when it is closed.
     client_survives_close: bool,
-    /// When the step lets go of the remote machine (its last act before the end
-    /// check), the client is running again with the value set.
     client_left_holding_at_end: bool,
-    /// Explorer watches started and not yet stopped.
     explorer_watches: usize,
 }
 
@@ -141,7 +112,6 @@ impl LockHarness for Fake {
         );
         self.flags_seen.push(flags.to_vec());
         self.panic_armed = flags.iter().any(|f| f == "--test-panic") && !self.ignores_panic_flag;
-        // The client's startup check puts back a stale value.
         if self.reading.expect("reading").marker {
             self.put(self.prior, false);
         }
@@ -232,7 +202,6 @@ impl LockHarness for Fake {
         if self.loses_submap && self.countdowns.len() == 1 {
             self.cannot_arm = true;
         }
-        // With the setting held Win+L reaches the remote machine; released, it locks.
         if self.locks_while_held
             || (self.reading.is_some_and(|r| r.value != Some(1)) && !self.never_locks)
         {
@@ -286,7 +255,6 @@ impl LockHarness for Fake {
     }
 
     fn panic_client(&mut self) -> anyhow::Result<()> {
-        // The hook exists only while the client is in front.
         if self.panic_armed && self.front {
             self.client = false;
             self.watchdog = false;
@@ -310,7 +278,6 @@ impl LockHarness for Fake {
 
     fn restore_flag(&mut self) -> anyhow::Result<()> {
         self.events.push("restore_flag".into());
-        // A running client owns the marker: the flag leaves it alone.
         if !self.client {
             self.put(self.prior, false);
         }
@@ -606,8 +573,6 @@ fn the_step_waits_for_the_unlock_before_it_starts_the_next_client() {
 
 #[test]
 fn raw_key_lines_beside_the_bind_do_not_fail_l3_and_l4() {
-    // What the remote logged in the live run: Win down twice, L down, the
-    // bind, then the ups.
     let mut h = Fake::new(None);
     h.raw_lines = vec![
         "key:down:125",
@@ -801,8 +766,6 @@ fn the_explorer_watch_stops_even_when_the_press_was_not_asked_for() {
 
 #[test]
 fn the_end_does_not_say_repaired_when_it_repaired_nothing() {
-    // A client that will not close, and a registry that is fine: the recovery
-    // flag is not run, and the row says what is left.
     let mut h = Fake::new(Some(0));
     h.client_survives_close = true;
     let results = run(&mut h);

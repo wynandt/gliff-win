@@ -256,7 +256,6 @@ fn renamed_files_pass_when_the_names_open_and_the_contents_match() {
         difference(&want, &renamed, true).is_some(),
         "strict sees the new names"
     );
-    // The names as they were are not what Windows can open.
     let said = difference(&want, &want, false).expect("diff");
     assert!(said.contains("a name Windows cannot open"), "{said}");
 }
@@ -301,7 +300,6 @@ fn a_renamed_tree_still_fails_for_content_count_and_case() {
     assert!(ok(clash).expect("diff").contains("only in case"));
 }
 
-// The tools on the remote machine, against the gate's own reader and writer.
 #[cfg(unix)]
 mod with_tar {
     use std::process::Command;
@@ -344,7 +342,6 @@ mod with_tar {
     #[test]
     fn the_archives_of_this_tar_read_in_every_format() {
         let mut nodes = sample().nodes;
-        // Names past 100 bytes: GNU long names, pax paths.
         let deep = format!("{}/{}", "g".repeat(90), "h".repeat(90));
         nodes.push(super::dir(deep.split('/').next().expect("first")));
         nodes.push(super::dir(&deep));
@@ -366,7 +363,6 @@ mod with_tar {
                 .output()
                 .expect("tar");
             if !out.status.success() {
-                // ustar cannot hold the longest names: that is the format's limit.
                 assert_eq!(format, "ustar");
                 continue;
             }

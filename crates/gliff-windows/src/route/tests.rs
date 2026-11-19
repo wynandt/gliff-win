@@ -1,5 +1,3 @@
-//! The input route's ordering guarantee and the clipboard rules.
-
 use std::sync::Arc;
 use std::sync::Barrier;
 use std::sync::atomic::AtomicBool;
@@ -21,8 +19,6 @@ enum Cmd {
     Release,
 }
 
-/// What a session holds after replaying its channel: a down key stays until
-/// a release or its own up.
 fn held_after(rx: &mut mpsc::UnboundedReceiver<Cmd>) -> usize {
     let mut held = 0usize;
     while let Ok(command) = rx.try_recv() {
@@ -71,8 +67,6 @@ fn a_switch_returns_the_old_session_and_sends_follow_the_new_one() {
     assert!(!route.send(Cmd::Key(8)));
 }
 
-/// One round: a thread sends keys while the UI thread switches the route and
-/// then releases the old session. Returns what the old session still holds.
 fn round_with(send: impl Fn(&InputRoute<Cmd>, Cmd) + Sync + Send + 'static) -> usize {
     let route = Arc::new(InputRoute::new());
     let (old_tx, mut old_rx) = mpsc::unbounded_channel();
@@ -93,7 +87,6 @@ fn round_with(send: impl Fn(&InputRoute<Cmd>, Cmd) + Sync + Send + 'static) -> u
     };
     start.wait();
     std::thread::yield_now();
-    // What the UI thread does for a switch: move the route, then release.
     route.switch(Some((id(2), new_tx)));
     let _ = old_tx.send(Cmd::Release);
     stop.store(true, Ordering::Relaxed);
@@ -111,8 +104,6 @@ fn the_old_session_ends_every_key_up_whatever_the_timing() {
     }
 }
 
-/// The wrong design: the sender is copied out of the lock and used after it.
-/// The test above must be able to tell it apart, so this shows it can.
 fn send_outside_the_lock(route: &InputRoute<Cmd>, gap: &dyn Fn(), command: Cmd) -> bool {
     let sender = {
         let target = route.target.lock().expect("lock");
@@ -128,8 +119,6 @@ fn a_sender_copied_out_of_the_lock_would_leave_a_key_down() {
     let (old_tx, mut old_rx) = mpsc::unbounded_channel();
     let (new_tx, _new_rx) = mpsc::unbounded_channel();
     route.switch(Some((id(1), old_tx.clone())));
-    // The hook copies the sender, the UI thread switches and releases, and
-    // only then does the hook send: the key lands behind the release.
     let gap = || {
         route.switch(Some((id(2), new_tx.clone())));
         let _ = old_tx.send(Cmd::Release);
@@ -140,8 +129,6 @@ fn a_sender_copied_out_of_the_lock_would_leave_a_key_down() {
 
 #[test]
 fn the_real_send_cannot_be_interleaved_that_way() {
-    // The same sequence with the real `send`: the send finishes inside the
-    // lock before `switch` can run, so the release is last.
     let route = InputRoute::new();
     let (old_tx, mut old_rx) = mpsc::unbounded_channel();
     let (new_tx, _new_rx) = mpsc::unbounded_channel();

@@ -247,7 +247,6 @@ fn motion_leaves_the_held_ctrl_for_the_altgr_filter() {
     s.key(raw(0xa2, 0x1d, Prefix::None, Press::Down, 100));
     s.pointer(PointerEvent::Motion { x: 1.0, y: 2.0 });
     assert!(s.holding(), "a moving mouse does not decide it");
-    // The AltGr that follows still removes the fake Ctrl.
     let alt = s.key(raw(0xa5, 0x38, Prefix::E0, Press::Down, 103));
     assert_eq!(alt.msgs, vec![key(100, true)], "right Alt alone, no Ctrl");
 }
@@ -255,8 +254,6 @@ fn motion_leaves_the_held_ctrl_for_the_altgr_filter() {
 #[test]
 fn a_click_during_or_after_a_whole_altgr_press_never_sends_its_fake_ctrl() {
     let mut s = side();
-    // Windows reports AltGr as the fake Ctrl and the right Alt with the same
-    // time: once both are in, the fake Ctrl is gone and nothing is waiting.
     s.key(raw(0xa2, 0x1d, Prefix::None, Press::Down, 100));
     let alt = s.key(raw(0xa5, 0x38, Prefix::E0, Press::Down, 100));
     assert_eq!(alt.msgs, vec![key(100, true)], "right Alt alone");
@@ -270,7 +267,6 @@ fn a_click_during_or_after_a_whole_altgr_press_never_sends_its_fake_ctrl() {
         s.wheel(Axis::Vertical, 120).len() == 1,
         "nor does a wheel step"
     );
-    // The fake Ctrl's Up is dropped, too: the remote never saw it go down.
     let up = s.key(raw(0xa2, 0x1d, Prefix::None, Press::Up, 140));
     assert!(up.msgs.is_empty(), "{:?}", up.msgs);
 }
@@ -284,8 +280,6 @@ fn a_click_without_a_waiting_ctrl_sends_only_the_click() {
 const RSHIFT: u16 = 0xa1;
 const SLASH: u16 = 0xbf;
 
-/// A real right Shift as a built-in keyboard's hook reports it: scan 0x36 with
-/// the extended flag (measured with a probe).
 fn rshift(press: Press, t: u32) -> RawKey {
     raw(RSHIFT, 0x36, Prefix::E0, press, t)
 }
@@ -340,12 +334,6 @@ fn right_shift_and_escape_release_a_shift_escape_chord() {
     );
 }
 
-/// Modelled, not measured: what Windows is documented to send with Num Lock
-/// on when Shift is held and a keypad key is pressed. Windows takes the
-/// Shift up (scan 0x22A), sends the key (as the navigation key, here Up from
-/// keypad 8: vk 0x26, scan 0x48, not extended), then puts the Shift back
-/// with its normal scan code. The fake Up is dropped, the keypad key goes
-/// out as keypad 8, and the repeated Shift Down adds nothing.
 #[test]
 fn the_fake_shifts_around_a_keypad_key_are_not_sent_modelled() {
     for (vk, real_scan, fake_scan, prefix, code) in [

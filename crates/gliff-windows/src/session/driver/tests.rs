@@ -94,7 +94,6 @@ fn one_pass_reads_at_most_the_limit() {
 
 #[test]
 fn the_deadline_is_late_enough_for_the_filter_to_give_up() {
-    // The Ctrl Down came at hook time 1000 and reached the session now.
     let arrived = Instant::now();
     let clock = KeyClock {
         time_ms: 1000,
@@ -153,7 +152,6 @@ fn ended(reason: Option<EndReason>, ssh_exit: Option<i32>) -> SessionEnd {
 
 #[test]
 fn a_run_that_never_opened_a_machine_and_was_closed_is_clean() {
-    // The window may start empty and be closed from there.
     assert!(run_was_clean(0, &[]));
 }
 

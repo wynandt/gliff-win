@@ -1,5 +1,3 @@
-//! The config folder choice and the file rules, against a temporary folder.
-
 use std::ffi::OsString;
 use std::fs;
 use std::path::PathBuf;
@@ -106,7 +104,6 @@ fn a_failed_write_keeps_the_old_file_and_leaves_no_temporary() {
     let dir = temp();
     let file = dir.path().join("a.toml");
     write_atomic(&file, "x = 1\n").expect("write");
-    // A folder where the file must go makes the rename fail.
     let blocked = dir.path().join("b.toml");
     fs::create_dir(&blocked).expect("blocker");
     let err = write_atomic(&blocked, "x = 2\n").expect_err("cannot replace a folder");
@@ -197,7 +194,6 @@ fn an_error_that_will_not_go_away_is_not_tried_again() {
                 Err(std::io::Error::from(kind))
             },
             5,
-            // A pause this long would make the test fail by timing out.
             std::time::Duration::from_secs(3600),
         );
         assert_eq!(calls, 1, "{kind:?} was tried again");
@@ -352,7 +348,7 @@ fn an_error_other_than_taken_stops_the_copy_instead_of_trying_the_next_name() {
     let result = keep_copy(&file, ".broken");
     fs::set_permissions(&sub, fs::Permissions::from_mode(0o700)).expect("restore");
     if fs::write(sub.join("probe"), "x").is_ok() {
-        return; // running as a user the mode does not bind: nothing to prove
+        return;
     }
     let err = result.expect_err("no write access is an error, not a free name");
     assert!(err.is_transient(), "{err}");
@@ -416,7 +412,7 @@ fn a_save_into_a_read_only_folder_is_not_transient() {
     let result = write_atomic(&file, "x = 2\n");
     fs::set_permissions(dir.path(), fs::Permissions::from_mode(0o700)).expect("unlock");
     match result {
-        Ok(()) => {} // a user the mode does not bind
+        Ok(()) => {}
         Err(err) => assert!(!err.is_transient(), "a caller would loop: {err}"),
     }
 }
@@ -428,8 +424,6 @@ fn a_guard_that_fails_five_times_keeps_one_copy() {
     let mut guard = FileGuard::unread(&file);
     for _ in 0..5 {
         fs::write(&file, "hand = = edit").expect("damaged text");
-        // Between the look and the rename, a folder takes the name: the
-        // rename fails.
         let result = guard.write_between(
             "x = 1\n",
             |_| true,
@@ -711,7 +705,6 @@ mod config_file {
         let dir = TestDir::new();
         let path = write(&dir, "= first");
         let (mut file, _) = ConfigFile::load(&path);
-        // A folder where the file goes makes the save fail.
         fs::write(&path, "= second").expect("edit");
         let blocked = dir.path().join("config.toml");
         let parked = dir.path().join("parked");
@@ -734,7 +727,6 @@ mod config_file {
 
     #[test]
     fn a_sound_file_gets_the_same_checks_on_every_save() {
-        // The rule has no shortcut for a file that loaded fine.
         let dir = TestDir::new();
         let path = write(&dir, "");
         let (mut file, _) = ConfigFile::load(&path);
@@ -798,8 +790,6 @@ mod config_file {
     #[test]
     fn a_file_that_cannot_be_read_is_not_damaged_and_is_not_overwritten() {
         let dir = TestDir::new();
-        // A folder in place of the file: reading it fails with an I/O error,
-        // as a sharing violation would.
         let path = dir.path().join("config.toml");
         fs::create_dir(&path).expect("folder");
         let (mut file, notes) = ConfigFile::load(&path);
@@ -860,7 +850,7 @@ mod config_file {
         fs::set_permissions(&path, fs::Permissions::from_mode(0o000)).expect("lock");
         let (mut file, notes) = ConfigFile::load(&path);
         if notes.is_empty() {
-            return; // running as a user the mode does not bind
+            return;
         }
         let err = file.save().expect_err("locked");
         assert!(err.is_transient(), "a permission can be fixed: {err}");
@@ -904,8 +894,6 @@ mod config_file {
         let path = write(&dir, &text);
         let (mut file, notes) = ConfigFile::load(&path);
         assert!(notes.is_empty(), "{notes:?}");
-        // Each kept inline table is written as a table of its own, which is
-        // longer: the result no longer loads back.
         let err = file.save().expect_err("the result would not load back");
         assert!(!err.is_transient(), "{err}");
         assert_eq!(fs::read_to_string(&path).expect("read"), text);
@@ -1058,9 +1046,6 @@ mod config_file {
 
     #[test]
     fn a_file_with_a_setting_note_is_kept_before_the_save() {
-        // The notes of the settings come after the tabs' notes: a file whose
-        // only problem is a setting must still be kept when the save would
-        // write it another way.
         let dir = TestDir::new();
         let original = "[settings]\nrelease_chord = \"bogus\"\n\n\n";
         let path = write(&dir, original);
@@ -1090,8 +1075,6 @@ mod config_file {
 
     #[test]
     fn a_setting_the_save_writes_another_way_is_kept_before_the_save() {
-        // The text is in the client's layout, and the value is read, then
-        // written back in its own spelling: no note, and still a change.
         let dir = TestDir::new();
         let original = "[settings]\nrelease_chord = \"SHIFT+ESC\"\n";
         let path = write(&dir, original);
@@ -1276,8 +1259,6 @@ mod config_file {
 
     #[test]
     fn an_old_config_file_loads_and_keeps_what_it_does_not_know() {
-        // A file from before the menu: tabs, settings, a key of a newer
-        // client, and no `[overrides]`.
         let old = "machines = [\"me@a\"]\nopen = [\"me@a\"]\nshown = \"me@a\"\nfuture = 7\n\n[settings]\nscreen = \"own\"\nmood = \"x\"\n";
         let dir = TestDir::new();
         let path = write(&dir, old);
@@ -1290,7 +1271,6 @@ mod config_file {
             "no table appears"
         );
 
-        // Saving with no choice made changes nothing that matters.
         file.save().expect("save");
         let table: toml::Table = fs::read_to_string(&path)
             .expect("file")
@@ -1298,7 +1278,6 @@ mod config_file {
             .expect("TOML");
         assert!(!table.contains_key("overrides"));
 
-        // A choice joins the file and takes nothing out of it.
         file.choices()
             .borrow_mut()
             .set_screen(&host("me@a"), Screen::Mirror);

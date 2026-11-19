@@ -1,5 +1,3 @@
-//! The tabs' rules, as lists of effects.
-
 use super::Cause;
 use super::Effect;
 use super::End;
@@ -15,7 +13,6 @@ use std::sync::OnceLock;
 use std::time::Duration;
 use std::time::Instant;
 
-/// A fake clock: `at(n)` is `n` milliseconds after one fixed start.
 fn at(ms: u64) -> Instant {
     static START: OnceLock<Instant> = OnceLock::new();
     *START.get_or_init(Instant::now) + Duration::from_millis(ms)
@@ -25,7 +22,6 @@ fn host(text: &str) -> HostTarget {
     text.parse().expect("a host")
 }
 
-/// The session a `Start` effect made.
 fn started(effects: &[Effect]) -> SessionId {
     effects
         .iter()
@@ -55,7 +51,6 @@ fn status_of(tabs: &Tabs, name: &str) -> Status {
         .expect("the tab")
 }
 
-/// Three tabs a, b and c, all streaming, a shown.
 fn three() -> Tabs {
     let mut tabs = Tabs::new();
     for name in ["a@x", "b@x", "c@x"] {
@@ -235,10 +230,8 @@ fn the_neighbour_rule_skips_tabs_with_no_session_and_then_goes_left() {
     let (b, c) = (tab_of(&tabs, "b@x"), tab_of(&tabs, "c@x"));
     tabs.click(c);
     tabs.stop(b);
-    // Shown c; its right has nothing; the left neighbour b is stopped, so a.
     tabs.stop(c);
     assert_eq!(tabs.shown(), Some(tab_of(&tabs, "a@x")));
-    // Now a is alone with c and b stopped: right side has none running.
     let effects = tabs.stop(tab_of(&tabs, "a@x"));
     assert_eq!(tabs.shown(), None);
     let a = SessionId::from_raw(0);
@@ -428,8 +421,6 @@ fn a_later_plain_error_does_not_keep_the_old_ssh_failure() {
     assert_eq!(view.failure(), None);
 }
 
-/// One shown tab `n@x` that is streaming and then ends with `failure`, with
-/// no retries allowed, so it gives up at once.
 fn gave_up_with(failure: SshFailure) -> (Tabs, TabId, SessionId) {
     let policy = crate::reconnect::Policy {
         first_delay: Duration::from_millis(10),
@@ -676,7 +667,7 @@ fn moving_a_tab_reorders_and_saves() {
 #[test]
 fn the_tab_set_holds_what_connected_and_what_was_not_stopped_by_hand() {
     let mut tabs = three();
-    tabs.open(&host("never@x")); // connecting, never connected
+    tabs.open(&host("never@x"));
     tabs.click(tab_of(&tabs, "b@x"));
     tabs.stop(tab_of(&tabs, "c@x"));
     let set = tabs.tab_set();
@@ -834,9 +825,6 @@ fn an_ended_tab_says_why_even_if_it_was_re_syncing() {
     );
 }
 
-// Reconnect. A fake clock drives every test: nothing here sleeps.
-
-/// The retry a `due` call started, if any.
 fn retry_started(effects: &[Effect]) -> Option<SessionId> {
     effects.iter().find_map(|effect| match effect {
         Effect::Start {

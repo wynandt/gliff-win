@@ -19,40 +19,23 @@ const TIMING: Timing = Timing {
     arrive_files: Duration::from_millis(200),
 };
 
-/// What the fake sync gets wrong.
 #[derive(Default)]
 struct Faults {
-    /// The client ends at once.
     client_exits: bool,
-    /// Nothing goes from Windows to the remote machine.
     no_windows_to_remote: bool,
-    /// CRLF is not converted to LF on the way to the remote machine.
     keeps_crlf: bool,
-    /// The Windows clipboard gets a foreign text after the quiet time.
     echo_after_quiet: bool,
-    /// A picture from Windows arrives upside down.
     flips_pictures: bool,
-    /// A picture from the remote machine loses its alpha on Windows.
     drops_alpha: bool,
-    /// Nothing from the remote machine is kept out of the history.
     history_open: bool,
-    /// The remote machine's picture is replaced after the quiet time.
     picture_echo_after_quiet: bool,
-    /// A file from the remote machine arrives with one byte changed.
     corrupts_files: bool,
-    /// The files from the remote machine come without a drop effect.
     no_drop_effect: bool,
-    /// The Windows clipboard names other files after the quiet time.
     files_echo_after_quiet: bool,
-    /// Names Windows cannot hold are kept as they are.
     keeps_refused_names: bool,
-    /// The client leaves a spool directory behind.
     leaves_spool: bool,
 }
 
-/// What the client makes of a tree that came from the remote machine: names
-/// Windows cannot hold are changed, and the later of two names that differ
-/// only in case gets a number.
 fn on_windows(found: &[Found], keep_names: bool) -> Vec<Found> {
     use std::collections::HashMap;
     use std::collections::HashSet;
@@ -92,8 +75,6 @@ fn on_windows(found: &[Found], keep_names: bool) -> Vec<Found> {
     out
 }
 
-/// Two clipboards that follow each other, as the client makes them, plus
-/// the faults above. `sleep` only counts: no real time passes.
 #[derive(Default)]
 struct Linked {
     faults: Faults,
@@ -633,7 +614,6 @@ fn the_nonce_makes_every_text_unique() {
     }
 }
 
-// The remote half, over scripts/fake-ssh and the fake wl-clipboard.
 #[cfg(unix)]
 mod over_ssh {
     use std::path::Path;
@@ -649,7 +629,6 @@ mod over_ssh {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../scripts/fake-ssh")
     }
 
-    /// The fake clipboard is one file per user: the tests that use it take turns.
     static FAKE_CLIPBOARD: Mutex<()> = Mutex::new(());
 
     fn fake_file() -> PathBuf {
@@ -665,8 +644,6 @@ mod over_ssh {
         }
     }
 
-    /// A remote with its own scratch directory, so no test touches the home
-    /// directory it runs in.
     fn scratch_remote(name: &str) -> (Remote, PathBuf) {
         let dir =
             std::env::temp_dir().join(format!("gwin-verify-test-{name}-{}", std::process::id()));
@@ -723,8 +700,6 @@ mod over_ssh {
             got.iter()
                 .any(|f| f.file.is_some_and(|(len, _)| len == 6 << 20))
         );
-        // What was copied is a uri-list of the top-level entries, which a
-        // reader sees as text.
         let list = remote.text().expect("text").expect("a list");
         assert_eq!(list.lines().count(), 2, "{list}");
         assert!(list.starts_with("file://"), "{list}");
@@ -784,7 +759,6 @@ mod over_ssh {
         assert_eq!(remote().image().expect("paste"), None);
     }
 
-    /// Noise does not compress: the PNG is far larger than a pipe holds.
     fn noisy_png() -> Vec<u8> {
         let mut picture = Picture::opaque(600, 400, 5);
         let mut state = 12345u32;
