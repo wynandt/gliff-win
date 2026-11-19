@@ -349,7 +349,6 @@ pub fn height_of(parent: HWND) -> u32 {
         if !IsWindowVisible(child).as_bool() {
             return 0;
         }
-        // In full screen the strip is over the picture, not above it.
         if !GetPropW(child, OVERLAY_PROP).is_invalid() {
             return 0;
         }
@@ -631,7 +630,6 @@ impl StripWin {
     /// folded (and then asks for the keyboard to go back to the picture).
     fn place_edit(&mut self) {
         let target = edit_target(self.layout.bar.map(|bar| bar.edit), self.visible);
-        // Moving and showing the field again on every layout makes it blink.
         if !self.edit_at.update(target) {
             return;
         }
@@ -801,8 +799,6 @@ extern "system" fn proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) ->
     let input = match msg {
         WM_PAINT => {
             if with_app(|app| app.strip.paint(app.stats_visible())).is_none() {
-                // The state is busy: a plain validation, drawn at the next
-                // change.
                 let mut ps = PAINTSTRUCT::default();
                 // SAFETY: our window, paired with EndPaint.
                 unsafe {
@@ -934,7 +930,6 @@ fn tab_menu(id: TabId, at: (i32, i32)) {
             hwnd,
             None,
         );
-        // Destroying the menu destroys the submenus built into it.
         destroy(menu);
         usize::try_from(chosen.0).unwrap_or(0)
     };
@@ -957,8 +952,6 @@ unsafe fn build_tab(menu: HMENU, entries: &[Entry], commands: &mut Vec<Command>)
             .chain(Some(0))
             .collect()
     };
-    // The rows that are one choice among several, by place in this menu,
-    // and which of them is the choice.
     let mut radios: Vec<u32> = Vec::new();
     let mut picked: Option<u32> = None;
     // SAFETY: the caller's menu; the strings outlive each call.

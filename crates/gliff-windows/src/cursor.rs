@@ -67,8 +67,7 @@ impl RemoteCursor {
         }
         match make_cursor(image) {
             Ok(icon) => {
-                // Swap first: the old icon may be the cursor on screen, and
-                // destroying the active cursor is undefined.
+                // Platform: destroying the cursor on screen is undefined, so the new one goes in first.
                 // SAFETY: GetCursor only reads the thread's cursor.
                 let active = unsafe { GetCursor() };
                 let old = self.shape.replace(icon);
@@ -134,7 +133,6 @@ fn make_cursor(image: &CursorImage) -> windows::core::Result<HICON> {
     let header = BITMAPINFOHEADER {
         biSize: size_of::<BITMAPINFOHEADER>() as u32,
         biWidth: w as i32,
-        // Negative: rows top down, as the payload.
         biHeight: -(h as i32),
         biPlanes: 1,
         biBitCount: 32,
@@ -155,8 +153,7 @@ fn make_cursor(image: &CursorImage) -> windows::core::Result<HICON> {
     unsafe {
         std::ptr::copy_nonoverlapping(image.argb.as_ptr(), bits.cast::<u8>(), len);
     }
-    // An all-zero AND mask: with no bits CreateBitmap's contents are
-    // undefined. Rows are padded to 16 bits.
+    // Platform: CreateBitmap leaves the bits undefined when it gets none.
     let mask_bits = vec![0u8; (w as usize).div_ceil(16) * 2 * h as usize];
     // SAFETY: a monochrome w x h bitmap; `mask_bits` holds every padded
     // row and outlives the call (CreateBitmap copies it).

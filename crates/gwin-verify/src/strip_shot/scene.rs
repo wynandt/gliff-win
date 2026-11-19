@@ -106,10 +106,8 @@ pub fn scenes() -> Vec<Scene> {
     let three = [Live, Live, Stopped];
     let mut long = scene("long-name", 640, &[Live, Live]);
     long.tabs[1].0 = "a-very-long-user-name@a-very-long-host-name.example.net".to_owned();
-    // A 40-character host: the name is longer than any tab used to be.
     let mut long_host = scene("long-host", 800, &[Live, Live, Live]);
     long_host.tabs[1].0 = "ops@build-server-east-region-001.example.net".to_owned();
-    // Machines whose addresses differ only at the end.
     let ips = |name: &'static str, width: i32, count: usize| {
         let mut s = scene(name, width, &vec![Live; count]);
         for (i, tab) in s.tabs.iter_mut().enumerate() {
@@ -122,7 +120,6 @@ pub fn scenes() -> Vec<Scene> {
     for (i, tab) in hosts.tabs.iter_mut().enumerate() {
         tab.0 = format!("deploy@build-server-eng-west.example.net-{}", i + 1);
     }
-    // Short names: a tab is its text and padding, with no minimum width.
     let mut short = scene("short-names", 640, &[Live, Live, Connecting, Failed]);
     for (tab, name) in short.tabs.iter_mut().zip(["a@x", "b@y", "me@h1", "ci@z9"]) {
         tab.0 = name.to_owned();
@@ -191,7 +188,6 @@ pub fn scenes() -> Vec<Scene> {
             hover: Hover::Chevron,
             ..scene("narrow-hover-chevron", 480, &ten)
         },
-        // Keep these non-overflow scenes wide enough for the graph button.
         Scene {
             bar: Some(BarScene {
                 text: "",

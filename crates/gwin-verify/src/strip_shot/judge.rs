@@ -93,9 +93,6 @@ pub fn problems(
         ));
     }
 
-    // The fixed parts: inside the strip, apart from each other. The
-    // address bar's three parts sit inside `add`, so they are checked
-    // against it.
     let mut parts = vec![("add", l.add), ("fullscreen", l.fullscreen)];
     if let Some(bar) = &l.bar {
         for (name, r) in [("edit field", bar.edit), ("list", bar.list), ("go", bar.go)] {
@@ -126,7 +123,6 @@ pub fn problems(
         }
     }
 
-    // The tabs.
     let minimum_dot = 10 * m.dpi as i32 / 96 - 1;
     for (i, tab) in l.tabs.iter().enumerate() {
         for other in &l.tabs[i + 1..] {
@@ -134,8 +130,6 @@ pub fn problems(
                 out.push(format!("tab {} overlaps tab {}", i + 1, i + 2));
             }
         }
-        // The name is complete: the full address, in the layout's font, in
-        // a place as wide as it is.
         let full = &built.paints[i].label;
         let name = ops.iter().find_map(|op| match op {
             Op::Text {
@@ -222,8 +216,6 @@ pub fn problems(
             if !inked {
                 out.push(format!("tab {}: no name is drawn", i + 1));
             }
-            // The room's last column stays clear: ink there is a name
-            // running on, or cut at, the edge.
             let edge = label.right - 1;
             if (label.top..label.bottom).any(|y| pic.at(edge, y) != background) {
                 out.push(format!(

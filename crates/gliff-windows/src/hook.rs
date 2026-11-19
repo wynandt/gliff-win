@@ -340,10 +340,8 @@ fn state_line() -> String {
 /// those the hook saw the user press and not let go of (the user's own Up
 /// reaches Windows). Returns what it released.
 pub fn release_at_grab_end() -> Vec<crate::modifiers::Modifier> {
-    // A copy: the lock is not held across `SendInput`, which runs this
-    // client's own hook.
+    // Platform: SendInput runs this process's own hook, so no lock is held across it.
     let real = physical_now();
-    // A Win key the user still holds gets its own Up after the grab.
     let due = win_owed().due(|vk| real.seen(vk) == Seen::Down);
     let released =
         crate::modifiers::release_held_where(|down, vk| real.stuck_at_grab_end(down, vk), &due);
@@ -354,8 +352,7 @@ pub fn release_at_grab_end() -> Vec<crate::modifiers::Modifier> {
 /// The hook was installed again: releases the modifiers Windows counts as
 /// down although the hook saw them come up.
 fn release_at_reinstall() -> Vec<crate::modifiers::Modifier> {
-    // A copy: the lock is not held across `SendInput`, which runs this
-    // client's own hook.
+    // Platform: SendInput runs this process's own hook, so no lock is held across it.
     let real = physical_now();
     let due = win_owed().due(|vk| real.seen(vk) == Seen::Down);
     let released =
@@ -402,8 +399,6 @@ pub fn set_mode(mode: HookMode) {
     let now = gate.request(mode);
     let ended = (was == HookMode::Grab && now != HookMode::Grab).then(state_line);
     if was == HookMode::Off && now != HookMode::Off {
-        // No hook ran while Off: a Down it saw before may have come up
-        // unseen, and would read as a key the user still holds.
         PHYSICAL
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
@@ -411,8 +406,6 @@ pub fn set_mode(mode: HookMode) {
     }
     let mut ledger = LEDGER.lock().unwrap_or_else(PoisonError::into_inner);
     if now != HookMode::Grab {
-        // What the remote still holds stays, until the hook has made sure
-        // that the session let go of it.
         ledger.forget_windows();
     } else if was != HookMode::Grab {
         ledger.seed(held_keys());
@@ -513,10 +506,6 @@ impl HookThread {
     ) -> Result<Self, String> {
         reset_timing();
         let mode = {
-            // A hook installed again in the middle of a grab starts from the
-            // keys Windows holds down now, not from nothing: a key that went
-            // down while no hook looked still gets its Up, and a release
-            // chord that is half held can be finished.
             let gate = GATE.lock().unwrap_or_else(PoisonError::into_inner);
             let mode = gate.mode();
             let held = if mode == HookMode::Off {
@@ -557,19 +546,11 @@ impl HookThread {
         match ready_rx.recv() {
             Ok(Ok(thread_id)) => {
                 if mode != HookMode::Off {
-                    // Installed again while a hook mode is on (the window
-                    // took a key for a silent hook, or the hook was gone):
-                    // what is down now, and a release of any modifier the
-                    // hook saw come up that Windows still counts as down.
-                    // Sent after the new hook is in, so it ignores them.
                     crate::logging::line(&format!(
                         "hook installed again, keys down: {}",
                         state_line()
                     ));
                     if let Some(remote) = remote {
-                        // The remote may have missed an Up while no hook looked,
-                        // and so may the session: both let go of every
-                        // modifier the hook did not see the user hold.
                         let user_holds = PHYSICAL
                             .lock()
                             .unwrap_or_else(PoisonError::into_inner)
@@ -616,8 +597,6 @@ impl Drop for HookThread {
         if crate::bounded_wait::ended_within(&self.ended, STOP_WAIT) {
             let _ = join.join();
         } else {
-            // Stuck in a callback: the thread removes the hook when it gets
-            // back to its loop. Waiting here would hang the window.
             crate::logging::line("keyboard hook thread did not stop in time; not waiting for it");
         }
     }
@@ -653,8 +632,6 @@ fn run(ctx: Ctx, ready: &std::sync::mpsc::Sender<Result<u32, String>>) {
     // SAFETY: no preconditions.
     let thread_id = unsafe { GetCurrentThreadId() };
     let _ = ready.send(Ok(thread_id));
-    // The loop is what lets Windows call the hook on this thread; it ends
-    // on WM_QUIT (GetMessageW returns 0) or an error (-1).
     // SAFETY: `msg` is a valid MSG for the whole loop.
     while unsafe { GetMessageW(&mut msg, None, 0, 0) }.0 > 0 {}
     // SAFETY: `hook` came from SetWindowsHookExW and is removed once.
@@ -676,8 +653,7 @@ unsafe extern "system" fn hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -
             _ => Press::Down,
         };
         let swallow = CTX.with(|c| {
-            // try_borrow_mut: SendInput inside the callback can call it
-            // again; the nested call passes the key.
+            // Platform: SendInput inside the callback calls the callback again.
             c.try_borrow_mut()
                 .ok()
                 .and_then(|mut ctx| ctx.as_mut().map(|ctx| ctx.handle(wparam.0 as u32, info)))
@@ -702,9 +678,6 @@ impl Ctx {
             _ => return false,
         };
         let vk = key.vkCode as u16;
-        // A key this client injected passes, and then reaches the window as
-        // a key message: noted, so the window does not take it for a silent
-        // hook and install the hook again.
         if PASSED
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
@@ -753,10 +726,6 @@ impl Ctx {
             .fate(now, self.cmds.target().is_some(), decision, vk, press);
         match fate {
             Fate::Release => {
-                // The release chord: the keyboard goes back to Windows now,
-                // from here, whatever the session or the UI thread are doing.
-                // The session releases the remote's keys and the UI catches
-                // up from the command.
                 gate.chord_fired();
                 WATCH
                     .lock()
@@ -765,7 +734,6 @@ impl Ctx {
                     .for_each(ChordWatch::clear);
                 let sent = self.cmds.send(UiCmd::ReleaseGrab);
                 if sent {
-                    // The session lets go of every key it holds.
                     LEDGER
                         .lock()
                         .unwrap_or_else(PoisonError::into_inner)
@@ -774,20 +742,13 @@ impl Ctx {
                 return sent;
             }
             Fate::Switch(to) => {
-                // The grab stays on. The UI thread moves the route; keys
-                // after this one go to the new session. The trigger is
-                // taken like a local chord's, so the new session never sees
-                // it.
                 if post_switch(to) {
                     return true;
                 }
-                // Nowhere to post: the key is an ordinary one.
                 self.taker = Taker::new();
             }
             Fate::Swallow => return true,
             Fate::Pass => {
-                // No session to send the key to: Windows gets it, and has to
-                // get its Up too.
                 self.windows_gets(&raw, now);
                 return false;
             }
@@ -801,19 +762,12 @@ impl Ctx {
     }
 
     fn grab(&mut self, raw: RawKey) -> bool {
-        // The rest of the life of a key that was down before the grab goes
-        // to Windows, which saw it go down, and not to the remote, which did
-        // not.
-        // If the remote saw its Down too (a key sent from the window before
-        // the hook was installed again), it gets the rest as well.
         let route = LEDGER
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .route(raw.vk, raw.press);
         let forwards = self.policy.forwards(&raw);
         if route != Route::Remote || !forwards {
-            // Not forwarded, but a held modifier still counts for a local
-            // chord.
             self.chords.push(raw.vk, raw.press, true);
             PASSED
                 .lock()
@@ -831,13 +785,9 @@ impl Ctx {
                 if self.local_chord(&raw, &modifiers, trigger) {
                     return true;
                 }
-                // No session to take the chord from: the key goes on as any
-                // other key below, and its Up with it.
                 self.chords.cancel_take();
             }
         }
-        // No session (or a closed channel) means the key goes to Windows
-        // rather than being lost, and then Windows saw the Down.
         let (vk, press, time_ms) = (raw.vk, raw.press, raw.time_ms);
         let sent = self.cmds.send(UiCmd::Key(raw));
         let mut ledger = LEDGER.lock().unwrap_or_else(PoisonError::into_inner);
@@ -898,7 +848,6 @@ impl Ctx {
             return false;
         }
         let mut ledger = LEDGER.lock().unwrap_or_else(PoisonError::into_inner);
-        // The remote let go of every key; the replay below is Windows' alone.
         ledger.take_remote_held();
         let mut passed = PASSED.lock().unwrap_or_else(PoisonError::into_inner);
         let mut inputs = Vec::with_capacity(modifiers.len() + 2);
@@ -922,8 +871,6 @@ impl Ctx {
         // SAFETY: `inputs` is a valid slice of INPUT and the size is that of
         // one INPUT, as SendInput requires.
         let _ = unsafe { SendInput(&inputs, std::mem::size_of::<INPUT>() as i32) };
-        // The log says that a local chord was kept and which modifiers it
-        // had, never the key that completed it.
         crate::logging::line(&format!(
             "local chord kept on Windows: {} + a key",
             crate::modifiers::names(

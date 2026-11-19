@@ -5,7 +5,6 @@
 //! lock-step rows) run on the build machine against fakes. Only `win32`
 //! touches a real machine, and only on Windows.
 
-// Only Windows drives a real machine; elsewhere these run in tests.
 #[cfg_attr(not(windows), allow(dead_code))]
 pub mod cases;
 #[cfg_attr(not(windows), allow(dead_code))]

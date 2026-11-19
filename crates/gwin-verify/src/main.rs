@@ -449,8 +449,6 @@ fn pointer(args: InputArgs, expect_scale_milli: u32, report: &mut Report) -> any
             .emit(Line::new("pointer", false).with("error", "the client reported no picture size"));
         return Ok(());
     };
-    // The step that changes the scale and puts it back runs this twice; the
-    // second line, at 2000, is `scale_restored`.
     let at_scale = scale == Some(expect_scale_milli);
     report.emit(
         Line::new("pointer_scale", at_scale)
@@ -546,8 +544,6 @@ impl Report {
         use std::io::Write;
         self.failed |= !line.ok;
         let mut out = std::io::stdout().lock();
-        // A closed stdout leaves nothing to report to; the exit code still
-        // carries the result.
         let _ = writeln!(out, "{}", line.to_json());
         let _ = out.flush();
     }
@@ -712,7 +708,6 @@ fn run(check: Check, report: &mut Report) -> anyhow::Result<()> {
                 Some(output) => DesktopMode::Mirror { output },
                 None => DesktopMode::Headless,
             };
-            // Absolute, so the reported stderr_log can be found afterwards.
             let log_dir = std::path::absolute(&log_dir)?;
             let spec = SshSpec {
                 ssh,
@@ -764,7 +759,6 @@ fn run(check: Check, report: &mut Report) -> anyhow::Result<()> {
             };
             let mut file = std::io::BufWriter::new(std::fs::File::create(&out)?);
             clip.write_to(&mut file)?;
-            // Drop would flush too, but would swallow a failed last write.
             std::io::Write::flush(&mut file)?;
             report.emit(
                 Line::new("make-clip", true)

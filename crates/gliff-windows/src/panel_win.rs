@@ -146,8 +146,6 @@ impl PanelWin {
             self.size = (width, height);
             self.hover = None;
         }
-        // The first show comes to the top; later moves keep the order, so the
-        // strip overlay of full screen stays above the panel.
         let flags = if self.visible {
             SWP_NOZORDER | SWP_NOACTIVATE
         } else {

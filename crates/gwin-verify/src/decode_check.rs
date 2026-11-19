@@ -152,8 +152,6 @@ pub fn measure_with(
             take(index, result, "idle drain: ");
         }
     }
-    // A High-profile stream holds one picture until flushed; it is judged
-    // like any other.
     if decoder.has_pending() {
         drains += 1;
         let t = Instant::now();
@@ -240,9 +238,6 @@ pub fn compare(
         gpu_lead_units: (i64::MAX, i64::MIN),
         ..Compared::default()
     };
-    // Pictures are compared in release order. OpenH264 holds a High-profile
-    // picture for one unit, while the low-latency hardware decoder releases
-    // it at once, so the same picture can come out at different units.
     for ((ci, f), (gi, g)) in cpu.iter().zip(&gpu) {
         c.pictures += 1;
         let lead = *ci as i64 - *gi as i64;
@@ -390,7 +385,6 @@ pub fn judge(clip: &Clip, m: &Measured, limits: Limits) -> Line {
     } else {
         0.0
     };
-    // Every unit must have been timed, or p95 describes fewer frames.
     let ok = m.samples_ms.len() as u64 >= frames
         && m.errors == 0
         && m.wrong_size == 0
@@ -478,7 +472,7 @@ mod tests {
     #[test]
     fn low_fps_fails_the_line() {
         let clip = small_clip();
-        let m = measured(&[1.0; 10], 1000.0); // 10 frames in 1 s
+        let m = measured(&[1.0; 10], 1000.0);
         assert!(!judge(&clip, &m, LIMITS).ok);
     }
 
@@ -507,7 +501,6 @@ mod tests {
 
     #[test]
     fn p95_is_the_measured_time_not_a_bucket_edge() {
-        // 19 units at 33.1 ms and one slow IDR: the 95th of 20 is 33.1.
         let clip = clip_of(20);
         let mut samples = [33.1; 20];
         samples[0] = 50.0;

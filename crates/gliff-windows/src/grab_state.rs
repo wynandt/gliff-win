@@ -214,8 +214,6 @@ impl GrabState {
         } else {
             Release::Nothing
         };
-        // Only with the keyboard: a pointer resting on the window while
-        // another program has the keyboard must not stop Win+L locking.
         let lock = if self.mode == HookMode::Grab {
             Want::On
         } else {

@@ -173,10 +173,8 @@ fn is_transient(error: &io::Error) -> bool {
 /// [`is_transient`], with whether this is Windows given, so that a test on
 /// any system can use the Windows codes.
 fn is_transient_on(windows: bool, error: &io::Error) -> bool {
-    // Windows says "sharing violation" (32) or "lock violation" (33) when
-    // another program has the file open, "delete pending" (303) when one
-    // has deleted it and not closed it, and "user-mapped section" (1224)
-    // when one has it mapped.
+    // Platform: Windows reports a file another program holds open, deleted or
+    // mapped as error 32, 33, 303 or 1224.
     let lock = windows && matches!(error.raw_os_error(), Some(32 | 33 | 303 | 1224));
     lock || matches!(
         error.kind(),
@@ -218,8 +216,7 @@ fn read_raw(path: &Path) -> Raw {
     let file = match fs::File::open(path) {
         Ok(file) => file,
         Err(e) if e.kind() == io::ErrorKind::NotFound => return Raw::Missing,
-        // Windows refuses to open a folder as a file with "access denied",
-        // which reads as a permission that may be fixed; say what it is.
+        // Platform: Windows answers "access denied" when the path is a folder.
         Err(e) if path.is_dir() => {
             return Raw::Unreadable(io::Error::new(
                 io::ErrorKind::IsADirectory,
@@ -591,7 +588,6 @@ pub(crate) fn write_atomic_checked(
         let _ = fs::remove_file(&tmp);
         return Err(e);
     }
-    // On Windows, `rename` replaces an existing file.
     let renamed = rename_with_retry(
         &tmp,
         path,
@@ -635,8 +631,7 @@ pub(crate) fn keep_copy(path: &Path, suffix: &str) -> Result<Option<PathBuf>, Fi
         {
             Ok(file) => file,
             Err(e) if e.kind() == io::ErrorKind::AlreadyExists => continue,
-            // Windows says "access denied", not "exists", when the name is a
-            // folder.
+            // Platform: Windows answers "access denied", not "exists", for a folder.
             Err(_) if name.is_dir() => continue,
             Err(e) => return Err(FileError::new(&name, e)),
         };

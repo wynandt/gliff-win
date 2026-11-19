@@ -113,13 +113,10 @@ pub fn run(args: Args) -> ExitCode {
         std::env::var_os("LOCALAPPDATA").map(Into::into),
         std::env::temp_dir(),
     );
-    // One client per configuration folder: a later launch hands its request
-    // to the running one and leaves.
     let instance_name = single_instance::instance_name(startup.dir.path());
     let _instance = match single_instance::win::acquire(&instance_name) {
         Ok(instance) => {
             if instance.is_some() {
-                // Ours; nothing to decide.
                 instance
             } else {
                 return match single_instance::decide(true, &args.targets, false) {
@@ -133,8 +130,6 @@ pub fn run(args: Args) -> ExitCode {
                 };
             }
         }
-        // Without the mutex a second client could start; carry on as the
-        // only one we know of.
         Err(e) => {
             eprintln!("gliff-windows: single-instance check failed: {e}");
             None
@@ -153,15 +148,7 @@ pub fn run(args: Args) -> ExitCode {
     for note in &startup.notes {
         crate::logging::line(&format!("config: {note}"));
     }
-    // A panic or a console control event lets go of the modifiers Windows
-    // still counts as down; the window's own exit path does it in
-    // `Grab::shutdown`.
     crate::modifiers::install_exit_paths();
-    // Every way out of this function puts the lock setting back (the panic
-    // hook and the console handler cover the rest); nothing is held until
-    // the first grab of a machine whose Send Win+L switch is on. Armed in
-    // every mode, because the switch can turn on at any time; with nothing
-    // held, each path finds no marker of ours and does nothing.
     if lockreg::init().is_none() {
         crate::logging::line(
             "lock setting: this process's start time is unreadable, so the registry route is off",
@@ -275,8 +262,6 @@ pub fn run(args: Args) -> ExitCode {
         Some(app) => app.finish(),
         None => fail("the window state vanished"),
     };
-    // Every session (and with it every engine thread) is over; the Windows
-    // thread is last, so a paste that waits is released first.
     if let Some(clip_win) = clip_win {
         clip_win.stop();
     }
@@ -340,7 +325,6 @@ fn start_clipboard(settings: &Settings) -> Option<(Box<dyn ClipSide>, ClipWin)> 
     let (hub, to_hub) = match ClipHub::new() {
         Ok(made) => made,
         Err(e) => {
-            // The kind only: the text of an OS error can name a path.
             crate::logging::line(&format!("clipboard: not started: io_{:?}", e.kind()));
             return None;
         }
@@ -348,7 +332,6 @@ fn start_clipboard(settings: &Settings) -> Option<(Box<dyn ClipSide>, ClipWin)> 
     let (clip_win, host) = match clip_win::start(to_hub, settings.clipboard_history) {
         Ok(started) => started,
         Err(e) => {
-            // The text is ours: a fixed phrase and a Win32 error number.
             crate::logging::line(&format!("clipboard: not started: {e}"));
             return None;
         }
@@ -442,7 +425,6 @@ fn create_window() -> windows::core::Result<HWND> {
             left: 0,
             top: 0,
             right: INITIAL_CLIENT.0 * dpi as i32 / 96,
-            // The picture gets the initial size; the strip sits above it.
             bottom: INITIAL_CLIENT.1 * dpi as i32 / 96 + Metrics::at(dpi).strip_height,
         };
         AdjustWindowRectExForDpi(
@@ -456,8 +438,6 @@ fn create_window() -> windows::core::Result<HWND> {
             WINDOW_EX_STYLE::default(),
             CLASS_NAME,
             w!("gliff"),
-            // The swap chain paints the whole client; the strip child must be
-            // clipped out of it or the picture covers the strip.
             WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN,
             CW_USEDEFAULT,
             CW_USEDEFAULT,

@@ -100,7 +100,6 @@ pub struct EngineThread {
 impl EngineThread {
     /// Forward a server message to the engine.
     pub fn peer(&self, msg: ClipboardMsg, payload: Bytes) {
-        // A stopped engine has nobody to tell.
         let _ = self.input.send(EngineIn::Peer(msg, payload));
     }
 
@@ -138,7 +137,6 @@ fn run(port: Port, send: SendToServer) {
     if let Some(session) = session {
         clip_log::tag_thread(session);
     }
-    // Only the senders held elsewhere keep this channel open.
     drop(input);
     let runtime = match tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -173,8 +171,6 @@ fn run(port: Port, send: SendToServer) {
             }
         }
     });
-    // Dropping the runtime ends every transfer task, which drops the
-    // answers the Windows thread may still be waiting for.
     drop(local);
     drop(runtime);
     Spool::remove_own(&spool_base);

@@ -322,7 +322,7 @@ pub fn system_chords() -> Vec<Case> {
         one("Ctrl+Shift+Esc", "Ctrl+Shift+Escape", "CTRL+SHIFT+Escape"),
         one("PrtSc", "Print", "Print"),
     ];
-    // Five Shifts open the Sticky Keys prompt when Windows gets them.
+    // Platform: five Shift presses open the Sticky Keys prompt.
     cases.push(risky(plain(
         "system Shift x5",
         vec![
@@ -392,8 +392,8 @@ pub fn layouts() -> Vec<Case> {
             ),
             &["y"],
         ),
-        // A right Shift is an extended key to Windows' hook; it must still
-        // be sent, so right Shift+`/` is `?` as left Shift+`/` is.
+        // Platform: the hook reports right Shift as an extended key.
+        // See docs/windows-quirks.md#keyboard.
         typed(
             plain(
                 "layout us right shift",
@@ -438,9 +438,7 @@ pub fn layouts() -> Vec<Case> {
             ),
             &["z"],
         ),
-        // AltGr+Q is `@` on the German layout; Windows adds a left Ctrl to
-        // AltGr, which the client sends as it is (evdev 29), and a real
-        // Ctrl+Q is still the bind.
+        // Platform: Windows adds a left Ctrl to AltGr. See docs/windows-quirks.md#keyboard.
         typed(
             plain(
                 "layout altgr",
@@ -504,7 +502,6 @@ pub fn injected_local() -> Vec<Case> {
             pause(),
         ],
         expect: Expect {
-            // LWin and Y.
             keys: KeyExpect {
                 never: vec![125, 21],
                 ..KeyExpect::default()
@@ -529,8 +526,6 @@ pub fn standin_chord() -> Vec<Case> {
         ],
         expect: Expect {
             foreground: Foreground::Client,
-            // The client sends one Super (evdev 125) for the Ctrl+Alt+L the
-            // case presses.
             keys: KeyExpect {
                 extra: vec![125],
                 ..KeyExpect::default()
@@ -638,11 +633,6 @@ pub fn capture_follows_hover() -> Vec<Case> {
                 ab(),
                 pause(),
             ],
-            // The first `ab` is Notepad's, the second the remote machine's: the grab
-            // is back after the pointer left and came in. The remote machine has no
-            // CTRL or ALT bind (a release bind is shadowed while another
-            // modifier is held), so Ctrl (29) and Alt (56) reaching it show
-            // in the raw key stream, and Home (102) never does.
             Expect {
                 notepad: Notepad::Text("ab"),
                 client: ClientExpect {
@@ -676,10 +666,6 @@ pub fn release_chords() -> Vec<Case> {
                     grab: Some(false),
                     ..ClientExpect::default()
                 },
-                // The remote machine's CTRL and ALT release binds cannot show a
-                // modifier let go while another is held, so the raw key
-                // stream is the evidence: Ctrl (29) and Alt (56) go down
-                // and Home (102) never does.
                 keys: KeyExpect {
                     need: vec![29, 56],
                     need_up: vec![29, 56],
@@ -692,16 +678,6 @@ pub fn release_chords() -> Vec<Case> {
                 })
             },
         ),
-        // Focus mode: the client stays focused after the chord but is no
-        // longer grabbed; a click on the picture takes the keyboard back.
-        // `C` has no bind, so the raw key stream shows whether it reached the
-        // remote machine (it must not); `A` and `B` after the click must.
-        //
-        // The case names the focus mode so the client starts afresh: the case
-        // before it released the grab with the same chord, and focusing a
-        // window that already has the focus does not grab again, so on that
-        // client this chord would reach Windows, not the hook's release
-        // (and Ctrl and Alt would never be forwarded).
         Case {
             flags: flags(&["--grab-follows", "focus"]),
             ..plain(
@@ -751,7 +727,6 @@ pub fn release_chords() -> Vec<Case> {
                     grab: Some(false),
                     ..ClientExpect::default()
                 },
-                // Shift (42) goes down; Esc (1) never does.
                 keys: KeyExpect {
                     need: vec![42],
                     need_up: vec![42],
@@ -795,7 +770,6 @@ pub fn hook_stall() -> Vec<Case> {
                 Act::Focus(Window::Client),
                 Act::Keys(taps(&["F24"])),
                 Act::Pause(Duration::from_millis(HOOK_STALL_MS + 2500)),
-                // Ctrl+Q does nothing on Windows if the hook were still down.
                 Act::Keys(chord("Ctrl+Q")),
                 pause(),
             ],
@@ -805,7 +779,6 @@ pub fn hook_stall() -> Vec<Case> {
                     ..ClientExpect::default()
                 },
                 keys: KeyExpect {
-                    // The stall key, F24, as the client maps its scancode.
                     extra: vec![85],
                     ..KeyExpect::default()
                 },
@@ -850,8 +823,6 @@ fn held_across_stall() -> Case {
             pause(),
         ],
         expect: Expect {
-            // Ctrl (29), Alt (56) and the stall key (85) may reach the remote
-            // machine; Home (102) never does.
             keys: KeyExpect {
                 extra: vec![29, 56, 85],
                 never: vec![102],
@@ -919,7 +890,6 @@ pub fn wheel() -> Vec<Case> {
     let event = |wheel, delta| Act::WheelEvent { wheel, delta };
     let events =
         |wheel, delta, times: usize| (0..times).map(|_| event(wheel, delta)).collect::<Vec<_>>();
-    // One event that is a whole notch, then the wait.
     let notches = |wheel, delta, times: usize| {
         (0..times)
             .flat_map(|_| [event(wheel, delta), Act::Pause(WHEEL_SPACING)])
@@ -949,11 +919,8 @@ pub fn wheel() -> Vec<Case> {
                 "wheel:up",
             ]))),
         ),
-        // Smaller than a notch: a smooth scroll. The client sends it as a
-        // finger scroll, but the server sends the source before the axis and
-        // Hyprland's virtual pointer then makes it a wheel event, so the
-        // down bind fires once per `binds:scroll_event_delay` (once or twice
-        // here, by timing). It never fires the other way.
+        // Platform: Hyprland's virtual pointer turns a smooth scroll into wheel events.
+        // See docs/windows-quirks.md#pointer-and-dpi.
         plain(
             "wheel 30 smooth events of 8 scroll down",
             with_pause(events(Wheel::Vertical, -8, 30)),
@@ -962,7 +929,6 @@ pub fn wheel() -> Vec<Case> {
                 never: names(&["wheel:up"]),
             }),
         ),
-        // Horizontal keeps its sign: right is positive on both sides.
         plain(
             "wheel horizontal one notch right then left",
             with_pause(

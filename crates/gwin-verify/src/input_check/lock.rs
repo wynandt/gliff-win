@@ -280,9 +280,6 @@ impl<H: LockHarness> Steps<'_, H> {
             reasons.push(format!("the client did not start: {e:#}"));
             return false;
         }
-        // A client that is not in front holds nothing and has no hook, so
-        // the leg cannot be measured, and a later press of Win+L would lock
-        // this machine. The client this run started is closed again.
         if !self.place(Front::Client, "the client start", reasons) {
             if let Err(e) = self.h.close_client() {
                 reasons.push(format!("closing the client failed: {e:#}"));
@@ -350,7 +347,6 @@ impl<H: LockHarness> Steps<'_, H> {
             return None;
         }
         let mark = self.h.remote_log().map(|l| last_n(&l)).unwrap_or(0);
-        // Forget a lock seen before this press.
         let _ = self.h.session_active();
         self.h.countdown(text, secs);
         self.h.sleep(Duration::from_millis(600));
@@ -378,8 +374,6 @@ impl<H: LockHarness> Steps<'_, H> {
 
     fn l3(&mut self) {
         let mut reasons = Vec::new();
-        // The client holds the setting only while it is in front: a Win+L
-        // pressed otherwise locks this machine for real.
         if !self.client_up("L3", &mut reasons) || !self.place(Front::Client, "L3", &mut reasons) {
             self.record("L3 focused Win+L", reasons);
             return;
@@ -425,8 +419,6 @@ impl<H: LockHarness> Steps<'_, H> {
             PRESS_TWO_SECS,
             &mut reasons,
         );
-        // The watch stops whether or not the press was asked for: left
-        // running it would close any Explorer window the maintainer opens.
         let opened = self.h.explorer_opened_and_closed();
         if let Some(seen) = seen {
             if seen != ["SUPER+L"] {
@@ -456,9 +448,6 @@ impl<H: LockHarness> Steps<'_, H> {
         let mut reasons = Vec::new();
         if !self.client_up("L5", &mut reasons) || !self.place(Front::TextField, "L5", &mut reasons)
         {
-            // With the client in front the setting is held and Win+L would
-            // not lock: nothing here can pass, and asking for the press only
-            // spends the maintainer's time.
             self.record("L5 blur and leave", reasons);
             return;
         }
@@ -469,7 +458,6 @@ impl<H: LockHarness> Steps<'_, H> {
             &mut reasons,
         );
         if seen.is_some() {
-            // The press locked the machine, or the setting still held it.
             if self.h.session_active() {
                 reasons.push(
                     "L5: with the setting released, Win+L did not lock the Windows machine"
@@ -498,8 +486,6 @@ impl<H: LockHarness> Steps<'_, H> {
         }
         if self.start_with(&panic_flags(), &mut reasons) {
             self.expect_held("L6 panic, before", &mut reasons);
-            // The hook exists only while the client grabs, so the panic key
-            // does nothing to a client that is not in front.
             if !self.h.foreground_is_client() {
                 self.place(Front::Client, "L6 panic", &mut reasons);
             }
@@ -507,9 +493,6 @@ impl<H: LockHarness> Steps<'_, H> {
                 reasons.push(format!("injecting the panic key failed: {e:#}"));
             }
             self.h.sleep(WATCHDOG);
-            // The hook thread's panic must end the process (a panic cannot
-            // unwind out of the hook, so it aborts); a client that is still
-            // running did not take the panic path at all.
             if self.h.client_running() {
                 reasons.push(format!(
                     "L6: the client was still running after the panic key{}",
@@ -529,30 +512,21 @@ impl<H: LockHarness> Steps<'_, H> {
             self.h.sleep(WATCHDOG);
             self.expect_restored("L7 the watchdog after /F", &mut reasons);
         }
-        // Killing both leaves the value set: documented, and the recovery
-        // paths below must put it back.
         if self.start_registry(&mut reasons) {
             self.kill(Kill::Tree, &mut reasons);
             self.h.sleep(WATCHDOG);
-            // Documented: with both processes gone the value stays set and
-            // the marker stays; the recovery paths below depend on it.
             self.expect_held("L7 /F /T (both die)", &mut reasons);
             if let Err(e) = self.h.restore_flag() {
                 reasons.push(format!("--restore-lock-policy failed: {e:#}"));
             }
             self.expect_restored("L7 after --restore-lock-policy", &mut reasons);
         }
-        // Second round: the startup check of the next launch recovers.
         if self.start_registry(&mut reasons) {
             self.kill(Kill::Tree, &mut reasons);
             self.h.sleep(WATCHDOG);
-            // There must be a stale marker for the next launch to recover.
             self.expect_held("L7 before the startup check", &mut reasons);
             if self.h.start_client(&registry_flags()).is_ok() {
                 self.h.sleep(SETTLE);
-                // The new client holds the value only once grabbed; it has
-                // not been focused, so what matters is that the stale
-                // marker is gone or replaced by its own.
                 if let Err(e) = self.h.close_client() {
                     reasons.push(format!("closing the client failed: {e:#}"));
                 }
@@ -587,9 +561,6 @@ impl<H: LockHarness> Steps<'_, H> {
             return;
         }
         reasons.append(&mut registry);
-        // Leave the machine as found: the client's own recovery flag. It
-        // leaves alone the marker of a client that is still running, so the
-        // one this run started is closed first.
         if client_left && let Err(e) = self.h.close_client() {
             reasons.push(format!("End: closing the client failed: {e:#}"));
         }
@@ -598,7 +569,6 @@ impl<H: LockHarness> Steps<'_, H> {
                 "End: --restore-lock-policy failed ({e:#}); run it by hand on the Windows machine"
             ));
         }
-        // Said only when the registry shows it.
         let mut after = Vec::new();
         self.expect_restored("End after --restore-lock-policy", &mut after);
         if after.is_empty() {
@@ -620,9 +590,6 @@ pub fn run(h: &mut impl LockHarness) -> Vec<CaseResult> {
         results: Vec::new(),
     };
     steps.l1();
-    // Nothing is started if the first read failed or a stale marker is
-    // there: the maintainer has to look first. The remote machine is armed and
-    // verified before the first client starts.
     if steps.results[0].passed() {
         steps.arm();
     }

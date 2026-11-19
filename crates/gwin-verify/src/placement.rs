@@ -217,7 +217,6 @@ mod tests {
 
     #[test]
     fn fullscreen_on_the_wrong_monitor_is_caught() {
-        // A real failure: fullscreen on monitor 0 while the output was monitor 2.
         let clients = r#"[{"title":"gwin-pattern","monitor":0,"at":[0,0],"size":[2560,1440],"fullscreen":2}]"#;
         let placement = judge(&format!("{MONITORS}{clients}"), "gliff-339504");
         assert!(

@@ -109,7 +109,6 @@ impl Address {
             }
             Event::Enter | Event::Go => self.connect(),
             Event::Escape if tabs == 0 => {
-                // There is no tab to go back to, so the bar stays.
                 self.error = None;
                 if std::mem::take(&mut self.text).is_empty() {
                     Vec::new()

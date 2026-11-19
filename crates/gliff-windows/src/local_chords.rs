@@ -240,8 +240,6 @@ impl LocalChords {
             if press == Press::Up {
                 self.taking = None;
             }
-            // A local Up (no session to send it to) ends the take too, or
-            // the next press of the key would be swallowed.
             if !local {
                 return ChordDecision::Swallow;
             }

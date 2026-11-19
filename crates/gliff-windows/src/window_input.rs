@@ -179,8 +179,7 @@ impl WindowInput {
                 self.release_buttons();
                 Some(LRESULT(0))
             }
-            // Handled, and still sent on to DefWindowProc so the system
-            // switches its own layout state.
+            // Platform: DefWindowProc must also see it to switch the system's layout state.
             WM_INPUTLANGCHANGE => {
                 self.check_keymap(Reason::InputLang);
                 None
@@ -197,7 +196,7 @@ impl WindowInput {
             WM_LBUTTONDOWN | WM_LBUTTONUP | WM_RBUTTONDOWN | WM_RBUTTONUP | WM_MBUTTONDOWN
             | WM_MBUTTONUP | WM_XBUTTONDOWN | WM_XBUTTONUP => {
                 self.button(view, msg, wparam, lparam);
-                // WM_XBUTTON* must answer TRUE; the others answer 0.
+                // Platform: WM_XBUTTON* must answer TRUE; the other buttons answer 0.
                 Some(LRESULT(isize::from(matches!(
                     msg,
                     WM_XBUTTONDOWN | WM_XBUTTONUP
@@ -228,8 +227,6 @@ impl WindowInput {
                 None
             }
             WM_POWERBROADCAST => {
-                // Sleep clears the lock setting at once; the wake (either
-                // kind) lets it follow the keyboard again.
                 match wparam.0 as u32 {
                     PBT_APMSUSPEND => self.grab.suspend(true),
                     PBT_APMRESUMESUSPEND | PBT_APMRESUMEAUTOMATIC => self.grab.suspend(false),
@@ -252,7 +249,6 @@ impl WindowInput {
                     .legacy_key(wparam.0 as u16, lparam.0, press, time, extra_info)
                     .map(|()| LRESULT(0))
             }
-            // Text for keys the grab took: nothing should beep or type.
             WM_CHAR | WM_SYSCHAR if self.grab.mode() == HookMode::Grab => Some(LRESULT(0)),
             _ => None,
         }
@@ -319,7 +315,6 @@ impl WindowInput {
                 }
             }
         }
-        // The position first, so the button lands where Windows says.
         self.motion(view, lparam);
         self.send(UiCmd::Pointer(PointerEvent::Button {
             button: code,

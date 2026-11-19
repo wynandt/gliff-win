@@ -346,7 +346,6 @@ impl Presenter {
             ctx.UpdateSubresource(&planes.u, 0, None, frame.u().as_ptr().cast(), cw, 0);
             ctx.UpdateSubresource(&planes.v, 0, None, frame.v().as_ptr().cast(), cw, 0);
             ctx.OMSetBlendState(None, None, u32::MAX);
-            // Pass 1: planes -> stream-sized RGB.
             ctx.PSSetShaderResources(3, Some(&[None]));
             ctx.OMSetRenderTargets(Some(&[Some(planes.rgb_rtv.clone())]), None);
             ctx.RSSetViewports(Some(&[d3d_viewport(Viewport {

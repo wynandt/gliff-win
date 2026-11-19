@@ -251,12 +251,7 @@ impl Win32Harness {
             if let Some(hwnd) = self.hwnd
                 && shown
             {
-                // A new window opens at the next cascade step, which on a
-                // tall window ends under the taskbar after a few restarts.
-                // The same corner each time keeps every click point on the
-                // client.
                 move_to_work_area_corner(hwnd);
-                // Let the first mouse move and the hook settle.
                 std::thread::sleep(Duration::from_millis(500));
                 self.save_remote_diag("remote-diag-after-start");
                 return Ok(());
@@ -321,8 +316,6 @@ impl Win32Harness {
         }
         // SAFETY: a live window.
         let dpi = unsafe { GetDpiForWindow(hwnd) };
-        // The tab strip is the top of the client area; the picture, which
-        // every position in the checks is relative to, is the rest.
         let (origin, size) = picture_in_client(
             (origin.x, origin.y),
             (
@@ -413,11 +406,8 @@ impl Win32Harness {
         if place == Place::OffClient {
             self.require_not_client_at(x, y)?;
         }
-        // `SetCursorPos` moves the pointer but Windows may not work out which
-        // window it is over (and so send `WM_MOUSELEAVE` or `WM_MOUSEMOVE`)
-        // until a real mouse event comes: one pixel out and back as input
-        // does that, and the waits give the messages time to arrive before
-        // the next key does. (The client also polls the pointer every tick.)
+        // Platform: after SetCursorPos Windows may not send WM_MOUSELEAVE or
+        // WM_MOUSEMOVE until a real mouse event arrives.
         input::cursor_to(x, y)?;
         std::thread::sleep(POINTER_SETTLE);
         input::nudge()?;
@@ -665,8 +655,6 @@ impl Drop for Win32Harness {
         self.stop();
         self.stop_poller
             .store(true, std::sync::atomic::Ordering::Release);
-        // The default input language goes back first (the client is gone), then
-        // the layouts this run loaded; neither may outlive it.
         self.restore_default();
         for (_, hkl, ours) in self.layouts.drain(..) {
             if ours {
@@ -698,8 +686,6 @@ impl Harness for Win32Harness {
             Act::Pointer(place) => self.pointer(*place),
             Act::Layout(step) => self.layout(*step),
             Act::Dismiss => {
-                // Only when the sink really has the focus, so Escape cannot
-                // go to the grabbed client and on to the remote machine.
                 if self.focus(Window::Notepad).is_ok() {
                     input::keys(
                         &crate::input_check::scan::chord_presses("Escape").unwrap_or_default(),
@@ -724,16 +710,12 @@ impl Harness for Win32Harness {
     }
 
     fn observe(&mut self) -> Seen {
-        // The stats file is rewritten once a second: wait for a copy written
-        // after the case's last act, or the grab it shows may be the one
-        // before the case's last key.
         wait_modified_after(&self.launch.stats_out, SystemTime::now(), STATS_FRESH);
         let seen = Seen {
             foreground_is_client: self.foreground_is_client(),
             notepad_text: self.sink.as_ref().map(Sink::text),
             input: self.stats().map(|s| s.input),
         };
-        // The case is over: nothing it pressed may stay down for the next.
         input::release_modifiers("a case");
         seen
     }

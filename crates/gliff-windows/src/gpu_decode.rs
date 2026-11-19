@@ -198,7 +198,6 @@ impl Drop for Fence {
 /// The GPU decoder: one Media Foundation decoder per stream on one
 /// device, with the `CpuDecoder` API.
 pub struct GpuDecoder {
-    // Field order is drop order: the decoders go before the device.
     main: Stream,
     aux: Option<Stream>,
     gpu: Gpu,
@@ -247,8 +246,6 @@ impl GpuDecoder {
                 pair(&self.pool, m, a)?
             }
         };
-        // Low latency gives one picture per unit; should one call release
-        // two, only the newest is shown, but none stays counted as held.
         self.held = (self.held + 1).saturating_sub(self.main.take_released());
         self.held_units = if self.held > 0 {
             self.held_units + 1
@@ -343,7 +340,7 @@ impl Gpu {
         let device: ID3D11Device = device.ok_or_else(|| GpuError::new("D3D11", "no device"))?;
         let context: ID3D11DeviceContext =
             context.ok_or_else(|| GpuError::new("D3D11", "no context"))?;
-        // The decoder uses the device from its own threads.
+        // Platform: the Media Foundation decoder uses the device from its own threads.
         let mt: ID3D11Multithread = device.cast().at("D3D11 multithread")?;
         // SAFETY: plain call on a live interface.
         let _ = unsafe { mt.SetMultithreadProtected(true) };
@@ -484,8 +481,8 @@ impl Stream {
         if !self.streaming {
             return Err(GpuError::new("decode", "no SPS before the first picture"));
         }
-        // Without this, the decoder holds every picture until its whole
-        // picture buffer is full (see `h264::without_reorder_delay`).
+        // Platform: the decoder holds every picture until its buffer is full unless the
+        // SPS says there is no reorder delay.
         let restricted = h264::without_reorder_delay(unit);
         let sample = self.sample(restricted.as_deref().unwrap_or(unit))?;
         let mut frame = None;
@@ -519,7 +516,6 @@ impl Stream {
             buffer.SetCurrentLength(len).at("input buffer length")?;
             let sample = MFCreateSample().at("input sample")?;
             sample.AddBuffer(&buffer).at("input sample")?;
-            // 60 fps in 100 ns units; the decoder needs times, not real ones.
             sample.SetSampleTime(self.time).at("sample time")?;
             sample.SetSampleDuration(166_667).at("sample time")?;
             self.time += 166_667;
@@ -599,7 +595,6 @@ impl Stream {
             let staging = self.staging(gpu, desc.Width, desc.Height)?;
             gpu.context
                 .CopySubresourceRegion(&staging, 0, 0, 0, 0, &texture, index, None);
-            // Sleep until the copy is done, so `Map` does not spin.
             if let Some(fence) = &gpu.fence {
                 fence.wait()?;
             }

@@ -1,5 +1,4 @@
 //! `gliff-windows <user@host>`.
-// A GUI program on Windows: no console window.
 #![cfg_attr(windows, windows_subsystem = "windows")]
 
 use clap::Parser;
@@ -13,8 +12,6 @@ fn main() -> std::process::ExitCode {
     let raw: Vec<String> = std::env::args().collect();
     let helper = Helper::from_args(&raw);
     if helper.is_some() {
-        // The helpers have no console and no target to take a log
-        // directory from: use the default one.
         let dir = std::env::var_os("LOCALAPPDATA")
             .map_or_else(std::env::temp_dir, Into::into)
             .join("gliff-windows")

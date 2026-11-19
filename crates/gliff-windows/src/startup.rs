@@ -131,8 +131,7 @@ pub fn print_settings(args: &Args) -> ExitCode {
         Ok(startup) => {
             let text = serde_json::to_string_pretty(&startup.report())
                 .expect("a JSON value is always text");
-            // A Windows GUI program may have no standard output; then there
-            // is nowhere to print, and that is not an error.
+            // Platform: a Windows GUI program can have no standard output.
             let _ = writeln!(std::io::stdout(), "{text}");
             ExitCode::SUCCESS
         }

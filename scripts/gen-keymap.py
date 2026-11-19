@@ -33,14 +33,14 @@ def fixture(csv_path):
 
 def arms():
     for title, lo_hi in (("normal", (0, 0xFF)), ("e0", (0xE000, 0xE0FF))):
-        print("//", title)
+        print(title + ":")
         for line in FIXTURE.read_text().splitlines():
             if line.startswith("#"):
                 continue
-            v, code, name = line.split("\t")
+            v, code, _name = line.split("\t")
             v, code = int(v, 16), int(code)
             if lo_hi[0] <= v <= lo_hi[1]:
-                print("        0x%02x => %d, // %s" % (v & 0xFF, code, name or "(unnamed)"))
+                print("        0x%02x => %d," % (v & 0xFF, code))
 
 
 if __name__ == "__main__":

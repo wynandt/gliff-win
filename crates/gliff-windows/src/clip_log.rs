@@ -214,7 +214,6 @@ impl RevokeWhy {
 /// Why something was refused, skipped or failed: a fixed list, never text.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Cause {
-    // A request this client refused (it sends an Abort).
     /// There is no local offer.
     NoOffer,
     /// The request names a serial that is not the current offer.
@@ -231,7 +230,6 @@ pub enum Cause {
     ReadUnanswered,
     /// The body is over the item limit.
     OverLimit,
-    // A read of the Windows clipboard that failed.
     /// The offer generation moved on: a newer copy replaced the offered one.
     ClipboardChanged,
     /// The clipboard sequence number moved: something wrote to the
@@ -249,7 +247,6 @@ pub enum Cause {
     FormatMissing,
     /// A picture could not be converted.
     ImageConversion,
-    // A paste of the remote offer that failed.
     /// The offer the paste names was replaced.
     OfferReplaced,
     /// The offer lists no files.
@@ -270,7 +267,6 @@ pub enum Cause {
     Cancelled,
     /// The transfer was dropped without an outcome (the session ended).
     Dropped,
-    // Offers this client could not make.
     /// The copy is marked private (a password manager's).
     Private,
     /// Nothing in the copy can be forwarded.
@@ -370,7 +366,6 @@ impl Display for Cause {
             Self::NoFileName => "no_file_name",
             Self::TooManyFiles => "too_many_files",
             Self::FilesTooLarge => "files_too_large",
-            // `ErrorKind`'s `Debug` is the variant name and nothing else.
             Self::Io(kind) => return write!(f, "io_{kind:?}"),
         };
         f.write_str(name)
@@ -657,7 +652,6 @@ impl Display for Event {
                 match end {
                     ServeEnd::Done => f.write_str("done")?,
                     ServeEnd::Cut => f.write_str("cut")?,
-                    // `ErrorKind`'s `Debug` is the variant name and nothing else.
                     ServeEnd::Failed(kind) => write!(f, "failed cause=io_{kind:?}")?,
                 }
                 write!(f, " bytes={bytes} ms={}", ms(*elapsed))

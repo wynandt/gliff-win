@@ -70,7 +70,6 @@ pub fn message(command: EditCommand) -> Message {
         EditCommand::Cut => (WM_CUT, 0, 0),
         EditCommand::Copy => (WM_COPY, 0, 0),
         EditCommand::Paste => (WM_PASTE, 0, 0),
-        // Start 0, end -1: the whole text.
         EditCommand::SelectAll => (EM_SETSEL, 0, -1),
     };
     Message {

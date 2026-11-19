@@ -92,9 +92,6 @@ pub fn dib_to_png(dib: &[u8]) -> Result<Vec<u8>, ConvertError> {
     if has_alpha_mask {
         let pixels = rgba.as_chunks_mut::<4>().0;
         let all_zero = pixels.iter().all(|p| p[3] == 0);
-        // Zero everywhere means the program did not use alpha; 255
-        // everywhere means it is not needed. Either way the picture is
-        // opaque and the PNG is smaller without a channel.
         if all_zero {
             for pixel in pixels.iter_mut() {
                 pixel[3] = 255;
@@ -157,7 +154,6 @@ fn parse_header(dib: &[u8]) -> Result<Layout, ConvertError> {
         if size >= V3_HEADER {
             masks[3] = word(52)?;
         } else if size == INFO_HEADER {
-            // The masks follow the header; alpha does only for ALPHABITFIELDS.
             let count = if compression == BI_ALPHABITFIELDS {
                 4
             } else {
@@ -191,7 +187,6 @@ fn parse_header(dib: &[u8]) -> Result<Layout, ConvertError> {
         }
         pixels_at += entries * 4;
     } else if colors_used > 0 && colors_used <= 256 {
-        // An optional colour table sits in front of the pixels.
         pixels_at += colors_used * 4;
     }
     Ok(Layout {
@@ -349,27 +344,27 @@ fn dibv5_header(width: usize, height: usize) -> Vec<u8> {
     put(V5_HEADER as u32);
     put(width as u32);
     put(height as u32);
-    put(1 | (32 << 16)); // planes, bit count
+    put(1 | (32 << 16));
     put(BI_BITFIELDS);
     put((width * height * 4) as u32);
-    put(0); // x pixels per metre
-    put(0); // y pixels per metre
-    put(0); // colours used
-    put(0); // colours important
-    put(0x00FF_0000); // red
-    put(0x0000_FF00); // green
-    put(0x0000_00FF); // blue
-    put(0xFF00_0000); // alpha
+    put(0);
+    put(0);
+    put(0);
+    put(0);
+    put(0x00FF_0000);
+    put(0x0000_FF00);
+    put(0x0000_00FF);
+    put(0xFF00_0000);
     put(LCS_SRGB);
     for _ in 0..9 {
-        put(0); // CIEXYZ end points
+        put(0);
     }
     for _ in 0..3 {
-        put(0); // gamma
+        put(0);
     }
     put(INTENT_IMAGES);
-    put(0); // profile data
-    put(0); // profile size
-    put(0); // reserved
+    put(0);
+    put(0);
+    put(0);
     h
 }

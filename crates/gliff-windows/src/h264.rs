@@ -88,8 +88,6 @@ pub fn nal_units(au: &[u8]) -> Vec<&[u8]> {
     let mut units = Vec::with_capacity(starts.len());
     for (n, &(_, payload)) in starts.iter().enumerate() {
         let end = match starts.get(n + 1) {
-            // A four-byte start code's leading zero, and trailing zero
-            // bytes, belong to no unit.
             Some(&(next, _)) => next,
             None => au.len(),
         };
@@ -154,21 +152,19 @@ fn restrict_sps(nal: &[u8]) -> Option<Vec<u8>> {
     for i in 0..sps.vui_flag_bit {
         w.bit((rbsp[i / 8] >> (7 - i % 8)) & 1 == 1);
     }
-    w.bit(true); // vui_parameters_present_flag
-    // aspect ratio, overscan, video signal, chroma location, timing, NAL
-    // and VCL HRD, pic_struct: none.
+    w.bit(true);
     for _ in 0..8 {
         w.bit(false);
     }
-    w.bit(true); // bitstream_restriction_flag
-    w.bit(true); // motion_vectors_over_pic_boundaries_flag
-    w.ue(2); // max_bytes_per_pic_denom: the default
-    w.ue(1); // max_bits_per_mb_denom: the default
-    w.ue(16); // log2_max_mv_length_horizontal: the default
-    w.ue(16); // log2_max_mv_length_vertical: the default
-    w.ue(0); // max_num_reorder_frames
-    w.ue(sps.max_num_ref_frames.max(1)); // max_dec_frame_buffering
-    w.bit(true); // rbsp_stop_one_bit
+    w.bit(true);
+    w.bit(true);
+    w.ue(2);
+    w.ue(1);
+    w.ue(16);
+    w.ue(16);
+    w.ue(0);
+    w.ue(sps.max_num_ref_frames.max(1));
+    w.bit(true);
     let mut out = vec![nal[0]];
     out.extend(escape(&w.finish()));
     Some(out)
@@ -289,8 +285,6 @@ pub fn set_level_idc(au: &mut [u8], level_idc: u8) -> usize {
     let mut i = 0;
     while i + 3 < au.len() {
         let start = au[i] == 0 && au[i + 1] == 0 && au[i + 2] == 1;
-        // profile_idc, constraint flags and level_idc can't hold an
-        // emulation-prevention byte unless two of them are zero.
         if start && au[i + 3] & 0x1f == 7 && i + 6 < au.len() {
             au[i + 6] = level_idc;
             changed += 1;

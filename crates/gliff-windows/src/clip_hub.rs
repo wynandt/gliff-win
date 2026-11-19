@@ -85,7 +85,6 @@ impl ClipHub {
 
     /// The Windows thread's host, known once that thread has started.
     pub fn attach_windows(&self, host: Arc<dyn Host>) {
-        // A second call keeps the first host.
         let _ = self.shared.windows.set(host);
     }
 
@@ -178,8 +177,6 @@ impl ClipHub {
 fn dispatch(shared: &Shared, mut output: UnboundedReceiver<EngineIn>) {
     while let Some(message) = output.blocking_recv() {
         let EngineIn::Command(command) = message else {
-            // Peer data and Stop come from a session, never from the Windows
-            // thread.
             continue;
         };
         let state = shared.state();
@@ -200,8 +197,6 @@ fn dispatch(shared: &Shared, mut output: UnboundedReceiver<EngineIn>) {
                 }
             }
             fetch @ (Command::FetchMime { .. } | Command::FetchFiles { .. }) => {
-                // With no owner the reply channel is dropped: the paste
-                // fails at once.
                 if let Some(session) = state.router.fetch_target() {
                     send(session, fetch);
                 }

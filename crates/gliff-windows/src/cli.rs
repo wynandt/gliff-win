@@ -245,7 +245,6 @@ impl Args {
             server_path: self.server_path.clone(),
             ssh: self.ssh.clone(),
             screen: self.headless.then_some(Screen::Own),
-            // `--headless` also drops an output the file names.
             output: if self.headless {
                 Some(None)
             } else {

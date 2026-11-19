@@ -83,11 +83,9 @@ impl Palette {
         let go = Rgb::hex(0x3d_3d_3d);
         Palette {
             strip,
-            // rgba(255,255,255,.14) and .07 of the mockups.
             tab_shown: white.over(strip, 36),
             tab_hover: white.over(strip, 18),
             text: white,
-            // The mockups' dim label: opacity .55.
             text_dim: white.over(strip, 141),
             ok: Rgb::hex(0x8f_f0_a4),
             warn: Rgb::hex(0xf8_e4_5c),
@@ -95,14 +93,11 @@ impl Palette {
             accent: Rgb::hex(0x78_ae_ed),
             ring: Rgb::hex(0x9a_9a_9a),
             backdrop: Rgb::hex(0x20_20_20),
-            // The mockups' #1e1e1e field, its rgba(255,255,255,.18) outline,
-            // rgba(255,255,255,.4) hint and #3d3d3d button.
             field,
             field_border: white.over(strip, 46),
             placeholder: white.over(field, 102),
             go,
             go_hover: white.over(go, 18),
-            // The mockups' blue button.
             primary: Rgb::hex(0x35_84_e4),
             primary_hover: white.over(Rgb::hex(0x35_84_e4), 36),
         }

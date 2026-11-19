@@ -146,7 +146,6 @@ pub fn offer_mimes(formats: &[WinFormat]) -> Vec<String> {
     let has = |wanted: &WinFormat| formats.contains(wanted);
     let mut mimes: Vec<String> = Vec::new();
     if has(&WinFormat::UnicodeText) {
-        // Upstream's filter adds the other text flavours behind this one.
         mimes.push(proto::TEXT_MIME.to_owned());
     }
     if has(&WinFormat::Html) {
@@ -227,9 +226,6 @@ pub fn local_body(
         }
         raw
     } else if base == PNG_MIME {
-        // The registered PNG is the program's own encoding and keeps its
-        // alpha; the bitmap formats are the fallback, also when the PNG
-        // cannot be read.
         let png = if formats.contains(&WinFormat::Png) {
             fetch(WinFormat::Png).ok()
         } else {

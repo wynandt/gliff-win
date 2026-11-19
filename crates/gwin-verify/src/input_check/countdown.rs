@@ -7,7 +7,6 @@
 pub fn seconds_left(total_secs: u32, elapsed_ms: u64) -> u32 {
     let total_ms = u64::from(total_secs) * 1000;
     let left_ms = total_ms.saturating_sub(elapsed_ms);
-    // At most `total_secs`, so it fits.
     u32::try_from(left_ms.div_ceil(1000)).unwrap_or(total_secs)
 }
 

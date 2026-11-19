@@ -134,8 +134,6 @@ impl CpuDecoder {
             }
         };
         let Some(frame) = frame else {
-            // Nothing came out, so nothing is drainable: correct any drift
-            // the counter picked up from failed decodes (as upstream).
             self.held = 0;
             return Ok(None);
         };
@@ -148,7 +146,6 @@ impl CpuDecoder {
     /// in-band.
     pub fn reset(&mut self, chroma: ChromaMode) -> Result<(), DecodeError> {
         self.inner = new_openh264()?;
-        // `session::Core` refuses any other chroma before a reset.
         self.aux = match chroma {
             ChromaMode::Dual420 => Some(new_openh264()?),
             _ => None,

@@ -6,7 +6,6 @@
 //! Windows; `remote` runs `wl-copy` and `wl-paste` over ssh on the remote
 //! machine and is proven against `scripts/fake-ssh` and the fake wl-clipboard.
 
-// Only Windows drives a real machine; elsewhere these run in tests.
 pub mod picture;
 #[cfg_attr(not(windows), allow(dead_code))]
 pub mod remote;
@@ -191,14 +190,12 @@ fn text_steps(nonce: &str) -> Vec<Step> {
             unicode.clone(),
         ),
         same("unicode-remote-to-windows", Way::RemoteToWindows, unicode),
-        // CRLF becomes LF on the way to the remote machine.
         Step {
             name: "crlf-windows-to-remote",
             way: Way::WindowsToRemote,
             send: format!("{nonce} a\r\nb\r\nc"),
             expect: format!("{nonce} a\nb\nc"),
         },
-        // LF stays LF on the way to Windows.
         same(
             "lf-remote-to-windows",
             Way::RemoteToWindows,
@@ -292,8 +289,6 @@ fn run_text<H: Harness>(h: &mut H, nonce: &str, timing: Timing) -> (Vec<Line>, b
         }
         last_expect = Some(step.expect);
     }
-    // Both sides still hold the last copy after a quiet time: a copy that
-    // came back as an echo, or a revoked offer, would have changed one.
     h.sleep(timing.quiet);
     let last = last_expect.unwrap_or_default();
     let windows = h.windows_text().map_err(|e| format!("{e:#}"));
@@ -428,8 +423,6 @@ fn run_image<H: Harness>(h: &mut H, nonce: &str, timing: Timing) -> (Vec<Line>, 
     let mut lines = Vec::new();
     let steps = picture_steps(nonce);
     let large = large_picture(nonce);
-    // The history check reads the clipboard the last copy from the remote
-    // machine left, so it runs before the large copy from Windows.
     for step in &steps {
         let outcome = run_picture_step(h, step, timing);
         let ok = matches!(outcome, Outcome::Arrived { .. });
@@ -533,7 +526,6 @@ pub fn run<H: Harness>(h: &mut H, cases: &[ClipCase], nonce: &str, timing: Timin
                 }
             }
             ClipCase::Files if started => {
-                // Its verdict waits for the spool check after the client ends.
                 let (case_lines, ok) = files::run_files(h, nonce, timing);
                 lines.extend(case_lines);
                 files_ok = Some(ok);

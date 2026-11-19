@@ -331,8 +331,6 @@ fn create_window() -> windows::core::Result<HWND> {
             lpszClassName: w!("GliffClipboard"),
             ..Default::default()
         };
-        // A second start finds the class registered; creating the window
-        // reports any real problem.
         let _ = RegisterClassExW(&class);
         CreateWindowExW(
             WINDOW_EX_STYLE::default(),
@@ -376,8 +374,6 @@ extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM)
     }
     LRESULT(0)
 }
-
-// The clipboard itself.
 
 /// The clipboard, opened; closed when dropped.
 struct Open;
@@ -520,8 +516,6 @@ fn owner_is(hwnd: HWND) -> bool {
     unsafe { GetClipboardOwner() }.is_ok_and(|owner| owner == hwnd)
 }
 
-// A program on Windows copies.
-
 fn on_update(hwnd: HWND) {
     if with_state(|state| state.debounce.update()) == Some(true) {
         arm_timer(hwnd, DEBOUNCE_MS);
@@ -622,7 +616,6 @@ fn local_changed(hwnd: HWND) {
         return;
     };
     let (input, generation) = command;
-    // A local change revokes the current offer first.
     let _ = input.send(EngineIn::Command(Command::RevokeLocal(
         RevokeWhy::LocalChange,
     )));
@@ -653,8 +646,6 @@ fn read_local(hwnd: HWND, mime: &str, generation: u64) -> Result<Vec<u8>, Cause>
     })
     .map_err(|error| Cause::of_convert(&error))
 }
-
-// The other machine copies.
 
 fn on_host_events(hwnd: HWND) {
     let Some(host) = with_state(|state| Arc::clone(&state.host)) else {
@@ -734,8 +725,7 @@ fn put_remote(hwnd: HWND, serial: u32, write: RemoteWrite) {
         });
         return;
     };
-    // The old promises end here: the window is told with
-    // WM_DESTROYCLIPBOARD before this returns.
+    // Platform: EmptyClipboard sends WM_DESTROYCLIPBOARD before it returns.
     // SAFETY: the clipboard is open.
     let _ = unsafe { EmptyClipboard() };
     let plans = write.plans.clone();
@@ -776,8 +766,6 @@ fn put_remote(hwnd: HWND, serial: u32, write: RemoteWrite) {
     });
 }
 
-// A program on Windows pastes.
-
 /// `WM_RENDERFORMAT`: the clipboard is open in the program that pastes, and
 /// this thread answers with the body, waiting for the engine.
 fn render_requested(id: u32) {
@@ -791,8 +779,8 @@ fn render_requested(id: u32) {
         return;
     };
     if let Some(bytes) = rendered(&input, serial, &write, id) {
-        // The clipboard is open in the requester, not in this thread, so
-        // the proof of an open clipboard must not close it.
+        // Platform: during delayed rendering the requester has the clipboard open, so
+        // it must not be closed here.
         let held = std::mem::ManuallyDrop::new(Open);
         set_bytes(&held, id, &bytes);
     }
@@ -812,7 +800,6 @@ fn rendered(
             .ok()?;
         return match answer.blocking_recv() {
             Ok(Ok(paths)) => Some(clip_files::hdrop_bytes(&paths)),
-            // The engine logged why (`paste ended`).
             Ok(Err(_)) | Err(_) => None,
         };
     }
@@ -836,7 +823,6 @@ fn rendered(
                 None
             }
         },
-        // The engine logged why (`paste ended`).
         Ok(Err(_)) | Err(_) => None,
     }
 }

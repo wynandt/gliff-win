@@ -196,7 +196,6 @@ impl Surface {
             bmiHeader: BITMAPINFOHEADER {
                 biSize: size_of::<BITMAPINFOHEADER>() as u32,
                 biWidth: width,
-                // Negative: the first row is the top.
                 biHeight: -height,
                 biPlanes: 1,
                 biBitCount: 32,

@@ -570,9 +570,6 @@ impl Tabs {
         let mut effects = Vec::new();
         self.retire(index, &mut effects);
         if self.shown == Some(id) {
-            // A shown tab that had no session (a session was handed on by
-            // `retire`): the neighbour rule still picks the nearest running
-            // tab.
             match self.neighbour(index) {
                 Some(next) => self.show(None, next, &mut effects),
                 None => {
@@ -644,7 +641,6 @@ impl Tabs {
         match cause {
             Cause::User => tab.record_pending = true,
             Cause::Restore => tab.record_pending = false,
-            // The retry is the same wish as the attempt it replaces.
             Cause::Retry => {}
         }
         tab.status = match (

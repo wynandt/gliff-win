@@ -41,8 +41,6 @@ const MAX_EXTENSION_UNITS: usize = 32;
 /// Device names Windows reserves, with or without an extension.
 const RESERVED: &[&str] = &["CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$"];
 
-// Naming files that arrive from Linux.
-
 /// A path part Windows accepts, made from one a Linux program chose.
 ///
 /// `<>:"\|?*` and control characters become `_`; a trailing dot or space is
@@ -117,7 +115,7 @@ fn shorten_to(part: &str, limit: usize) -> String {
         }
         out.push(c);
     }
-    // A cut can leave a trailing dot or space that Windows would drop.
+    // Platform: Windows drops a trailing dot or space from a file name.
     let out = out.trim_end_matches(['.', ' ']).to_owned();
     let out = if out.is_empty() { "_".to_owned() } else { out };
     out + extension
@@ -144,8 +142,6 @@ pub fn top_level_units(spool_dir: &Path) -> usize {
 
 /// [`spool_paths`], with top-level names cut to `top_units` UTF-16 units.
 pub fn spool_paths_within(files: &[ClipboardFile], top_units: usize) -> Vec<PathBuf> {
-    // Original relative prefix to its sanitized path, and the lower-cased
-    // sanitized paths in use.
     let mut mapped: HashMap<String, String> = HashMap::new();
     let mut taken: HashSet<String> = HashSet::new();
     let mut out = Vec::with_capacity(files.len());
@@ -225,8 +221,6 @@ pub fn extended(path: &Path) -> PathBuf {
     }
     path.to_path_buf()
 }
-
-// Listing files that are copied on Windows.
 
 /// Walk the copied paths into an offer. Directories are listed recursively;
 /// symbolic links and junctions inside them are skipped so a loop cannot run
@@ -321,8 +315,6 @@ fn walk(
     }
     Ok(())
 }
-
-// The spool.
 
 /// A directory that holds one remote offer's files on this side. Removed when
 /// dropped.
@@ -429,8 +421,6 @@ pub fn process_alive(pid: u32) -> bool {
     }
 }
 
-// The `CF_HDROP` payload.
-
 /// The registered format that tells a drop target to copy, not move.
 pub const DROP_EFFECT_FORMAT: &str = "Preferred DropEffect";
 /// `DROPEFFECT_COPY`.
@@ -443,9 +433,7 @@ const DROPFILES_HEADER: usize = 20;
 pub fn hdrop_bytes(paths: &[PathBuf]) -> Vec<u8> {
     let mut out = Vec::new();
     out.extend_from_slice(&u32::try_from(DROPFILES_HEADER).unwrap_or(20).to_le_bytes());
-    // The drop point (x, y) and fNC.
     out.extend_from_slice(&[0; 12]);
-    // fWide.
     out.extend_from_slice(&1u32.to_le_bytes());
     for path in paths {
         for unit in path.to_string_lossy().encode_utf16() {

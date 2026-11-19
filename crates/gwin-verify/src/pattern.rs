@@ -74,7 +74,6 @@ pub fn cell_rect(width: u32, height: u32, column: u32, row: u32) -> (u32, u32, u
     )
 }
 
-// The drawing half serves gwin-fake-server and the tests.
 #[cfg_attr(not(test), allow(dead_code))]
 /// What [`render`] draws.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -219,7 +218,6 @@ fn inner_mean(frame: &BgraFrame, (x0, x1, y0, y1): (u32, u32, u32, u32)) -> [f64
     for y in y0..y1.min(frame.height) {
         for x in x0..x1.min(frame.width) {
             let i = ((y * frame.width + x) * 4) as usize;
-            // BGRA.
             sum[0] += u64::from(frame.pixels[i + 2]);
             sum[1] += u64::from(frame.pixels[i + 1]);
             sum[2] += u64::from(frame.pixels[i]);

@@ -211,7 +211,6 @@ fn paint_hint(hwnd: HWND) {
 /// stock one (reading order, Unicode control characters, input-method items).
 /// `lparam` is the screen position, or -1 when the menu key asked for it.
 fn context_menu(hwnd: HWND, lparam: LPARAM) {
-    // The two words are signed 16-bit screen coordinates.
     let x = i32::from(lparam.0 as u16 as i16);
     let y = i32::from((lparam.0 >> 16) as u16 as i16);
     // SAFETY: our own child and a menu made and destroyed here; the strings
@@ -286,8 +285,6 @@ extern "system" fn proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) ->
             let _ = with_app(|app| app.address_event(Event::Escape));
             return LRESULT(0);
         }
-        // Enter and Escape would beep as characters; Ctrl+A is not
-        // select-all in a plain field.
         WM_CHAR if wparam.0 == 0x0d || wparam.0 == 0x1b => return LRESULT(0),
         WM_CHAR if wparam.0 == CTRL_A => {
             // SAFETY: our own child.

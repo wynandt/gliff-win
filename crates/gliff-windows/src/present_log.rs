@@ -192,7 +192,6 @@ impl Segment {
                 n as f64 / span.as_secs_f64()
             }
         };
-        // A freeze at the end of the window is a gap too.
         let tail = if span.is_zero() {
             Duration::ZERO
         } else {

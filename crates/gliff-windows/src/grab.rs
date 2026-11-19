@@ -169,12 +169,6 @@ pub struct Grab {
 impl Grab {
     /// The startup recovery runs here, before anything can be held.
     pub fn new(hwnd: HWND, cmds: Arc<InputRoute<UiCmd>>, config: GrabConfig) -> Self {
-        // One owner for the marker, the watchdog and the exit paths; none
-        // when the start time is unreadable, and then there is no registry
-        // route (Super+L goes by the chord). The policy is made in every
-        // mode, so the per-machine switch can turn it on at any time; it
-        // writes nothing until the switch is on and the window has the
-        // keyboard. The repair of a dead client's leftover runs here, once.
         let owner = lockreg::owner();
         let (lock, recovery) = lock_policy::start_up(WinRegistry, true, owner, &WinProcesses);
         if recovery != Recovery::Nothing {
@@ -350,8 +344,6 @@ impl Grab {
         let reading = read_pointer(self.hwnd);
         let key = reading.key();
         if self.last_poll.as_ref() != Some(&key) {
-            // Only a change is logged: this is what settles a hover that
-            // does not follow the pointer.
             crate::logging::line(&format!(
                 "pointer poll: over={:?} under={} capture={} messages-say-over={}",
                 reading.over,
@@ -370,11 +362,8 @@ impl Grab {
                 self.leave();
             }
             Some(Pointer::Entered) => {
-                // No mouse message came, so none is asked for either: the
-                // poll also finds the leave. Asking Windows to track the
-                // pointer from here made it answer with a leave at once
-                // whenever the pointer was over a child window, and the poll
-                // entered again on the next tick.
+                // Platform: TrackMouseEvent called from here answers WM_MOUSELEAVE at once
+                // while the pointer is over a child window.
                 crate::logging::line("pointer: entered the window (found by the poll, no message)");
                 self.dispatch(Event::Pointer(Pointer::Entered));
             }
@@ -410,20 +399,10 @@ impl Grab {
         time_ms: u32,
         extra_info: bool,
     ) -> Option<()> {
-        // A key the hook let through on purpose (a media key, a key under
-        // `--injected-keys local`, a key with no session to send it to) is
-        // Windows' to handle: do not send it, do not count it, and let
-        // `DefWindowProc` see it. So is any key while the hook itself is not
-        // grabbing (the release chord just fired).
         let was_passed = crate::hook::was_passed(vk, press, time_ms);
         if !silent_hook_judge(self.state.mode(), crate::hook::mode(), was_passed) {
             return None;
         }
-        // A message the hook has already overtaken is dropped: it handled a
-        // later event of the key (its Up, say) after the window installed it
-        // again, and that event decided where the key's life goes. It is a
-        // key of the grab, so `DefWindowProc` does not see it either (a late
-        // Alt+F4 would close the window).
         let key = crate::key_ledger::KeyId::of_message(vk, lparam);
         if crate::hook::saw_later(key, time_ms) {
             return Some(());
@@ -445,8 +424,6 @@ impl Grab {
         let sent = self.config.policy.forwards(&raw) && self.cmds.send(UiCmd::Key(raw));
         crate::hook::note_legacy(key, press, sent);
         if self.counters.legacy_keys == 1 || self.counters.legacy_keys.is_multiple_of(100) {
-            // How many keys are down and which modifier groups, and how the
-            // hook has been running: no key is named.
             crate::logging::line(&silent_line(
                 self.counters.legacy_keys,
                 crate::hook::held_now(),
@@ -485,9 +462,6 @@ impl Grab {
             log_change(&change);
         }
         if hook::release_overdue() {
-            // The release chord went unanswered: the session it went to has
-            // ended or is not the shown one. The state lets go of the grab
-            // here, or the hook would refuse every later one.
             crate::logging::line("release chord: no session answered; the window took it in");
             self.release_chord();
         }
@@ -563,8 +537,6 @@ impl Grab {
         if let Some(gate) = &mut self.lock {
             log_change(&gate.policy_mut().exit());
         }
-        // The remote side was let go of by the session (Bye); Windows' own
-        // modifier state is cleaned here, with the hook gone.
         let released = crate::modifiers::release_held();
         self.counters.modifiers_released_on_exit += released.len() as u32;
         if !released.is_empty() {
@@ -651,8 +623,6 @@ impl Grab {
         }
         if out.release == Release::All {
             self.cmds.send(UiCmd::ReleaseInput);
-            // The hook is no longer swallowing (or is Super+L only): clean
-            // Windows' side too, but not a modifier the user is still holding.
             let released = crate::hook::release_at_grab_end();
             self.counters.modifiers_released += released.len() as u32;
             if !released.is_empty() {
@@ -664,15 +634,15 @@ impl Grab {
                 ));
             }
         }
-        if out.mode == HookMode::Grab && !self.watchdog_refused && !self.watchdog_alive() {
-            // The helper that cleans the modifiers after a hard kill (and
-            // restores the lock setting, in registry mode).
-            if let Err(e) = self.ensure_watchdog() {
-                self.watchdog_refused = true;
-                crate::logging::line(&format!(
-                    "watchdog did not start, so a hard kill leaves modifiers to Windows: {e}"
-                ));
-            }
+        if out.mode == HookMode::Grab
+            && !self.watchdog_refused
+            && !self.watchdog_alive()
+            && let Err(e) = self.ensure_watchdog()
+        {
+            self.watchdog_refused = true;
+            crate::logging::line(&format!(
+                "watchdog did not start, so a hard kill leaves modifiers to Windows: {e}"
+            ));
         }
         self.apply_lock(out.lock);
     }
@@ -682,10 +652,6 @@ impl Grab {
     fn apply_lock(&mut self, wish: Want) {
         let open = self.send_win_l && !self.suspended;
         let now = self.now_ms();
-        // The helper that puts the setting back after a kill is started
-        // before the setting is first turned on; if it cannot start the
-        // setting stays off (and the next wish tries again), so a killed
-        // client never leaves it set without a helper.
         let needs_helper = self
             .lock
             .as_ref()
@@ -843,8 +809,6 @@ fn read_pointer(hwnd: HWND) -> PointerReading {
         under: "unknown",
         captured: false,
     };
-    // A drag that started in the window keeps the mouse (`SetCapture`) and
-    // the messages, wherever the pointer goes: the messages are right then.
     // SAFETY: no arguments.
     out.captured = unsafe { GetCapture() } == hwnd;
     let mut at = POINT::default();

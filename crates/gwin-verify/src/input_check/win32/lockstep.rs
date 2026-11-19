@@ -279,7 +279,6 @@ impl LockHarness for Win32Harness {
             if let Ok(desktop) = opened {
                 // SAFETY: the handle OpenInputDesktop just returned.
                 let _ = unsafe { CloseDesktop(desktop) };
-                // The desktop needs a moment before it takes input again.
                 std::thread::sleep(Duration::from_secs(2));
                 self.locked.store(false, Ordering::Release);
                 return true;
@@ -331,7 +330,6 @@ impl LockHarness for Win32Harness {
         let Some(child) = self.child.as_mut() else {
             return Ok(());
         };
-        // The panic ends the process; give it a moment.
         let deadline = Instant::now() + Duration::from_secs(5);
         while matches!(child.try_wait(), Ok(None)) && Instant::now() < deadline {
             std::thread::sleep(Duration::from_millis(50));
@@ -355,10 +353,7 @@ impl LockHarness for Win32Harness {
             anyhow::bail!("taskkill {how:?} exited {status}");
         }
         self.hwnd = None;
-        // Reap the child and let go of its handle. While this process holds
-        // it, Windows keeps the dead client's process object, and a check
-        // that asks "is the owner still there" by opening it by pid would
-        // find it.
+        // Platform: Windows keeps a dead process's object while a handle to it is open.
         if let Some(mut child) = self.child.take() {
             let _ = child.wait();
         }
@@ -370,8 +365,6 @@ impl LockHarness for Win32Harness {
             .arg("--restore-lock-policy")
             .output()
             .context("running --restore-lock-policy")?;
-        // Anything the helper printed goes in the run's output. (What it
-        // restored, or found alive, is in the client log.)
         for line in String::from_utf8_lossy(&out.stdout)
             .lines()
             .chain(String::from_utf8_lossy(&out.stderr).lines())
@@ -386,7 +379,6 @@ impl LockHarness for Win32Harness {
 
     fn note_explorer_windows(&mut self) {
         self.explorer_before = explorer_windows();
-        // A watch left from an earlier call is stopped first.
         if let Some(old) = self.explorer_watch.take() {
             old.finish();
         }
@@ -397,7 +389,6 @@ impl LockHarness for Win32Harness {
         let Some(watch) = self.explorer_watch.take() else {
             return false;
         };
-        // A short grace: a window that is still opening when the step ends.
         let deadline = Instant::now() + Duration::from_secs(1);
         while !watch.seen() && Instant::now() < deadline {
             std::thread::sleep(Duration::from_millis(50));

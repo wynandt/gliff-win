@@ -123,8 +123,6 @@ pub fn judge_fps(
         .fold(at_start, u32::min);
     if f64::from(lowest) < floor {
         problems.push(FpsProblem::CapBelowFloor { cap: lowest });
-        // Under its own low cap the fps is the server's choice; the cap
-        // is the failure.
         return problems;
     }
     let expected = round2(fps_of_cap * effective_cap(at_start, steps, window));
@@ -259,7 +257,6 @@ mod tests {
 
     #[test]
     fn a_ladder_scaled_stream_is_not_an_encoder_clamp() {
-        // rate.rs:345-358: ladder levels 5 and 6 code at scale 0.5.
         assert_eq!(
             judge_config((1280, 800), (640, 400), 500),
             ResizeVerdict::Scaled { stream: (640, 400) },
@@ -330,7 +327,6 @@ mod tests {
 
     #[test]
     fn a_run_at_the_servers_cap_of_30_passes() {
-        // Seen against a real server: cap 30 all window, 871 pictures in 30 s.
         let window = Duration::from_secs(30);
         assert_eq!(
             judge_fps(29.03, 30, &[], window, 30.0, FPS_OF_CAP),

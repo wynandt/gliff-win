@@ -108,8 +108,6 @@ impl Tools for RealTools {
             command.creation_flags(CREATE_NO_WINDOW);
         }
         let mut child = command.spawn().map_err(ToolError::Spawn)?;
-        // Each pipe is drained on its own thread: a full pipe would block
-        // the child, and the wait below would never end.
         let stdout = drain(child.stdout.take());
         let stderr = drain(child.stderr.take());
         let deadline = Instant::now() + cmd.timeout();
@@ -120,7 +118,6 @@ impl Tools for RealTools {
                     std::thread::sleep(Duration::from_millis(20));
                 }
                 Ok(None) | Err(_) => {
-                    // Killing a child that just exited is harmless.
                     let _ = child.kill();
                     let _ = child.wait();
                     break None;
@@ -136,8 +133,8 @@ impl Tools for RealTools {
                     exit: status.code(),
                 })
             }
-            // A helper the killed ssh started may still hold the pipes open.
-            // The readers are not waited for.
+            // Platform: a helper the killed ssh started can keep the pipes open, so the
+            // readers are not joined.
             None => Err(ToolError::Timeout),
         }
     }
@@ -165,7 +162,6 @@ fn drain<R: Read + Send + 'static>(pipe: Option<R>) -> Reader {
     std::thread::spawn(move || {
         if let Some(mut pipe) = pipe {
             let mut chunk = [0_u8; 4096];
-            // A read error ends the text there; what was read is kept.
             while let Ok(n) = pipe.read(&mut chunk) {
                 if n == 0 {
                     break;

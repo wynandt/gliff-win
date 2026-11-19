@@ -229,7 +229,7 @@ mod win {
         ) {
             release_local();
         }
-        // Not handled: the default handler still ends the process.
+        // Platform: FALSE lets the default console handler end the process.
         BOOL(0)
     }
 }
@@ -312,9 +312,8 @@ mod tests {
 
     #[test]
     fn an_owed_win_key_is_released_though_windows_says_it_is_up() {
-        // Issue #35, after Win+L with the lock switched off: Windows acts as
-        // if Win were held, but GetAsyncKeyState says no key is down. A
-        // release gated on GetAsyncKeyState let it be.
+        // Platform: after Win+L Windows can act as if Win were held while
+        // GetAsyncKeyState reports it up. https://github.com/wynandt/gliff-win/issues/35
         let none_down = |_| false;
         assert!(to_release_where(none_down, |_, _| true, &[]).is_empty());
         assert_eq!(

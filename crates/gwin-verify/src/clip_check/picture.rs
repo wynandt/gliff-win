@@ -199,7 +199,6 @@ impl Picture {
                 rgba[out..out + 4].copy_from_slice(&[p[2], p[1], p[0], a]);
             }
         }
-        // A program that does not use alpha leaves it zero everywhere.
         if rgba.as_chunks::<4>().0.iter().all(|p| p[3] == 0) {
             for p in rgba.as_chunks_mut::<4>().0 {
                 p[3] = 255;

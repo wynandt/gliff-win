@@ -173,7 +173,6 @@ pub(super) fn run_files<H: Harness>(h: &mut H, nonce: &str, timing: Timing) -> (
     if !ok {
         return (lines, false);
     }
-    // The clipboard now holds the last copy from the remote machine.
     let effect = h.windows_drop_effect().map_err(|e| format!("{e:#}"));
     let excluded = h.windows_history_excluded().map_err(|e| format!("{e:#}"));
     let good = matches!(effect, Ok(Some(1))) && matches!(excluded, Ok(true));
@@ -187,7 +186,6 @@ pub(super) fn run_files<H: Harness>(h: &mut H, nonce: &str, timing: Timing) -> (
     if !good {
         return (lines, false);
     }
-    // Quiet: nothing is copied back, and both sides still hold the tree.
     let last = &steps[steps.len() - 1];
     let expected = last.spec.found();
     h.sleep(timing.quiet);
@@ -198,7 +196,6 @@ pub(super) fn run_files<H: Harness>(h: &mut H, nonce: &str, timing: Timing) -> (
         Ok(None) => Some("no files".to_owned()),
         Err(e) => Some(e.clone()),
     };
-    // The remote side holds the paths it made; Windows may have renamed.
     let (windows, remote) = (say(&windows, last.strict), say(&remote, true));
     let good = windows.is_none() && remote.is_none();
     let mut out = line("quiet", good);

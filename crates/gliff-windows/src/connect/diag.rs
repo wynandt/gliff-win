@@ -92,9 +92,8 @@ pub fn classify(stderr: &str, exit: Option<i32>, phase: Phase) -> SshFailure {
     if has("connection timed out") || has("no route to host") || has("network is unreachable") {
         return SshFailure::Unreachable;
     }
-    // Windows' ssh has no words for some Winsock errors, the no-route ones
-    // among them (an IPv6 address with no route prints "Unknown error"). A
-    // failed connect with no reason is a machine that cannot be reached.
+    // Platform: Windows OpenSSH prints "Unknown error" for some Winsock errors,
+    // such as no route. See docs/windows-quirks.md#windows-versions.
     if lowered.iter().any(|line| {
         line.contains("connect to host") && line.trim_end().ends_with(": unknown error")
     }) {
@@ -109,17 +108,12 @@ pub fn classify(stderr: &str, exit: Option<i32>, phase: Phase) -> SshFailure {
     if has("permission denied (") {
         return SshFailure::KeyRefused;
     }
-    // A connection that failed never reached a remote shell, so these come
-    // after the connection classes. Only exit 127 speaks for the remote
-    // shell: ssh's own errors exit 255, a killed ssh has no exit, and any
-    // other code is the server's own business, not a missing server.
+    // Platform: ssh exits 255 for its own errors; only 127 comes from the remote shell.
     let shell_says_missing =
         has("command not found") || has("no such file or directory") || has(": not found");
     if shell_says_missing && exit == Some(127) {
         return SshFailure::ServerMissing;
     }
-    // A session that printed nothing and exited 127 asked a shell for a
-    // command it does not have. A version check is not trusted with that.
     if phase == Phase::Session && exit == Some(127) && lowered.iter().all(|l| l.trim().is_empty()) {
         return SshFailure::ServerMissing;
     }

@@ -55,8 +55,10 @@
 mod input_log;
 mod model;
 
-// Shared with gwin-verify; the compare half is unused here.
-#[allow(dead_code)]
+#[allow(
+    dead_code,
+    reason = "shared with gwin-verify; the compare half is unused here"
+)]
 #[path = "../../pattern.rs"]
 mod pattern;
 
@@ -161,8 +163,6 @@ fn tint_from_env() -> Option<[u8; 3]> {
 }
 
 fn main() -> anyhow::Result<()> {
-    // As upstream main.rs: the runtime outlives the LocalSet and is dropped
-    // last, which is where the pending stdin read holds the exit.
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()?;
@@ -172,9 +172,6 @@ fn main() -> anyhow::Result<()> {
 
 async fn serve() -> anyhow::Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    // The call the client makes to check the server's version: what the real
-    // server prints, with the number from the environment when a test needs
-    // an old one.
     if args.first().map(String::as_str) == Some("--version") {
         let number = std::env::var("GWIN_FAKE_SERVER_VERSION").unwrap_or_else(|_| "0.4.1".into());
         println!("gliff-server {number}");
@@ -192,8 +189,6 @@ async fn serve() -> anyhow::Result<()> {
         .and_then(|i| args.get(i + 1))
         .cloned()
         .map(|name| {
-            // `--output auto` is the focused real output (upstream
-            // session.rs:1661-1700); the fake has one.
             if name == "auto" {
                 "HDMI-A-1".to_owned()
             } else {
@@ -273,9 +268,6 @@ async fn serve() -> anyhow::Result<()> {
             }
         }
     }
-    // Upstream leaves the session on Bye (session.rs:498) and dropping
-    // `SessionOutput` removes the headless output (session.rs:1477-1482),
-    // so from here hyprctl no longer shows it or the pattern on it.
     server.remove_hypr()?;
     match fault {
         Fault::BadExit => std::process::exit(3),
@@ -405,21 +397,17 @@ impl Server {
 
     async fn on_client(&mut self, msg: ClientMsg) -> anyhow::Result<()> {
         match msg {
-            // Cumulative; an id not in flight is ignored
-            // (session.rs:499-503, rate.rs:111-140).
             ClientMsg::FrameAck { frame_id, .. } => {
                 while self.inflight.front().is_some_and(|(id, _)| *id <= frame_id) {
                     self.inflight.pop_front();
                 }
             }
-            // session.rs:550-558.
             ClientMsg::RequestKeyframe => self.want_keyframe = true,
             ClientMsg::Resize {
                 width,
                 height,
                 scale,
             } if self.fault != Fault::IgnoreResize => self.resize(width, height, scale).await?,
-            // Upstream answers a client Ping (session.rs:589-599).
             ClientMsg::Ping { t } => {
                 self.writer
                     .write_msg(&ServerMsg::Pong {
@@ -445,8 +433,6 @@ impl Server {
             return Ok(());
         }
         if !same_size {
-            // A geometry change rebuilds the encoder and forces a keyframe
-            // (session.rs:982-1037).
             let base = model::fit_extent(width, height, model::CPU_ENCODER_MAX);
             self.encoder = encoder(base, self.fps_cap)?;
             self.want_keyframe = true;
@@ -500,7 +486,6 @@ impl Server {
         let inflight: u64 = self.inflight.iter().map(|(_, n)| *n as u64).sum();
         let cap = model::cap_bytes(self.largest_frame);
         if !model::has_room(inflight, self.last_frame as u64, cap) {
-            // Blocked on acks: no frame, and no step up (rate.rs:324-376).
             self.hold_from = now;
             return Ok(now + Duration::from_millis(2));
         }
@@ -509,9 +494,6 @@ impl Server {
             && self.fault != Fault::Hold30
             && now.duration_since(self.hold_from) >= Duration::from_millis(model::HOLD_UP_MS)
         {
-            // Level 0 (or level 2 for `cap15`): fps-only, no encoder
-            // rebuild (session.rs:982-1037); either step sends a
-            // StreamConfig (session.rs:525-547).
             self.fps_cap = if self.fault == Fault::Cap15 {
                 CAP15_FPS
             } else {
@@ -521,9 +503,6 @@ impl Server {
             self.hold_from = now;
             self.send_config().await?;
         }
-        // Pace from the schedule, so a late wake-up is made up by the next
-        // ticks and the average rate is the cap however busy the machine is;
-        // only a lag past MAX_LAG_FRAMES starts again from now rather than burst.
         let next = due + interval;
         Ok(
             if now.saturating_duration_since(next) > interval * MAX_LAG_FRAMES {
@@ -546,7 +525,6 @@ impl Server {
         if encoded.keyframe && self.fault == Fault::Level60 {
             set_level_idc(&mut encoded.main, 60);
         }
-        // session.rs:1151-1193: frame_id from 0, +1 per frame sent.
         let frame_id = self.frame_id;
         self.frame_id += 1;
         if !encoded.keyframe {

@@ -262,7 +262,6 @@ impl Registry for WinRegistry {
         if waited == WAIT_OBJECT_0 || waited == WAIT_ABANDONED {
             return Box::new(RegistryHold(Some(handle)));
         }
-        // Timed out or failed: go ahead without it.
         // SAFETY: `handle` was returned by CreateMutexW and is closed once.
         let _ = unsafe { CloseHandle(handle) };
         Box::new(RegistryHold(None))
@@ -397,10 +396,8 @@ impl Processes for WinProcesses {
         let ended = has_ended(handle);
         // SAFETY: `handle` was returned by OpenProcess and is closed once.
         let _ = unsafe { CloseHandle(handle) };
-        // A process that has ended still has a process object, and so a
-        // readable start time, for as long as anyone (a parent that has not
-        // let go of its `Child`, say) holds a handle to it. Only the pid and
-        // the start time matching is therefore not "running".
+        // Platform: an ended process keeps its process object, and its start time,
+        // while anyone holds a handle to it.
         !ended && start == Some(owner.start)
     }
 }
@@ -450,8 +447,6 @@ pub fn init() -> Option<Owner> {
 /// `WM_ENDSESSION` and `WM_DESTROY` all end here. Does nothing before
 /// [`init`], and nothing when this process has no marker.
 pub fn restore_now() {
-    // Before the restore takes the registry: a turn-on that is under way
-    // finishes first (it holds the registry), and none starts after.
     EXITING.store(true, Ordering::SeqCst);
     let Some(owner) = OWNER.get().copied() else {
         return;
@@ -470,7 +465,7 @@ unsafe extern "system" fn ctrl_handler(kind: u32) -> BOOL {
     ) {
         restore_now();
     }
-    // Not handled: the default handler still ends the process.
+    // Platform: FALSE lets the default console handler end the process.
     BOOL(0)
 }
 
@@ -493,8 +488,6 @@ pub fn restore_by_hand() -> Recovery {
 /// restores if the marker still names it. Returns the line to log.
 pub fn watchdog(owner: Owner) -> String {
     let line = restore_after_owner(owner);
-    // The client cannot let go of the modifiers itself after a hard kill, and
-    // the grab may have swallowed the Up of one Windows still counts as down.
     let released = crate::modifiers::release_local();
     if released == 0 {
         line
@@ -513,7 +506,6 @@ fn restore_after_owner(owner: Owner) -> String {
         )
     };
     let Ok(handle) = handle else {
-        // The client is already gone (or the pid is not ours to open).
         return match lock_policy::restore_if_owned(&mut WinRegistry, Some(owner)) {
             Ok(Some(_)) => "lock watchdog: restored (owner already gone)".to_owned(),
             Ok(None) => "lock watchdog: nothing to restore".to_owned(),
@@ -527,7 +519,6 @@ fn restore_after_owner(owner: Owner) -> String {
             Err(e) => format!("lock watchdog: restore failed: {e}"),
         }
     } else {
-        // The pid now belongs to another process: the client is gone.
         match lock_policy::restore_if_owned(&mut WinRegistry, Some(owner)) {
             Ok(Some(_)) => "lock watchdog: restored (pid reused)".to_owned(),
             Ok(None) => "lock watchdog: nothing to restore".to_owned(),
@@ -581,8 +572,6 @@ mod tests {
             .expect("cmd");
         let pid = child.id();
         child.wait().expect("wait");
-        // `child` still holds its handle here, as the lock step's does after
-        // a kill. Its start time stays readable through that handle.
         let start = {
             use windows::Win32::System::Threading::OpenProcess;
             use windows::Win32::System::Threading::PROCESS_QUERY_LIMITED_INFORMATION;

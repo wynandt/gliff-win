@@ -176,7 +176,6 @@ fn field_text(field: &[u8]) -> &[u8] {
 
 fn field_number(field: &[u8]) -> anyhow::Result<u64> {
     if field[0] & 0x80 != 0 {
-        // GNU base-256, for sizes over 8 GiB.
         let mut value = u64::from(field[0] & 0x7f);
         for byte in &field[1..] {
             value = value.checked_mul(256).context("size overflow")? + u64::from(*byte);
@@ -386,10 +385,10 @@ pub fn parse_uri_list(body: &str) -> anyhow::Result<Vec<String>> {
 /// NUL, and one more NUL.
 pub fn hdrop(paths: &[String]) -> Vec<u8> {
     let mut out = Vec::new();
-    out.extend(20u32.to_le_bytes()); // pFiles
-    out.extend([0u8; 8]); // pt
-    out.extend(0u32.to_le_bytes()); // fNC
-    out.extend(1u32.to_le_bytes()); // fWide
+    out.extend(20u32.to_le_bytes());
+    out.extend([0u8; 8]);
+    out.extend(0u32.to_le_bytes());
+    out.extend(1u32.to_le_bytes());
     for path in paths {
         for unit in path.encode_utf16() {
             out.extend(unit.to_le_bytes());

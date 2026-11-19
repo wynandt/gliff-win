@@ -161,10 +161,6 @@ pub fn layout(view: (u32, u32), device: f64, width: f64, height: f64) -> Option<
         return None;
     }
     let fit = (width * device / vw).min(height * device / vh);
-    // The smallest even mode gives the compositor's alignment step at this
-    // scale. Allow that much slack plus rounding when preserving exact
-    // integer sampling; fractional scales can need more than ten device
-    // pixels (upstream's comment).
     let alignment = clean_mode(2, 2, device.clamp(0.5, 4.0) as f32).0;
     let integer = fit.floor();
     let slack = (width * device - vw * integer).min(height * device - vh * integer);
