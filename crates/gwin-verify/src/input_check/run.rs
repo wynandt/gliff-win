@@ -190,7 +190,10 @@ pub fn summary(check: &'static str, results: &[CaseResult]) -> Line {
 /// The flags a gate client starts with. `--super-l registry` changes a Windows
 /// setting; only the lock step may do that, so every other case names `chord`
 /// unless it names a mode itself, and never depends on the client's default.
-#[cfg_attr(not(windows), allow(dead_code))]
+#[cfg_attr(
+    not(windows),
+    allow(dead_code, reason = "only the Windows build uses this")
+)]
 pub fn gate_flags(flags: &[String]) -> Vec<String> {
     let mut all = Vec::with_capacity(flags.len() + 2);
     if !flags.iter().any(|f| f == "--super-l") {

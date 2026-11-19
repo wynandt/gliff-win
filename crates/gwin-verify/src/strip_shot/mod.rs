@@ -37,7 +37,10 @@ pub struct Options {
     /// Scene names; empty: all of them.
     pub scenes: Vec<String>,
     /// Draw shapes only, no names (the default off Windows).
-    #[cfg_attr(not(windows), allow(dead_code))]
+    #[cfg_attr(
+        not(windows),
+        allow(dead_code, reason = "only the Windows build uses this")
+    )]
     pub shapes_only: bool,
 }
 

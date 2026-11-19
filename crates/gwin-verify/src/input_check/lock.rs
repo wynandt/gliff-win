@@ -606,7 +606,10 @@ pub fn run(h: &mut impl LockHarness) -> Vec<CaseResult> {
 }
 
 /// The handles in `now` that are not in `before`, in order, each once.
-#[cfg_attr(not(windows), allow(dead_code))]
+#[cfg_attr(
+    not(windows),
+    allow(dead_code, reason = "only the Windows build uses this")
+)]
 pub fn unseen(before: &[isize], now: &[isize]) -> Vec<isize> {
     let mut out: Vec<isize> = Vec::new();
     for hwnd in now {

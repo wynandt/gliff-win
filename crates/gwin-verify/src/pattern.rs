@@ -74,7 +74,13 @@ pub fn cell_rect(width: u32, height: u32, column: u32, row: u32) -> (u32, u32, u
     )
 }
 
-#[cfg_attr(not(test), allow(dead_code))]
+#[cfg_attr(
+    not(test),
+    allow(
+        dead_code,
+        reason = "gwin-verify calls this only from tests; gwin-fake-server shares this file"
+    )
+)]
 /// What [`render`] draws.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Content {
@@ -88,14 +94,26 @@ pub enum Content {
     Flat([u8; 3]),
 }
 
-#[cfg_attr(not(test), allow(dead_code))]
+#[cfg_attr(
+    not(test),
+    allow(
+        dead_code,
+        reason = "gwin-verify calls this only from tests; gwin-fake-server shares this file"
+    )
+)]
 /// Draws frame `n` as BGRA into `out` (resized to fit).
 pub fn render(width: u32, height: u32, n: u64, content: Content, out: &mut Vec<u8>) {
     background(width, height, content, out);
     square(width, height, n, out);
 }
 
-#[cfg_attr(not(test), allow(dead_code))]
+#[cfg_attr(
+    not(test),
+    allow(
+        dead_code,
+        reason = "gwin-verify calls this only from tests; gwin-fake-server shares this file"
+    )
+)]
 /// Everything but the moving square. The fake server draws this once per
 /// size and copies it, since only the square changes.
 pub fn background(width: u32, height: u32, content: Content, out: &mut Vec<u8>) {
@@ -123,7 +141,13 @@ pub fn background(width: u32, height: u32, content: Content, out: &mut Vec<u8>) 
     }
 }
 
-#[cfg_attr(not(test), allow(dead_code))]
+#[cfg_attr(
+    not(test),
+    allow(
+        dead_code,
+        reason = "gwin-verify calls this only from tests; gwin-fake-server shares this file"
+    )
+)]
 /// The square for frame `n`: 60% of the strip high, moving 1/120 of the
 /// width per frame (the script's overlay expression).
 pub fn square(width: u32, height: u32, n: u64, out: &mut [u8]) {
