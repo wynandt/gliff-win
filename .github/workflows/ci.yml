@@ -1,6 +1,7 @@
 # CI for gliff-win. It mirrors the local gate in scripts/check:
 #   host job : lint-terms, lint-ssh, lint-registry, lint-clip-log, lint-comments,
-#              lint-upstream-cite, fmt, clippy -D warnings, tests
+#              lint-upstream-cite, lint-line-cite, fmt, clippy -D warnings,
+#              tests
 #              (Linux, like `scripts/check --host-only` without held-keys)
 #   held-keys job : formal/held-keys/run (Linux; its own job so it can start
 #                   without the Rust toolchain, about half a minute)
@@ -78,6 +79,11 @@ jobs:
         run: |
           scripts/lint-upstream-cite --self-test
           scripts/lint-upstream-cite
+
+      - name: lint-line-cite
+        run: |
+          scripts/lint-line-cite --self-test
+          scripts/lint-line-cite
 
       - name: fmt
         run: cargo fmt --all --check
