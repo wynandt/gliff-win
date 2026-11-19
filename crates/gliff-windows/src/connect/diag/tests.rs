@@ -331,3 +331,14 @@ fn text_that_redirects_or_hides_other_text_is_not_shown() {
     };
     assert_eq!(last_line, "Received disconnect: evilline");
 }
+
+#[test]
+fn the_unreachable_sentence_uses_the_ssh_connect_timeout() {
+    let msg = message(&SshFailure::Unreachable, &target());
+    assert!(
+        msg.what
+            .contains(&format!("{} seconds", super::CONNECT_TIMEOUT_SECS)),
+        "title must follow CONNECT_TIMEOUT_SECS: {}",
+        msg.what
+    );
+}
