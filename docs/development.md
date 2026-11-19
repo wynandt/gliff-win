@@ -8,7 +8,8 @@ reference for the verification tool is [gwin-verify.md](gwin-verify.md).
 
 gliff-win is checked at three levels:
 
-1. **`scripts/check`**: the terms, ssh, registry and clipboard-log lints,
+1. **`scripts/check`**: the terms, ssh, registry, clipboard-log, comment,
+   upstream-cite and line-cite lints,
    the held-keys model, format, clippy, host tests, the workflow lint and
    the Windows cross-build. Everything must pass before a change lands.
    [CI](#ci-and-release) runs the same checks on every pull request (the
@@ -89,19 +90,23 @@ In order:
 6. `scripts/lint-upstream-cite --self-test`, then `scripts/lint-upstream-cite`:
    every upstream Gliff revision a tracked file names is the one pinned in
    `Cargo.toml` (see [Comments](#comments)). Needs Python 3.
-7. `formal/held-keys/run`: model-check holding and releasing keys with TLC.
+7. `scripts/lint-line-cite --self-test`, then `scripts/lint-line-cite`: no
+   tracked file cites a source line as `<path>.<ext>:<line>`, except a
+   permalink that pins a commit or an entry in `scripts/lint-line-cite.allow`
+   (see [Comments](#comments)). Needs Python 3.
+8. `formal/held-keys/run`: model-check holding and releasing keys with TLC.
    On x86-64 Linux the first run downloads a pinned TLC and a pinned Java
    runtime into `target/tla-tools` (SHA-256 checked). Needs the network that
    first time. About half a minute; see
    [formal/held-keys](../formal/held-keys/README.md).
-8. `cargo fmt --all -- --check`.
-9. `cargo clippy --workspace --all-targets --locked -- -D warnings`.
-10. `cargo test --workspace --locked`.
-11. `scripts/lint-workflows --self-test`, then `scripts/lint-workflows`: lint
+9. `cargo fmt --all -- --check`.
+10. `cargo clippy --workspace --all-targets --locked -- -D warnings`.
+11. `cargo test --workspace --locked`.
+12. `scripts/lint-workflows --self-test`, then `scripts/lint-workflows`: lint
    the files in `.github/workflows` (see [CI and release](#ci-and-release)).
    Needs Python 3 and Go, and the network the first time (it installs two
    pinned tools under `target/`).
-12. Unless `--host-only`: `cargo xwin clippy ... -D warnings`, again with
+13. Unless `--host-only`: `cargo xwin clippy ... -D warnings`, again with
     `--features test-hooks`, and `cargo xwin build --release` for
     `x86_64-pc-windows-msvc`.
 
@@ -422,7 +427,8 @@ These are allowed:
   line number. Any revision you name must be the one pinned in `Cargo.toml`.
 - A marker a lint reads, such as `// clip-log:` for `scripts/lint-clip-log`.
 - A lint exception, as the attribute's reason:
-  `#[allow(dead_code, reason = "...")]`.
+  `#[allow(dead_code, reason = "...")]`. Clippy denies an `#[allow]` without a
+  reason (`allow_attributes_without_reason` in the workspace `Cargo.toml`).
 - License headers.
 
 Not allowed: narration, a restatement of the next line, commented-out code,
@@ -436,6 +442,10 @@ the same line needs its own tag.
 comments need review: a lint cannot tell a contract from narration.
 `scripts/lint-upstream-cite` fails when a tracked file names an upstream Gliff
 revision other than the pinned one.
+`scripts/lint-line-cite` fails on a line citation (a file name, a colon and a
+line number), which goes stale when the code above it moves. Name the symbol
+instead, or link a permalink that pins a commit. A real exception, such as a log format,
+goes in `scripts/lint-line-cite.allow` with a reason.
 
 ## The Rust toolchain
 
@@ -467,7 +477,7 @@ names. A release waits for all five.
 
 | Job (check name) | Runs on | What it does |
 |---|---|---|
-| `lint, fmt, clippy, test (linux)` | ubuntu | `lint-terms`, `lint-ssh`, `lint-registry`, `lint-clip-log`, `cargo fmt --check`, clippy with `-D warnings`, `cargo test` on the default threads |
+| `lint, fmt, clippy, test (linux)` | ubuntu | `lint-terms`, `lint-ssh`, `lint-registry`, `lint-clip-log`, `lint-comments`, `lint-upstream-cite`, `lint-line-cite`, `cargo fmt --check`, clippy with `-D warnings`, `cargo test` on the default threads |
 | `held-keys (linux)` | ubuntu | `formal/held-keys/run`: the TLA+ model of holding and releasing keys |
 | `clippy, build (windows)` | windows | clippy with `-D warnings`, again with `--features test-hooks`, and a release build for `x86_64-pc-windows-msvc` |
 | `test (windows)` | windows | `cargo test -p gliff-windows`: the tests of the Windows-only code that can run without a desktop, such as the registry code in `lockreg.rs`. The hook, window and clipboard glue still need a hand check on Windows |
