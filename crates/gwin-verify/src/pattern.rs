@@ -514,6 +514,7 @@ mod tests {
         }
     }
 
+    #[cfg(unix)]
     fn rust_pattern_graph(width: u32, height: u32) -> String {
         let grid = height * 4 / 5;
         let mut g = format!("color=c=black:s={width}x{height}:r=60,format=rgb24");
