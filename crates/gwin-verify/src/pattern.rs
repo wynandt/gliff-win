@@ -490,4 +490,80 @@ mod tests {
         println!("{score:?}");
         assert_eq!(score.verdict(), Verdict::Match, "ffmpeg render: {score:?}");
     }
+
+    const SIZES: [(u32, u32); 4] = [(960, 600), (1920, 1080), (3642, 2276), (17, 11)];
+
+    #[test]
+    fn cell_rects_use_the_same_integer_formula_as_the_script() {
+        for (width, height) in SIZES {
+            let grid = height * 4 / 5;
+            for row in 0..super::ROWS {
+                for column in 0..super::COLUMNS {
+                    assert_eq!(
+                        super::cell_rect(width, height, column, row),
+                        (
+                            column * width / 8,
+                            (column + 1) * width / 8,
+                            row * grid / 4,
+                            (row + 1) * grid / 4,
+                        ),
+                        "{width}x{height} cell ({column},{row})"
+                    );
+                }
+            }
+        }
+    }
+
+    fn rust_pattern_graph(width: u32, height: u32) -> String {
+        let grid = height * 4 / 5;
+        let mut g = format!("color=c=black:s={width}x{height}:r=60,format=rgb24");
+        let mut i = 0;
+        for row in 0..super::ROWS {
+            for column in 0..super::COLUMNS {
+                let (x0, x1, y0, y1) = super::cell_rect(width, height, column, row);
+                let [r, gch, b] = PALETTE[i];
+                g.push_str(&format!(
+                    ",drawbox=x={x0}:y={y0}:w={}:h={}:color=0x{r:02x}{gch:02x}{b:02x}:t=fill",
+                    x1 - x0,
+                    y1 - y0
+                ));
+                i += 1;
+            }
+        }
+        let strip = height - grid;
+        let side = (strip * 3 / 5).max(2);
+        let span = width.saturating_sub(side).max(1);
+        let step = (width / 120).max(1);
+        let y = grid + (strip - side) / 2;
+        g.push_str(&format!(
+            "[bg];color=c=white:s={side}x{side}:r=60[sq];[bg][sq]overlay=x='mod(n*{step}\\,{span})':y={y}:eof_action=repeat[out0]"
+        ));
+        g
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn the_script_graph_matches_the_rust_cell_rects() {
+        let script = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../scripts/remote/gwin-pattern");
+        for (width, height) in SIZES {
+            let out = std::process::Command::new("bash")
+                .arg(&script)
+                .arg("graph")
+                .arg(format!("{width}x{height}"))
+                .output()
+                .expect("run gwin-pattern graph");
+            assert!(
+                out.status.success(),
+                "graph {width}x{height}: {}",
+                String::from_utf8_lossy(&out.stderr)
+            );
+            let got = String::from_utf8(out.stdout).expect("graph is utf-8");
+            assert_eq!(
+                got,
+                format!("{}\n", rust_pattern_graph(width, height)),
+                "script graph {width}x{height}"
+            );
+        }
+    }
 }
