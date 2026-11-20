@@ -390,9 +390,9 @@ on Windows and pasted on Linux). See
   scroll, so they add no kinetic scrolling of their own. The upstream Linux
   client sends its touchpad the same way and is affected the same way.
   Sending the source after the axis would fix it on the server.
-- **Thumb buttons** are `XBUTTON1` (back) and `XBUTTON2` (forward). `--side-buttons`
-  chooses which Linux codes they send; the default is upstream's, and which default
-  to keep is not decided yet.
+- **Thumb buttons** are `XBUTTON1` (back) and `XBUTTON2` (forward). They are sent
+  as `BTN_SIDE` and `BTN_EXTRA`, the codes the pinned server uses, with the
+  default `--side-buttons upstream` and with `linux-mouse` alike.
 - Tested at 200% and 150% only. A scale change while the client runs has not been
   tried.
 - **With Own screen, the remote scale is the Windows scale.** Change it on
