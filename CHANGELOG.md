@@ -7,6 +7,11 @@ release, see [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
 ## [Unreleased]
 
+- A key pressed while the keyboard hook was too slow could reach the remote
+  as down, up, then down again, and stay held there. The slow hook call now
+  drops a key the window has already sent.
+  ([#56](https://github.com/wynandt/gliff-win/issues/56))
+
 ## [0.3.0]
 
 - Click the graph button beside fullscreen to show or hide connection
