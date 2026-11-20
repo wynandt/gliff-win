@@ -3,6 +3,10 @@
 
 use std::time::Duration;
 
+use gwin_verify::model::CPU_ENCODER_MAX;
+use gwin_verify::model::fit_extent;
+use gwin_verify::model::resize_mode;
+
 /// How far the output size implied by a StreamConfig may be from the
 /// request: `scale_milli` is rounded to 1/1000, worth 2-4 px at 4K.
 const IMPLIED_SLACK: u32 = 4;
@@ -12,16 +16,17 @@ const IMPLIED_SLACK: u32 = 4;
 /// output).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ResizeVerdict {
-    /// The output is the requested size and the stream codes all of it.
+    /// The output is the mode the pin creates for the request, and the
+    /// stream codes all of it.
     Applied,
-    /// The output is the requested size, but the encoder scaled the
-    /// stream down to fit its maximum.
+    /// The output is the mode the pin creates for the request, but the
+    /// encoder scaled the stream down to fit its maximum.
     Clamped { stream: (u32, u32) },
-    /// The output is the requested size, but the stream is smaller than
-    /// the encoder fit: the rate ladder's scale-0.5 levels, a symptom that
-    /// `fps` reports.
+    /// The output is the mode the pin creates for the request, but the
+    /// stream is smaller than the encoder fit: the rate ladder's scale-0.5
+    /// levels, a symptom that `fps` reports.
     Scaled { stream: (u32, u32) },
-    /// Not (yet) the requested output.
+    /// Not (yet) the output the pin would create for the request.
     Other { implied_output: (u32, u32) },
 }
 
@@ -34,34 +39,23 @@ pub fn implied_output(stream: (u32, u32), scale_milli: u32) -> (u32, u32) {
     )
 }
 
-/// The CPU encoder's maximum (`gliff_sw::Encoder::MAX_SIZE`).
-const CPU_ENCODER_MAX: (u32, u32) = (3840, 2160);
-
-/// The stream the server scales an output down to when it is over the
-/// CPU encoder maximum: the same aspect, inside the maximum.
-fn encoder_fit(output: (u32, u32)) -> (u32, u32) {
-    let s = (f64::from(CPU_ENCODER_MAX.0) / f64::from(output.0))
-        .min(f64::from(CPU_ENCODER_MAX.1) / f64::from(output.1))
-        .min(1.0);
-    (
-        (f64::from(output.0) * s).round() as u32,
-        (f64::from(output.1) * s).round() as u32,
-    )
-}
-
 pub fn judge_config(requested: (u32, u32), stream: (u32, u32), scale_milli: u32) -> ResizeVerdict {
     let implied = implied_output(stream, scale_milli);
     let near = |a: (u32, u32), b: (u32, u32)| {
         a.0.abs_diff(b.0) <= IMPLIED_SLACK && a.1.abs_diff(b.1) <= IMPLIED_SLACK
     };
-    if !near(implied, requested) {
+    let goal = resize_mode(requested, 1.0, requested)
+        .map(|(mode, _)| mode)
+        .unwrap_or(requested);
+    if !near(implied, goal) {
         return ResizeVerdict::Other {
             implied_output: implied,
         };
     }
-    if near(stream, requested) {
+    let encoder = fit_extent(goal.0, goal.1, CPU_ENCODER_MAX);
+    if near(stream, goal) {
         ResizeVerdict::Applied
-    } else if encoder_fit(requested) != requested && near(stream, encoder_fit(requested)) {
+    } else if encoder != goal && near(stream, encoder) {
         ResizeVerdict::Clamped { stream }
     } else {
         ResizeVerdict::Scaled { stream }
@@ -214,16 +208,30 @@ mod tests {
     #[test]
     fn resize_is_applied_clamped_or_not_from_stream_and_scale_milli() {
         assert_eq!(
-            judge_config((3840, 2400), (3840, 2400), 1000),
+            judge_config((3840, 2400), (3642, 2276), 1000),
             ResizeVerdict::Applied,
-            "real server, Vulkan"
+            "Vulkan codes the capped 3642x2276 output"
         );
         assert_eq!(
-            judge_config((3840, 2400), (3456, 2160), 900),
+            judge_config((3840, 2400), (3840, 2400), 1000),
+            ResizeVerdict::Other {
+                implied_output: (3840, 2400)
+            },
+            "the pin does not create a 3840x2400 headless mode"
+        );
+        assert_eq!(
+            judge_config((3840, 2400), (3456, 2160), 949),
             ResizeVerdict::Clamped {
                 stream: (3456, 2160)
             },
-            "CPU encoder max (fit_extent)"
+            "CPU encoder max of the capped output (fit_extent)"
+        );
+        assert_eq!(
+            judge_config((2560, 2168), (2548, 2160), 995),
+            ResizeVerdict::Clamped {
+                stream: (2548, 2160)
+            },
+            "fit_extent, not the rounded encoder_fit copy (2549x2160)"
         );
         assert_eq!(
             judge_config((3840, 2400), (1920, 1080), 1000),
@@ -248,7 +256,7 @@ mod tests {
     #[test]
     fn a_stream_within_the_slack_is_applied() {
         assert_eq!(
-            judge_config((3840, 2400), (3838, 2400), 1000),
+            judge_config((1920, 1080), (1918, 1080), 1000),
             ResizeVerdict::Applied,
             "2 px off is rounding, not a clamp"
         );
@@ -262,11 +270,11 @@ mod tests {
             "a request inside the encoder maximum cannot be clamped by it"
         );
         assert_eq!(
-            judge_config((3840, 2400), (1728, 1080), 450),
+            judge_config((3840, 2400), (1728, 1080), 474),
             ResizeVerdict::Scaled {
                 stream: (1728, 1080)
             },
-            "half of the encoder fit is the ladder, not the fit"
+            "half of the encoder fit of the capped output is the ladder, not the fit"
         );
     }
 

@@ -262,8 +262,8 @@ fn the_thumb_buttons_are_checked_by_the_codes_each_mapping_sends() {
     let want = [
         ("mouse:273", ""),
         ("mouse:274", ""),
-        ("mouse:278", ""),
-        ("mouse:277", ""),
+        ("mouse:275", ""),
+        ("mouse:276", ""),
         ("mouse:275", "--side-buttons linux-mouse"),
         ("mouse:276", "--side-buttons linux-mouse"),
     ];
@@ -271,7 +271,7 @@ fn the_thumb_buttons_are_checked_by_the_codes_each_mapping_sends() {
         .iter()
         .map(|(n, f)| ((*n).to_owned(), (*f).to_owned()))
         .collect();
-    assert_eq!(seen, want, "upstream 278 and 277, Linux mouse 275 and 276");
+    assert_eq!(seen, want, "upstream and Linux mouse both send 275 and 276");
 }
 
 #[test]

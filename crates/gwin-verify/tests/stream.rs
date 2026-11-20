@@ -319,5 +319,5 @@ fn the_cpu_encoder_clamp_is_named_not_passed() {
     assert!(!success, "{line}");
     assert_eq!(failures(&line), ["encoder_clamped"], "{line}");
     assert_eq!(line["stream_config"]["stream"], "3456x2160", "{line}");
-    assert_eq!(line["stream_config"]["scale_milli"], 900, "{line}");
+    assert_eq!(line["stream_config"]["scale_milli"], 949, "{line}");
 }

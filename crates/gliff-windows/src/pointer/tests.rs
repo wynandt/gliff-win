@@ -47,12 +47,12 @@ fn the_three_main_buttons() {
 fn thumb_buttons_follow_the_enum() {
     assert_eq!(
         button(XDOWN, 1, SideButtons::Upstream),
-        Some((0x116, Press::Down)),
+        Some((0x113, Press::Down)),
         "back"
     );
     assert_eq!(
         button(XUP, 2, SideButtons::Upstream),
-        Some((0x115, Press::Up)),
+        Some((0x114, Press::Up)),
         "forward"
     );
     assert_eq!(

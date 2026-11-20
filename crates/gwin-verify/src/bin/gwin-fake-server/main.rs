@@ -49,7 +49,8 @@
 //! and a last line with the keys still held at Bye (see `input_log.rs`).
 
 mod input_log;
-mod model;
+
+use gwin_verify::model;
 
 #[allow(
     dead_code,

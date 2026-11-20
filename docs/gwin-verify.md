@@ -171,7 +171,9 @@ read it as an option), and the harness puts `--` before the target in the ssh
 and client command lines it builds.
 
 Runs the client's real session core headless: Resize to the panel size,
-waits for a StreamConfig that implies that output, settles, then measures
+waits for a StreamConfig that implies the output the pinned server will
+actually create for that request (a 3840x2400 scale-1.0 resize becomes
+3642x2276), settles, then measures
 decoded fps, decode p50/p95, frame gaps, frame id holes, acks against frames
 and the SPS profile and level. A second ssh asks `hyprctl` where the
 `gwin-pattern` window is at the start and end of the window. The last picture
@@ -186,8 +188,11 @@ is saved as a PNG and compared with the 32-cell test pattern.
   only after 4 s unblocked, so the gate is relative: fps must reach 0.95 of
   the cap in force, time-weighted (`--fps-of-cap`), and each cap in force must
   be at least `--min-fps` (30).
-- `encoder_clamped` at 3840x2400 means the server fell back to its CPU encoder
-  (3840x2160 at most). The panel size needs the Vulkan encoder.
+- A 3840x2400 scale-1.0 resize is first capped by the server's headless
+  limit to 3642x2276. `encoder_clamped` then means the stream is smaller
+  than that output because the CPU encoder tops out at 3840x2160 (3456x2160
+  for this panel). A Vulkan encoder can still code the capped output in
+  full; it cannot create a 3840x2400 headless mode.
 - The end placement probe runs before Bye because upstream drops the output on
   Bye.
 - `--placement skip` drops the hyprctl probe (non-Hyprland host); pattern
@@ -207,9 +212,11 @@ integration test runs all of these at 640x400:
 `cargo test -p gwin-verify --test stream`.
 
 On the remote machine, start the pattern first:
-`scripts/remote/gwin-pattern place 3840x2400` (waits for the output, shows the
-pattern fullscreen, re-checks every 5 s, exits 1 if a check failed), and
-`scripts/remote/gwin-pattern cleanup` afterwards.
+`scripts/remote/gwin-pattern place` (waits for 3642x2276, the mode a
+3840x2400 scale-1.0 request becomes at the pin; or pass an explicit WxH
+the server will create), shows the pattern fullscreen, re-checks every 5 s,
+exits 1 if a check failed, and `scripts/remote/gwin-pattern cleanup`
+afterwards.
 
 ## present
 

@@ -19,6 +19,7 @@ use gliff_windows::session::driver::SessionHandle;
 use gliff_windows::session::driver::Waker;
 use gliff_windows::session::driver::start;
 use gliff_windows::ssh::SshSpec;
+use gwin_verify::model::headless_target;
 use serde_json::Value;
 
 const REMOTE_ARGS: &[&str] = &["follow"];
@@ -160,9 +161,15 @@ fn not_ready(dir: &Path, hypr: &Path, mode: (i64, i64)) -> Option<String> {
     let fields: Vec<&str> = last.split(' ').collect();
     let (w, h) = fields[2].split_once('x').expect("start <pid> <WxH>");
     let (w, h): (i64, i64) = (w.parse().expect("w"), h.parse().expect("h"));
-    if w * mode.1 != h * mode.0 {
+    let logical = (
+        (now.0 as f64 / scale).round() as i64,
+        (now.1 as f64 / scale).round() as i64,
+    );
+    let want_h = 960 * logical.1 / logical.0 / 2 * 2;
+    if (w, h) != (960, want_h) {
         return Some(format!(
-            "source {w}x{h} is not the output's aspect {mode:?} at scale {scale}"
+            "source {w}x{h} is not 960x{want_h} (logical {}x{} at scale {scale})",
+            logical.0, logical.1
         ));
     }
     if fields[3] != "r=60" {
@@ -236,19 +243,38 @@ fn the_pattern_follows_a_scale_2_output_through_the_present_run() {
     assert_eq!(output(&hypr).map(|o| o.2), Some(2.0), "scale 2 output");
 
     handle.send(UiCmd::Resize(FULLSCREEN));
-    let fullscreen = wait_ready(&handle, &dir, &hypr, (3840, 2400), Duration::from_secs(20));
+    let mode = headless_target(FULLSCREEN.width, FULLSCREEN.height, FULLSCREEN.scale);
+    let logical = (
+        (f64::from(mode.0) / f64::from(FULLSCREEN.scale)).round() as u32,
+        (f64::from(mode.1) / f64::from(FULLSCREEN.scale)).round() as u32,
+    );
+    let fullscreen = wait_ready(
+        &handle,
+        &dir,
+        &hypr,
+        (mode.0 as i64, mode.1 as i64),
+        Duration::from_secs(20),
+    );
     assert_eq!(
         fullscreen,
         None,
-        "fullscreen (3840x2400 @2): remote machine said:\n{}",
+        "fullscreen ({}x{} @2, the pin cap of 3840x2400): remote machine said:\n{}",
+        mode.0,
+        mode.1,
         out()
     );
     let until = Instant::now() + Duration::from_secs(10);
+    let marker = format!(
+        "mode {}x{} scale 2.0 logical {}x{}",
+        mode.0, mode.1, logical.0, logical.1
+    );
+    let placed = format!(
+        "PLACEMENT OK: monitor 1 at 2560,0 size {}x{}",
+        logical.0, logical.1
+    );
     let rechecked = |said: &str| {
-        said.split_once("mode 3840x2400 scale 2.0 logical 1920x1200")
-            .is_some_and(|(_, after)| {
-                after.contains("PLACEMENT OK: monitor 1 at 2560,0 size 1920x1200")
-            })
+        said.split_once(marker.as_str())
+            .is_some_and(|(_, after)| after.contains(&placed))
     };
     while !rechecked(&out()) && Instant::now() < until {
         let _ = handle.slot().take();
@@ -257,7 +283,9 @@ fn the_pattern_follows_a_scale_2_output_through_the_present_run() {
     }
     assert!(
         rechecked(&out()),
-        "re-placed at 1920x1200 logical:\n{}",
+        "re-placed at {}x{} logical:\n{}",
+        logical.0,
+        logical.1,
         out()
     );
 

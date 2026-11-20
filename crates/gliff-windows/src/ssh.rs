@@ -111,12 +111,10 @@ pub fn ssh_args(spec: &SshSpec) -> Vec<OsString> {
     invocation(spec, &remote)
 }
 
-/// The session's own ssh options, `--`, the target, then the remote command
-/// words: the one builder behind the session and the version check, so a
-/// check never runs with other options than the session.
-pub(crate) fn invocation(spec: &SshSpec, remote: &[&str]) -> Vec<OsString> {
+/// The ssh options the session, the version check, and a short exec share.
+fn session_ssh_options() -> Vec<OsString> {
     let timeout = connect_timeout_opt();
-    let mut args: Vec<OsString> = [
+    [
         "-T",
         "-o",
         "Compression=no",
@@ -128,11 +126,18 @@ pub(crate) fn invocation(spec: &SshSpec, remote: &[&str]) -> Vec<OsString> {
         timeout.as_str(),
         "-o",
         "ServerAliveInterval=10",
-        "--",
     ]
-    .iter()
+    .into_iter()
     .map(OsString::from)
-    .collect();
+    .collect()
+}
+
+/// The session's own ssh options, `--`, the target, then the remote command
+/// words: the one builder behind the session and the version check, so a
+/// check never runs with other options than the session.
+pub(crate) fn invocation(spec: &SshSpec, remote: &[&str]) -> Vec<OsString> {
+    let mut args = session_ssh_options();
+    args.push(OsString::from("--"));
     args.push(OsString::from(spec.target.as_str()));
     args.extend(remote.iter().map(OsString::from));
     args
@@ -172,11 +177,8 @@ pub fn spawn(spec: &SshSpec) -> std::io::Result<SshLink> {
 /// `-- <target> <command>`. The remote shell parses `command`, which is
 /// why [`exec`] only takes a `&'static str`.
 pub fn exec_args(spec: &SshSpec, command: &'static str) -> Vec<OsString> {
-    let timeout = connect_timeout_opt();
-    let mut args: Vec<OsString> = ["-T", "-o", "BatchMode=yes", "-o", timeout.as_str(), "--"]
-        .iter()
-        .map(OsString::from)
-        .collect();
+    let mut args = session_ssh_options();
+    args.push(OsString::from("--"));
     args.push(OsString::from(spec.target.as_str()));
     args.push(OsString::from(command));
     args
@@ -486,14 +488,33 @@ mod tests {
             [
                 "-T",
                 "-o",
+                "Compression=no",
+                "-o",
+                "IPQoS=lowdelay",
+                "-o",
                 "BatchMode=yes",
                 "-o",
                 timeout.as_str(),
+                "-o",
+                "ServerAliveInterval=10",
                 "--",
                 "user@host",
                 "hyprctl -j monitors all"
             ],
             "exec contract"
+        );
+    }
+
+    #[test]
+    fn exec_args_use_the_same_ssh_options_as_the_session() {
+        let s = spec("user@host", DesktopMode::Headless);
+        let session = strings(ssh_args(&s));
+        let exec = strings(super::exec_args(&s, "true"));
+        let dash = |args: &[String]| args.iter().position(|a| a == "--").expect("double dash");
+        assert_eq!(
+            &session[..dash(&session)],
+            &exec[..dash(&exec)],
+            "options before -- must stay in lockstep"
         );
     }
 

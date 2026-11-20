@@ -6,7 +6,7 @@
 # Windows machine runs gwin-verify; it waits for the output to appear.
 #
 #   gwin-pattern follow [--output NAME]        # present gate: any size, follows Resizes
-#   gwin-pattern place [WxH] [--output NAME]   # stream gate: one mode, default 3840x2400
+#   gwin-pattern place [WxH] [--output NAME]   # stream gate: one mode, default 3642x2276
 #   gwin-pattern graph WxH                     # print the lavfi source (build machine checks)
 #   gwin-pattern cleanup                       # stop any pattern window it left
 #
@@ -24,7 +24,11 @@
 # `hypr_ipc::clean_mode`), so `hyprctl monitors` reports width/height = that
 # mode and scale = the client's; windows on it are mode / scale in logical px.
 # The first mode is clamped (at most 1920x1080 at 1.0) until the client's
-# first Resize. `place WxH` waits for the mode WxH;
+# first Resize. A 3840x2400 request at scale 1.0 becomes 3642x2276 at the
+# pinned server (headless_cap, then clean_mode). `place` with no size waits
+# for that mode, which is what a default `gwin-verify stream` resize becomes.
+# `place WxH` waits for the mode WxH exactly, so `place 3840x2400` does not
+# match a real server; pass 3642x2276, or another mode the pin will create.
 # `follow` takes the first gliff-* output at any mode and re-places on
 # every change. Real runs showed that ffplay opens on the
 # home monitor even when the headless output is focused, so the window is
@@ -263,7 +267,7 @@ follow() {
 }
 
 place() {
-  local size=3840x2400 want=""
+  local size=3642x2276 want=""
   while [ $# -gt 0 ]; do
     case "$1" in
       --output) want=$2; shift 2 ;;
