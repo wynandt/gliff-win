@@ -11,6 +11,25 @@ release, see [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
   as down, up, then down again, and stay held there. The slow hook call now
   drops a key the window has already sent.
   ([#56](https://github.com/wynandt/gliff-win/issues/56))
+- With the default thumb button setting, Back and Forward could do nothing
+  on the remote: they were sent as codes the server does not use for those
+  buttons. The default (`--side-buttons upstream`) now sends `BTN_SIDE` and
+  `BTN_EXTRA`, the codes the server uses, the same as `linux-mouse`.
+  ([#60](https://github.com/wynandt/gliff-win/issues/60))
+- The picture could stay frozen until the session ended when the decoder
+  failed while catching up after a quiet spell. The client now drops the
+  pictures stuck in the decoder and asks the remote for a full picture, as
+  it already did for other decode errors.
+  ([#58](https://github.com/wynandt/gliff-win/issues/58))
+- When Windows could not set up COM for GPU decode, the client went on into
+  Media Foundation anyway, and the errors that followed were hard to read.
+  GPU decode now stops there with a COM error in the log, and the client
+  decodes on the CPU.
+  ([#61](https://github.com/wynandt/gliff-win/issues/61))
+- A remote pointer shape whose click point lay outside its image was still
+  shown, so a click could land away from the drawn pointer. The client now
+  shows the system arrow for such a shape, as the upstream client does.
+  ([#62](https://github.com/wynandt/gliff-win/issues/62))
 
 ## [0.3.0]
 
