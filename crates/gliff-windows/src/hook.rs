@@ -75,6 +75,7 @@ use crate::key_ledger::Physical;
 use crate::key_ledger::Route;
 use crate::key_ledger::Seen;
 use crate::key_ledger::describe_down;
+use crate::key_ledger::describe_key;
 use crate::keymap::Chord;
 use crate::keymap::Prefix;
 use crate::keymap::Press;
@@ -372,14 +373,14 @@ pub fn mode() -> HookMode {
 /// says whether the window passed it on to the remote. Windows saw it either
 /// way. `key` names the key as the hook does (see [`KeyId::of_message`]),
 /// so its Up meets the Down the hook saw.
-pub fn note_legacy(key: KeyId, press: Press, sent: bool) {
+pub fn note_legacy(key: KeyId, press: Press, sent: bool, time_ms: u32) {
     let vk = key.vk();
     physical_saw(vk, press);
     let _gate = GATE.lock().unwrap_or_else(PoisonError::into_inner);
     LEDGER
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
-        .legacy(key, press, sent);
+        .legacy(key, press, sent, time_ms);
 }
 
 /// The virtual keys Windows has down now, for [`crate::pass_log::silent_line`],
@@ -693,6 +694,20 @@ impl Ctx {
         self.test_hooks
             .on_key(vk, press, key.flags.0 & LLKHF_INJECTED.0 != 0);
         let mut gate = GATE.lock().unwrap_or_else(PoisonError::into_inner);
+        let id = KeyId::of_hook(vk, key.flags.0 & LLKHF_EXTENDED.0 != 0);
+        if LEDGER
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .window_took(id, press, key.time)
+        {
+            drop(gate);
+            crate::logging::line(&format!(
+                "keyboard hook: a key the window already sent came late from a hook call \
+                 Windows gave up on; dropped ({})",
+                describe_key(vk, press)
+            ));
+            return false;
+        }
         let now = gate.mode();
         if now != self.last_mode {
             self.tracker.reset();

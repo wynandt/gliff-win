@@ -9,7 +9,9 @@
 //!
 //! The ledger keeps two facts per key: whether Windows saw its Down, and
 //! whether the remote machine did. It outlives a hook reinstall, so a key that
-//! went down in the gap still gets its Up. Pure.
+//! went down in the gap still gets its Up. It also keeps the last key message
+//! the window took for each key, so a hook call Windows gave up on does not
+//! send that key again when it finishes. Pure.
 //!
 //! The ledger holds key codes in memory only. [`describe_down`] is the one
 //! way it is written to the log, and it writes a count and the names of the
@@ -48,6 +50,9 @@ pub enum Route {
 #[derive(Debug)]
 pub struct KeyLedger {
     slots: [Slot; KEYS],
+    /// The last key message the window took for each key, by [`KeyId`]:
+    /// its key time and press. In memory only, never logged.
+    taken: [Option<(u32, Press)>; 2 * KEYS],
 }
 
 impl KeyLedger {
@@ -58,6 +63,7 @@ impl KeyLedger {
                 windows: false,
                 remote: false,
             }; KEYS],
+            taken: [None; 2 * KEYS],
         }
     }
 
@@ -105,12 +111,29 @@ impl KeyLedger {
     /// A [`KeyId`], not the message's own virtual key: the message names the
     /// generic Shift, Ctrl or Alt, the hook the left or right one, and both
     /// must land on the same slot or the Up the hook sees later finds no Down.
-    pub fn legacy(&mut self, key: KeyId, press: Press, sent: bool) {
+    /// `time_ms` is the message's key time.
+    pub fn legacy(&mut self, key: KeyId, press: Press, sent: bool, time_ms: u32) {
+        if let Some(taken) = self.taken.get_mut(key.index()) {
+            *taken = Some((time_ms, press));
+        }
         let vk = key.vk();
         self.windows_saw(vk, press);
         if sent || press == Press::Up {
             self.remote_saw(vk, press);
         }
+    }
+
+    /// Whether the window already took this hook event: Windows gave up on a
+    /// slow hook callback and sent the event to the window as a key message
+    /// (see [`Self::legacy`]), and the callback has only now got to it.
+    /// That is the event the window took (same time, same press) or an older
+    /// one of the key: the hook gets a key's events in order.
+    pub fn window_took(&self, key: KeyId, press: Press, time_ms: u32) -> bool {
+        let Some((taken, taken_press)) = self.taken.get(key.index()).copied().flatten() else {
+            return false;
+        };
+        let after = taken.wrapping_sub(time_ms) as i32;
+        (after == 0 && taken_press == press) || (1..LATER_MS).contains(&after)
     }
 
     /// Where this event goes. An Up of a Windows-side key ends its time on

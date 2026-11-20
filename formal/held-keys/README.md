@@ -150,7 +150,9 @@ Hover follow and SuperL-only mode, left and right modifiers (one `Mod`),
 typing and IME, AltGr, the switch chord and tab switches (the route
 ordering on a switch), more than one modifier per chord, auto-repeat, `KeyPolicy` filtering, pointer buttons, the
 watchdog after a hard kill, `shutdown`, and timing (a property that needs a
-deadline). A pass says nothing about keys beyond the bounds above.
+deadline). That includes a hook callback Windows gave up on that finishes
+after the window took its key (`KeyLedger::window_took`; the key_ledger tests
+replay it). A pass says nothing about keys beyond the bounds above.
 
 ## A real bug or the model?
 

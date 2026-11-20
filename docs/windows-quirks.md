@@ -54,6 +54,14 @@ otherwise.
   in the stats file). `gwin-verify keys` has a check that stalls the hook for
   2.5 s on purpose; it reports "inconclusive", not a pass, when Windows did not
   drop the hook that time.
+- **A callback Windows gave up on still finishes.** When the hook's time is up,
+  Windows sends the key on to the window, but the callback goes on and hands
+  the key over later as if nothing happened. By then the window has sent that
+  key to the remote machine, and maybe its Up too, so a Down sent again would
+  be held there for good. The ledger notes the time of every key message the
+  window took, and the hook drops an event the window already took: that same
+  event, or an older one of the same key. An event from the same millisecond
+  that is the other press (the Up after the window's Down) is not dropped.
 - **Keys that go down while no hook is looking.** For the moment between the
   removal and the new hook, Windows sees every key itself. A key that went down
   then has its Down counted by Windows, and if the new hook swallowed its Up,
