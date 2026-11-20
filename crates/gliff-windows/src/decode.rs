@@ -111,9 +111,18 @@ impl CpuDecoder {
 
     /// Idle drain. Each OpenH264 flush leaks a picture slot until the next
     /// IDR and the fourth in a row breaks decoding, so callers flush only
-    /// when [`CpuDecoder::has_pending`] is true.
+    /// when [`CpuDecoder::has_pending`] is true. A failed flush drops every
+    /// held picture so the driver does not keep flushing a dead decoder.
     #[must_use = "a drained picture must be presented or dropped on purpose"]
     pub fn flush(&mut self) -> Result<Option<YuvFrame>, DecodeError> {
+        let result = self.flush_inner();
+        if result.is_err() {
+            self.held = 0;
+        }
+        result
+    }
+
+    fn flush_inner(&mut self) -> Result<Option<YuvFrame>, DecodeError> {
         let pool = self.pool.clone();
         let frame = match &mut self.aux {
             None => match self.inner.flush_remaining()?.first() {

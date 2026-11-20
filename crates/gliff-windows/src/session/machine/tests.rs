@@ -588,13 +588,24 @@ fn drained_pictures_are_presented_but_never_acked() {
         Vec::new(),
         "nothing held: nothing to do"
     );
+    let out = core.drained(Err(sw_error()));
     assert_eq!(
-        core.drained(Err(sw_error())),
-        Vec::new(),
-        "drain error is only counted"
+        out,
+        vec![send(ClientMsg::RequestKeyframe)],
+        "a failed drain asks for a keyframe"
     );
     assert_eq!(core.stats().drain_errors, 1, "drain error counted");
+    assert_eq!(core.stats().keyframe_requests, 1, "one keyframe asked");
     assert_eq!(core.stats().acks, 1, "only the decode acked");
+    let _ = core.on_server(frame(2), au(), Bytes::new());
+    let next = core.decoded(done(2, Ok(Some(picture(1920)))));
+    assert!(
+        matches!(
+            next.as_slice(),
+            [_, Action::Present(Picture { frame_id: 2, .. })]
+        ),
+        "after a drain error the FIFO restarts: {next:?}"
+    );
 }
 
 #[test]

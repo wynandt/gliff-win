@@ -569,7 +569,9 @@ impl Core {
     }
 
     /// The result of an idle drain (`CpuDecoder::flush`). Never acks: the
-    /// unit was acked when it was fed.
+    /// unit was acked when it was fed. A failed drain is treated like a
+    /// mid-stream decode error: the queue is dropped and a keyframe is
+    /// asked for, so the driver does not keep flushing a dead decoder.
     pub fn drained(&mut self, result: Result<Option<YuvFrame>, DecodeError>) -> Vec<Action> {
         match (self.phase, result) {
             (Phase::Ended, _) | (_, Ok(None)) => Vec::new(),
@@ -579,7 +581,8 @@ impl Core {
             }
             (_, Err(_)) => {
                 self.stats.drain_errors += 1;
-                Vec::new()
+                self.in_decoder.clear();
+                vec![self.request_keyframe()]
             }
         }
     }
