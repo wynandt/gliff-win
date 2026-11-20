@@ -50,8 +50,8 @@ directory.
 
 **Mouse buttons.** Linux numbers: 272 left, 273 right, 274 middle, 275
 `BTN_SIDE`, 276 `BTN_EXTRA`, 277 `BTN_FORWARD`, 278 `BTN_BACK`. The client's
-default `--side-buttons upstream` sends Back as 278 and Forward as 277;
-`linux-mouse` sends 275 and 276.
+default `--side-buttons upstream` sends Back as 275 and Forward as 276,
+matching the pinned server; `linux-mouse` sends the same codes.
 
 **Wheel.** Hyprland skips a scroll bind whose event comes less than
 `binds:scroll_event_delay` ms (300 by default) after the previous scroll event,

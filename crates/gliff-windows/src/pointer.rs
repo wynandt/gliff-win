@@ -27,10 +27,11 @@ const WM_XBUTTONUP: u32 = 0x020c;
 /// Which evdev codes the two thumb buttons send.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
 pub enum SideButtons {
-    /// Upstream's: back is `BTN_BACK` 0x116, forward is `BTN_FORWARD` 0x115.
-    Upstream,
-    /// What Linux mice send for the thumb buttons: `BTN_SIDE` 0x113 and
+    /// The pinned server's codes: back is `BTN_SIDE` 0x113, forward is
     /// `BTN_EXTRA` 0x114.
+    Upstream,
+    /// Same codes as [`SideButtons::Upstream`]. Linux mice send `BTN_SIDE`
+    /// and `BTN_EXTRA` for the thumb buttons.
     LinuxMouse,
 }
 
@@ -70,8 +71,7 @@ pub fn button(msg: u32, xbutton: u16, codes: SideButtons) -> Option<(u32, Press)
         WM_MBUTTONUP => (Some(BTN_MIDDLE), Press::Up),
         WM_XBUTTONDOWN | WM_XBUTTONUP => {
             let code = match codes {
-                SideButtons::Upstream => side(0x116, 0x115),
-                SideButtons::LinuxMouse => side(0x113, 0x114),
+                SideButtons::Upstream | SideButtons::LinuxMouse => side(0x113, 0x114),
             };
             let press = if msg == WM_XBUTTONDOWN {
                 Press::Down

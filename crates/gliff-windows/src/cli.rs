@@ -99,7 +99,7 @@ pub struct Args {
     /// win) and one key, for example `win+shift+s,win+v`.
     #[arg(long, value_name = "LIST")]
     pub local_chords: Option<LocalChordList>,
-    /// Which codes the two thumb buttons send (default `upstream`).
+    /// Which codes the two thumb buttons send (default `upstream`: 0x113 and 0x114, the pinned server's codes).
     #[arg(long, value_enum)]
     pub side_buttons: Option<SideButtons>,
     /// Do not share the clipboard with the remote machine.

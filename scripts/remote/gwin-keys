@@ -106,8 +106,8 @@ bind_list() {
   printf 'press\tALT + F10\tprobe:alt\n'
   printf 'press\tSUPER + F10\tprobe:super\n'
   # Mouse: 272-274 left, right, middle; 275 and 276 are BTN_SIDE and BTN_EXTRA
-  # (--side-buttons linux-mouse); 277 and 278 are BTN_FORWARD and BTN_BACK
-  # (the default, as upstream).
+  # (the client's default and linux-mouse); 277 and 278 are BTN_FORWARD and
+  # BTN_BACK, still bound so a stray code is visible.
   local b
   for b in 272 273 274 275 276 277 278; do
     printf 'press\tmouse:%s\tmouse:%s\n' "$b" "$b"
