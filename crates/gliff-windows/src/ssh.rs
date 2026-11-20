@@ -14,6 +14,7 @@ use tokio::process::ChildStdout;
 use tokio::process::Command;
 
 use crate::cli::DesktopMode;
+use crate::connect::CONNECT_TIMEOUT_SECS;
 use crate::connect::Phase;
 use crate::connect::SshFailure;
 use crate::connect::classify;
@@ -91,12 +92,16 @@ pub fn validate(spec: &SshSpec) -> Result<(), SpecError> {
     Ok(())
 }
 
+fn connect_timeout_opt() -> String {
+    format!("ConnectTimeout={CONNECT_TIMEOUT_SECS}")
+}
+
 /// `-T -o Compression=no -o IPQoS=lowdelay -o BatchMode=yes
-/// -o ConnectTimeout=10 -o ServerAliveInterval=10 -- <target> <server_path>
-/// --stdio (--headless | --output X)`: upstream `ssh_command`'s options plus
-/// BatchMode (never prompt; there is no console to prompt on), a connect
-/// timeout (so "did not answer in 10 seconds" is true) and a keepalive. The
-/// target follows `--` so it cannot be read as an option.
+/// -o ConnectTimeout=<CONNECT_TIMEOUT_SECS> -o ServerAliveInterval=10 --
+/// <target> <server_path> --stdio (--headless | --output X)`: upstream
+/// `ssh_command`'s options plus BatchMode (never prompt; there is no
+/// console to prompt on), a connect timeout and a keepalive. The target
+/// follows `--` so it cannot be read as an option.
 pub fn ssh_args(spec: &SshSpec) -> Vec<OsString> {
     let mut remote = vec![spec.server_path.as_str(), "--stdio"];
     match &spec.mode {
@@ -107,7 +112,8 @@ pub fn ssh_args(spec: &SshSpec) -> Vec<OsString> {
 }
 
 /// The ssh options the session, the version check, and a short exec share.
-fn session_ssh_options() -> [&'static str; 11] {
+fn session_ssh_options() -> Vec<OsString> {
+    let timeout = connect_timeout_opt();
     [
         "-T",
         "-o",
@@ -117,20 +123,20 @@ fn session_ssh_options() -> [&'static str; 11] {
         "-o",
         "BatchMode=yes",
         "-o",
-        "ConnectTimeout=10",
+        timeout.as_str(),
         "-o",
         "ServerAliveInterval=10",
     ]
+    .into_iter()
+    .map(OsString::from)
+    .collect()
 }
 
 /// The session's own ssh options, `--`, the target, then the remote command
 /// words: the one builder behind the session and the version check, so a
 /// check never runs with other options than the session.
 pub(crate) fn invocation(spec: &SshSpec, remote: &[&str]) -> Vec<OsString> {
-    let mut args: Vec<OsString> = session_ssh_options()
-        .into_iter()
-        .map(OsString::from)
-        .collect();
+    let mut args = session_ssh_options();
     args.push(OsString::from("--"));
     args.push(OsString::from(spec.target.as_str()));
     args.extend(remote.iter().map(OsString::from));
@@ -171,10 +177,7 @@ pub fn spawn(spec: &SshSpec) -> std::io::Result<SshLink> {
 /// `-- <target> <command>`. The remote shell parses `command`, which is
 /// why [`exec`] only takes a `&'static str`.
 pub fn exec_args(spec: &SshSpec, command: &'static str) -> Vec<OsString> {
-    let mut args: Vec<OsString> = session_ssh_options()
-        .into_iter()
-        .map(OsString::from)
-        .collect();
+    let mut args = session_ssh_options();
     args.push(OsString::from("--"));
     args.push(OsString::from(spec.target.as_str()));
     args.push(OsString::from(command));
@@ -322,6 +325,7 @@ mod tests {
 
     #[test]
     fn headless_args_match_the_contract() {
+        let timeout = super::connect_timeout_opt();
         let args = strings(ssh_args(&spec("user@host", DesktopMode::Headless)));
         assert_eq!(
             args,
@@ -334,7 +338,7 @@ mod tests {
                 "-o",
                 "BatchMode=yes",
                 "-o",
-                "ConnectTimeout=10",
+                timeout.as_str(),
                 "-o",
                 "ServerAliveInterval=10",
                 "--",
@@ -474,6 +478,7 @@ mod tests {
 
     #[test]
     fn exec_args_put_the_command_after_the_target() {
+        let timeout = super::connect_timeout_opt();
         let args = strings(super::exec_args(
             &spec("user@host", DesktopMode::Headless),
             "hyprctl -j monitors all",
@@ -489,7 +494,7 @@ mod tests {
                 "-o",
                 "BatchMode=yes",
                 "-o",
-                "ConnectTimeout=10",
+                timeout.as_str(),
                 "-o",
                 "ServerAliveInterval=10",
                 "--",

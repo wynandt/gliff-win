@@ -1643,7 +1643,7 @@ impl App {
             }
             WM_ERASEBKGND => Some(LRESULT(1)),
             WM_KEYDOWN if wparam.0 == usize::from(VK_F11.0) => {
-                if lparam.0 & (1 << 30) == 0 {
+                if lparam.0 & LPARAM_KEY_REPEAT == 0 {
                     self.toggle_fullscreen();
                 }
                 Some(LRESULT(0))
@@ -1771,6 +1771,9 @@ pub fn forward_menu_loop(child: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) 
         }
     }
 }
+
+/// lParam bit 30 is set when this is an auto-repeat (`KF_REPEAT`).
+const LPARAM_KEY_REPEAT: isize = 1 << 30;
 
 /// The window procedure.
 pub extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {

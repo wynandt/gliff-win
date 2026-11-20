@@ -15,6 +15,7 @@ pub mod runner;
 pub mod version;
 
 pub use diag::Button;
+pub use diag::CONNECT_TIMEOUT_SECS;
 pub use diag::GUIDE_FILE;
 pub use diag::Guide;
 pub use diag::Message;

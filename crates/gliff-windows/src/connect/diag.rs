@@ -12,6 +12,10 @@ use super::version::MIN_SERVER;
 use super::version::ServerVersion;
 use crate::history::HostTarget;
 
+/// Seconds the client passes as ssh `ConnectTimeout`. The unreachable-host
+/// sentence uses the same figure.
+pub const CONNECT_TIMEOUT_SECS: u32 = 10;
+
 /// Which ssh run failed. A version check has no host or key part to fail,
 /// and a session that never printed anything can only be told by its exit.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -326,7 +330,7 @@ pub fn message(failure: &SshFailure, target: &HostTarget) -> Message {
             None,
         ),
         SshFailure::Unreachable => make(
-            format!("{host} did not answer in 10 seconds."),
+            format!("{host} did not answer in {CONNECT_TIMEOUT_SECS} seconds."),
             "It may be off, asleep, or blocked by a firewall or VPN.",
             Button::TryAgain,
             None,

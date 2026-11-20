@@ -365,6 +365,8 @@ gwin-verify.exe pointer --host <target> --client .\gliff-windows.exe --remote-ke
 `--hook-stall-test-ms`), which exist only in a client built with
 `--features test-hooks` ([development.md](development.md#build)). A released
 client rejects them, so build the client for `keys` with that feature.
+Without `--only`, the default run is every group except `lock` and `manual`.
+`Manual` runs only with `--manual` or `--only manual`.
 
 Windows only, with the display at 200% (`pointer --expect-scale-milli 1500` at
 150%), unlocked and untouched. Both drive the real client with `SendInput` and
