@@ -181,7 +181,7 @@ pub struct InputInfo {
     #[serde(default)]
     pub scroll_stops_sent: u64,
     /// Button presses sent to the server by Linux button code (272 left,
-    /// 273 right, 274 middle, 275 and 276 or 277 and 278 for the thumbs).
+    /// 273 right, 274 middle, 275 and 276 for the thumbs).
     #[serde(default)]
     pub button_presses_sent: BTreeMap<u32, u64>,
 }

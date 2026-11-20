@@ -943,9 +943,9 @@ pub fn wheel() -> Vec<Case> {
 }
 
 /// Right, middle, back and forward with the default `--side-buttons`
-/// (upstream: back is 278 `BTN_BACK`, forward 277 `BTN_FORWARD`), then the
-/// two thumb buttons again with `--side-buttons linux-mouse` (275 `BTN_SIDE`,
-/// 276 `BTN_EXTRA`).
+/// (upstream: back is 275 `BTN_SIDE`, forward 276 `BTN_EXTRA`), then the
+/// two thumb buttons again with `--side-buttons linux-mouse` (the same
+/// codes).
 pub fn buttons() -> Vec<Case> {
     let case = |side: Side, bind: &str, extra: &[&str]| {
         let name = if extra.is_empty() {
@@ -966,8 +966,8 @@ pub fn buttons() -> Vec<Case> {
     vec![
         case(Side::Right, "mouse:273", &[]),
         case(Side::Middle, "mouse:274", &[]),
-        case(Side::Back, "mouse:278", &[]),
-        case(Side::Forward, "mouse:277", &[]),
+        case(Side::Back, "mouse:275", &[]),
+        case(Side::Forward, "mouse:276", &[]),
         case(Side::Back, "mouse:275", linux),
         case(Side::Forward, "mouse:276", linux),
     ]
