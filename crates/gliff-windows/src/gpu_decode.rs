@@ -304,7 +304,10 @@ fn pair(
 /// process, once.
 fn com_and_mf() -> Result<(), GpuError> {
     // SAFETY: no reserved pointer.
-    let _ = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) };
+    let hr = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) };
+    if !crate::com_init::com_init_usable(hr.0) {
+        return Err(GpuError::new("COM", format!("{:#010x}", hr.0 as u32)));
+    }
     static STARTED: OnceLock<Result<(), GpuError>> = OnceLock::new();
     STARTED
         .get_or_init(|| {

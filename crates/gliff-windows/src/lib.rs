@@ -21,6 +21,7 @@ pub mod clip_link;
 pub mod clip_log;
 #[cfg(windows)]
 pub mod clip_win;
+pub mod com_init;
 pub mod config;
 pub mod connect;
 #[cfg(windows)]
