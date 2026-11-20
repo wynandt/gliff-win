@@ -422,7 +422,7 @@ impl Grab {
             injected: false,
         };
         let sent = self.config.policy.forwards(&raw) && self.cmds.send(UiCmd::Key(raw));
-        crate::hook::note_legacy(key, press, sent);
+        crate::hook::note_legacy(key, press, sent, time_ms);
         if self.counters.legacy_keys == 1 || self.counters.legacy_keys.is_multiple_of(100) {
             crate::logging::line(&silent_line(
                 self.counters.legacy_keys,

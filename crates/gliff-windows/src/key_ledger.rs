@@ -105,12 +105,22 @@ impl KeyLedger {
     /// A [`KeyId`], not the message's own virtual key: the message names the
     /// generic Shift, Ctrl or Alt, the hook the left or right one, and both
     /// must land on the same slot or the Up the hook sees later finds no Down.
-    pub fn legacy(&mut self, key: KeyId, press: Press, sent: bool) {
+    /// `time_ms` is the message's key time.
+    pub fn legacy(&mut self, key: KeyId, press: Press, sent: bool, time_ms: u32) {
+        let _ = time_ms;
         let vk = key.vk();
         self.windows_saw(vk, press);
         if sent || press == Press::Up {
             self.remote_saw(vk, press);
         }
+    }
+
+    /// Whether the window already took this hook event: Windows gave up on a
+    /// slow hook callback and sent the event to the window as a key message
+    /// (see [`Self::legacy`]), and the callback has only now got to it.
+    pub fn window_took(&self, key: KeyId, press: Press, time_ms: u32) -> bool {
+        let _ = (key, press, time_ms);
+        false
     }
 
     /// Where this event goes. An Up of a Windows-side key ends its time on

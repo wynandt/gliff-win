@@ -372,14 +372,14 @@ pub fn mode() -> HookMode {
 /// says whether the window passed it on to the remote. Windows saw it either
 /// way. `key` names the key as the hook does (see [`KeyId::of_message`]),
 /// so its Up meets the Down the hook saw.
-pub fn note_legacy(key: KeyId, press: Press, sent: bool) {
+pub fn note_legacy(key: KeyId, press: Press, sent: bool, time_ms: u32) {
     let vk = key.vk();
     physical_saw(vk, press);
     let _gate = GATE.lock().unwrap_or_else(PoisonError::into_inner);
     LEDGER
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
-        .legacy(key, press, sent);
+        .legacy(key, press, sent, time_ms);
 }
 
 /// The virtual keys Windows has down now, for [`crate::pass_log::silent_line`],

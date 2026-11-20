@@ -11,6 +11,7 @@ const LCTRL: u16 = 0xa2;
 const LALT: u16 = 0xa4;
 const TAB: u16 = 0x09;
 const F: u16 = 0x46;
+const F24: u16 = 0x87;
 
 const MODIFIER_VKS: [u16; 11] = [
     0x10, 0x11, 0x12, 0x5b, 0x5c, 0xa0, 0xa1, 0xa2, 0xa3, 0xa4, 0xa5,
@@ -177,12 +178,12 @@ fn a_passed_up_ends_the_windows_side_of_the_key() {
 fn a_key_sent_from_the_window_then_reinstall_sends_its_up_to_both() {
     let mut keys = KeyLedger::new();
     keys.seed([]);
-    keys.legacy(KeyId::of_hook(LWIN, false), Press::Down, true);
+    keys.legacy(KeyId::of_hook(LWIN, false), Press::Down, true, 100);
     keys.reinstall([LWIN]);
     assert_eq!(keys.route(LWIN, Press::Up), Route::Windows { remote: true });
     assert_eq!(keys.take_remote_held(), Vec::<u16>::new(), "Up ended it");
 
-    keys.legacy(KeyId::of_hook(LCTRL, false), Press::Down, false);
+    keys.legacy(KeyId::of_hook(LCTRL, false), Press::Down, false, 200);
     assert_eq!(
         keys.route(LCTRL, Press::Up),
         Route::Windows { remote: false }
@@ -195,7 +196,7 @@ const LCTRL_MESSAGE: isize = 0x1d << 16;
 fn a_generic_ctrl_down_from_the_window_meets_the_left_ctrl_up_from_the_hook() {
     let mut keys = KeyLedger::new();
     keys.seed([]);
-    keys.legacy(KeyId::of_message(0x11, LCTRL_MESSAGE), Press::Down, true);
+    keys.legacy(KeyId::of_message(0x11, LCTRL_MESSAGE), Press::Down, true, 100);
     assert_eq!(keys.windows_held(), vec![LCTRL]);
     assert_eq!(
         keys.route(LCTRL, Press::Up),
@@ -385,4 +386,90 @@ fn a_key_message_is_overtaken_only_by_a_later_event_of_the_same_key() {
         KeyId::of_message(0x10, right_shift),
         130u32.wrapping_sub(60_000)
     ));
+}
+
+/// A hook event while grabbing, on the ledger in the order `Ctx::handle` and
+/// `Ctx::grab` use it: an event the window already took is dropped, any
+/// other goes where the ledger routes it. True when the remote gets it.
+fn hook_event(keys: &mut KeyLedger, vk: u16, press: Press, time_ms: u32) -> bool {
+    if keys.window_took(KeyId::of_hook(vk, false), press, time_ms) {
+        return false;
+    }
+    match keys.route(vk, press) {
+        Route::Remote => {
+            keys.remote_saw(vk, press);
+            true
+        }
+        Route::Windows { remote } => remote,
+    }
+}
+
+/// The hook callback for the Down at 1000 stalls. Windows sends the Down to
+/// the window, which sends it on, and the hook is installed again. The Up
+/// reaches the window too, and the hook is installed once more. Then the
+/// stalled callback ends and goes on with its Down.
+#[test]
+fn a_hook_callback_windows_gave_up_on_does_not_send_its_down_after_the_up() {
+    let f24 = KeyId::of_hook(F24, false);
+    let mut keys = KeyLedger::new();
+    keys.seed([]);
+    let mut remote = Vec::new();
+    keys.legacy(f24, Press::Down, true, 1000);
+    remote.push(Press::Down);
+    keys.reinstall([F24]);
+    keys.legacy(f24, Press::Up, true, 1060);
+    remote.push(Press::Up);
+    keys.reinstall([]);
+    if hook_event(&mut keys, F24, Press::Down, 1000) {
+        remote.push(Press::Down);
+    }
+    assert_eq!(remote, [Press::Down, Press::Up], "one Down, then its Up");
+    assert_eq!(keys.take_remote_held(), Vec::<u16>::new(), "nothing held");
+}
+
+/// As above, but the Up reaches the new hook, which sends it to Windows and
+/// the remote.
+#[test]
+fn a_late_hook_down_after_the_new_hook_sent_the_up_is_dropped() {
+    let f24 = KeyId::of_hook(F24, false);
+    let mut keys = KeyLedger::new();
+    keys.seed([]);
+    let mut remote = Vec::new();
+    keys.legacy(f24, Press::Down, true, 1000);
+    remote.push(Press::Down);
+    keys.reinstall([F24]);
+    for (press, time) in [(Press::Up, 1060), (Press::Down, 1000)] {
+        if hook_event(&mut keys, F24, press, time) {
+            remote.push(press);
+        }
+    }
+    assert_eq!(remote, [Press::Down, Press::Up], "one Down, then its Up");
+    assert_eq!(keys.take_remote_held(), Vec::<u16>::new(), "nothing held");
+}
+
+#[test]
+fn only_the_event_the_window_took_and_older_ones_are_dropped() {
+    let f24 = KeyId::of_hook(F24, false);
+    let mut keys = KeyLedger::new();
+    keys.seed([]);
+    keys.legacy(f24, Press::Down, true, 1000);
+    keys.reinstall([F24]);
+    assert!(keys.window_took(f24, Press::Down, 1000), "the same event");
+    assert!(keys.window_took(f24, Press::Down, 990), "an older one");
+    assert!(
+        !keys.window_took(f24, Press::Up, 1000),
+        "the Up in the same millisecond is a new event"
+    );
+    assert!(!keys.window_took(f24, Press::Down, 1100), "a later press");
+    assert!(
+        !keys.window_took(KeyId::of_hook(F, false), Press::Down, 1000),
+        "another key"
+    );
+    assert!(
+        !keys.window_took(f24, Press::Down, 1000u32.wrapping_add(60_000)),
+        "an event a minute later"
+    );
+    assert!(hook_event(&mut keys, F24, Press::Up, 1000));
+    assert!(hook_event(&mut keys, F24, Press::Down, 1100));
+    assert_eq!(keys.take_remote_held(), vec![F24], "the new press is held");
 }
