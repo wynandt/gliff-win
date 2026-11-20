@@ -371,7 +371,7 @@ pub async fn run(opts: Options) -> Line {
     run.tx = None;
     stop.store(true, Ordering::Relaxed);
     if let Some(handle) = consumer {
-        let _ = handle.join();
+        note_consumer_join(&mut run.failures, handle.join());
     }
     let written = match writer.await {
         Ok(Ok(())) => acks_written.load(Ordering::Relaxed),
@@ -972,5 +972,39 @@ impl Run {
                 .with("stderr_log", stderr_log.display().to_string());
         }
         line
+    }
+}
+
+fn note_consumer_join(failures: &mut Vec<Failure>, result: std::thread::Result<()>) {
+    if result.is_err() {
+        failures.push(Failure::Link("consumer panicked".to_owned()));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Failure;
+    use super::note_consumer_join;
+
+    #[test]
+    fn a_consumer_panic_is_recorded_as_a_link_failure() {
+        let mut failures = Vec::new();
+        let handle = std::thread::spawn(|| panic!("consumer test"));
+        note_consumer_join(&mut failures, handle.join());
+        assert!(
+            matches!(&failures[..], [Failure::Link(text)] if text == "consumer panicked"),
+            "a panicked consumer must fail the line: {failures:?}"
+        );
+    }
+
+    #[test]
+    fn a_consumer_that_finishes_adds_no_failure() {
+        let mut failures = Vec::new();
+        let handle = std::thread::spawn(|| {});
+        note_consumer_join(&mut failures, handle.join());
+        assert!(
+            failures.is_empty(),
+            "a quiet join is not a failure: {failures:?}"
+        );
     }
 }

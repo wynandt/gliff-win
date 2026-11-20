@@ -59,7 +59,7 @@ fn write_ssh(dir: &Path, plan: &str) -> PathBuf {
             r#"#!/usr/bin/env bash
 dir="{dir}"
 n=$(( $(cat "$dir/count" 2>/dev/null || echo 0) + 1 ))
-echo "$n" > "$dir/count"
+echo "$n" > "$dir/count.tmp" && mv "$dir/count.tmp" "$dir/count"
 read -ra plan < "$dir/plan"
 i=$(( n - 1 ))
 (( i >= ${{#plan[@]}} )) && i=$(( ${{#plan[@]}} - 1 ))
@@ -205,18 +205,10 @@ impl Rig {
 
     fn attempts(&self, target: &str) -> usize {
         let dir = self.base.join(target.replace('@', "-"));
-        for _ in 0..50 {
-            match std::fs::read_to_string(dir.join("count")) {
-                Err(_) => return 0,
-                Ok(text) => {
-                    if let Ok(count) = text.trim().parse() {
-                        return count;
-                    }
-                }
-            }
-            std::thread::sleep(Duration::from_millis(2));
+        match std::fs::read_to_string(dir.join("count")) {
+            Err(_) => 0,
+            Ok(text) => text.trim().parse().expect("the attempt count is a number"),
         }
-        panic!("the attempt count never became readable");
     }
 
     fn print_attempts(&self) {
