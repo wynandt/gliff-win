@@ -196,7 +196,12 @@ const LCTRL_MESSAGE: isize = 0x1d << 16;
 fn a_generic_ctrl_down_from_the_window_meets_the_left_ctrl_up_from_the_hook() {
     let mut keys = KeyLedger::new();
     keys.seed([]);
-    keys.legacy(KeyId::of_message(0x11, LCTRL_MESSAGE), Press::Down, true, 100);
+    keys.legacy(
+        KeyId::of_message(0x11, LCTRL_MESSAGE),
+        Press::Down,
+        true,
+        100,
+    );
     assert_eq!(keys.windows_held(), vec![LCTRL]);
     assert_eq!(
         keys.route(LCTRL, Press::Up),
