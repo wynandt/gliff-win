@@ -433,6 +433,47 @@ fn a_click_on_a_stopped_tab_starts_nothing_until_its_old_session_is_joined() {
 }
 
 #[test]
+fn a_stopped_session_that_is_never_joined_stops_blocking_its_tab_after_the_close_wait() {
+    let (mut fx, _) = fixture(&["a@x"], &TabSet::default());
+    let tab = fx
+        .tabs
+        .iter()
+        .find(|tab| tab.target().same(&host("a@x")))
+        .expect("the tab")
+        .id();
+    let old = session_of(&fx.tabs, "a@x");
+    fx.world.event(old.get(), connected());
+    fx.set.poll(&mut fx.tabs);
+    let stop = fx.tabs.stop(tab);
+    fx.set.run(&mut fx.tabs, stop);
+    let click = fx.tabs.click(tab);
+    fx.set.run(&mut fx.tabs, click);
+    assert_eq!(*fx.world.started.borrow(), ["a@x"]);
+    assert_eq!(fx.tabs.tab(tab).and_then(|tab| tab.session()), None);
+
+    let under = super::CLOSE_WAIT.as_millis() - 1;
+    fx.advance(u64::try_from(under).expect("close wait fits"));
+    fx.set.poll(&mut fx.tabs);
+    let early = fx.tabs.click(tab);
+    fx.set.run(&mut fx.tabs, early);
+    assert_eq!(
+        *fx.world.started.borrow(),
+        ["a@x"],
+        "still inside the close wait"
+    );
+
+    fx.advance(1);
+    let applied = fx.set.poll(&mut fx.tabs);
+    assert!(applied.ended.is_empty(), "the old thread has not finished");
+    let again = fx.tabs.click(tab);
+    fx.set.run(&mut fx.tabs, again);
+    assert_eq!(*fx.world.started.borrow(), ["a@x", "a@x"]);
+    assert_ne!(session_of(&fx.tabs, "a@x"), old);
+    assert_eq!(fx.set.sessions().len(), 1);
+    assert_eq!(fx.set.running(), 2, "the old thread is still unjoined");
+}
+
+#[test]
 fn stopping_twice_is_harmless_and_sends_one_bye() {
     let (mut fx, _) = fixture(&["a@x"], &TabSet::default());
     let a = session_of(&fx.tabs, "a@x");

@@ -149,10 +149,60 @@ fn a_click_while_the_stopped_session_is_closing_only_shows_the_tab() {
 }
 
 #[test]
+fn closed_with_an_unknown_or_stale_id_changes_nothing() {
+    let mut tabs = three();
+    let c = tab_of(&tabs, "c@x");
+    let old = session_of(&tabs, "c@x");
+    let a = session_of(&tabs, "a@x");
+    tabs.stop(c);
+    tabs.closed(SessionId::from_raw(4000));
+    tabs.closed(a);
+    let effects = tabs.click(c);
+    assert!(
+        !effects.iter().any(|e| matches!(e, Effect::Start { .. })),
+        "{effects:?}"
+    );
+    assert_eq!(tabs.shown(), Some(c));
+    assert!(tabs.tab(c).is_some_and(|tab| tab.session().is_none()));
+    assert_eq!(session_of(&tabs, "a@x"), a);
+    assert_eq!(status_of(&tabs, "c@x"), Status::Stopped);
+    assert_ne!(old, a);
+
+    let mut tabs = three();
+    let old = session_of(&tabs, "c@x");
+    tabs.ended(old, End::Error("lost".into()), at(0));
+    let new = retry_started(&tabs.due(at(1_500))).expect("a retry");
+    tabs.closed(old);
+    tabs.closed(SessionId::from_raw(4000));
+    assert_eq!(session_of(&tabs, "c@x"), new);
+    assert_eq!(status_of(&tabs, "c@x"), reconnecting(1, "lost", None));
+}
+
+#[test]
+fn reconnect_on_a_closing_tab_starts_nothing_until_the_session_is_closed() {
+    let mut tabs = three();
+    let c = tab_of(&tabs, "c@x");
+    let old = session_of(&tabs, "c@x");
+    let shown = tabs.shown();
+    tabs.stop(c);
+    assert_eq!(tabs.reconnect(c), Vec::new());
+    assert_eq!(tabs.shown(), shown);
+    assert!(tabs.tab(c).is_some_and(|tab| tab.session().is_none()));
+    tabs.closed(old);
+    let effects = tabs.reconnect(c);
+    let new = started(&effects);
+    assert_ne!(new, old);
+    assert_eq!(status_of(&tabs, "c@x"), Status::Connecting);
+    assert_eq!(tabs.shown(), Some(c));
+}
+
+#[test]
 fn a_click_on_a_stopped_tab_starts_it_before_the_route_moves() {
     let mut tabs = three();
     let c = tab_of(&tabs, "c@x");
+    let old = session_of(&tabs, "c@x");
     tabs.stop(c);
+    tabs.closed(old);
     let a = session_of(&tabs, "a@x");
     let effects = tabs.click(c);
     let c_session = started(&effects);
@@ -181,6 +231,7 @@ fn a_session_id_is_never_reused() {
     let first = started(&tabs.open(&host("a@x")));
     let tab = tab_of(&tabs, "a@x");
     tabs.stop(tab);
+    tabs.closed(first);
     let second = started(&tabs.click(tab));
     assert_ne!(first, second);
 }
@@ -191,6 +242,7 @@ fn a_late_event_of_a_stopped_session_does_nothing() {
     let old = started(&tabs.open(&host("a@x")));
     let tab = tab_of(&tabs, "a@x");
     tabs.stop(tab);
+    tabs.closed(old);
     let new = started(&tabs.click(tab));
     assert_eq!(
         tabs.ended(old, End::Error("late".into()), at(0)),
@@ -342,6 +394,7 @@ fn a_restored_session_is_not_recorded_and_a_second_start_by_click_is() {
     );
     let tab = tab_of(&tabs, "a@x");
     tabs.stop(tab);
+    tabs.closed(session);
     let again = started(&tabs.click(tab));
     assert!(
         tabs.connected(again, at(0))
@@ -637,7 +690,10 @@ fn chords_move_next_previous_and_by_position() {
 #[test]
 fn a_chord_that_lands_on_a_stopped_tab_starts_it_like_a_click() {
     let mut tabs = three();
-    tabs.stop(tab_of(&tabs, "b@x"));
+    let b = tab_of(&tabs, "b@x");
+    let old = session_of(&tabs, "b@x");
+    tabs.stop(b);
+    tabs.closed(old);
     let effects = tabs.switch(SwitchTo::Next);
     assert!(effects.iter().any(|e| matches!(e, Effect::Start { .. })));
     assert_eq!(tabs.shown(), Some(tab_of(&tabs, "b@x")));
