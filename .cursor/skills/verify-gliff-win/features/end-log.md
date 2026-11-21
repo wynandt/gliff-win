@@ -49,7 +49,7 @@ Host companions (not native proof):
 
 ## Runs
 
-- 2026-11-21, Windows 11, loopback, build of PR #84 at `d27ac2f`:
+- 2026-11-21, Windows 11, loopback, build of the final PR #84 head:
   ENDLOG-1, ENDLOG-2, ENDLOG-3 (hard link and junction) and ENDLOG-4 passed.
   No planted secret was in any log. Symbolic link not run: no admin rights.
 
