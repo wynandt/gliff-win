@@ -30,6 +30,7 @@
 use std::collections::BTreeMap;
 use std::io;
 use std::sync::Arc;
+use std::time::Duration;
 use std::time::Instant;
 
 use tokio::sync::mpsc::UnboundedSender;
@@ -42,6 +43,7 @@ use crate::session::EndReason;
 use crate::session::SessionStats;
 use crate::session::UiCmd;
 use crate::session::UiEvent;
+use crate::session::driver::EXIT_WAIT;
 use crate::session::driver::SessionEnd;
 use crate::session::driver::SessionHandle;
 use crate::tabs::Cause;
@@ -219,13 +221,20 @@ struct Entry<L> {
     ended: bool,
 }
 
+/// How long a tab waits for its stopped session to be joined before it may
+/// start again. The driver kills ssh after [`EXIT_WAIT`], so by then the old
+/// link is gone even if its thread is still held up.
+pub(crate) const CLOSE_WAIT: Duration =
+    Duration::new(EXIT_WAIT.as_secs() + 1, EXIT_WAIT.subsec_nanos());
+
 /// The sessions of a window.
 pub struct SessionSet<L: Link> {
     route: Arc<InputRoute<UiCmd>>,
     clip: Option<Box<dyn ClipSide>>,
     starter: Starter<L>,
     live: BTreeMap<SessionId, Entry<L>>,
-    retiring: Vec<(SessionId, L)>,
+    /// Sessions told `Bye` and not yet joined, and when each was retired.
+    retiring: Vec<(SessionId, L, Instant)>,
     clock: Box<dyn Fn() -> Instant>,
     /// Whether a machine's clipboard is shared, asked at each connect.
     shares: Box<dyn Fn(&HostTarget) -> bool>,
@@ -372,9 +381,10 @@ impl<L: Link> SessionSet<L> {
     }
 
     /// Takes every queued event, tells the model what it owns (a connect, an
-    /// end), applies what it answers, joins sessions that finished, and
-    /// returns them for the views (a connect is both the model's and the
-    /// view's: it carries the machine's kind).
+    /// end), applies what it answers, joins sessions that finished, tells the
+    /// tabs which sessions it joined or stopped waiting for, and returns them
+    /// for the views (a connect is both the model's and the view's: it carries
+    /// the machine's kind).
     pub fn poll(&mut self, tabs: &mut Tabs) -> Applied {
         let mut total = Applied::default();
         let sessions = self.sessions();
@@ -410,7 +420,17 @@ impl<L: Link> SessionSet<L> {
             let due = tabs.due((self.clock)());
             total.merge(self.run(tabs, due));
         }
-        total.ended.extend(self.reap());
+        let joined = self.reap();
+        for (session, _) in &joined {
+            tabs.closed(*session);
+        }
+        let now = (self.clock)();
+        for (session, _, retired) in &self.retiring {
+            if now.saturating_duration_since(*retired) >= CLOSE_WAIT {
+                tabs.closed(*session);
+            }
+        }
+        total.ended.extend(joined);
         total
     }
 
@@ -477,7 +497,7 @@ impl<L: Link> SessionSet<L> {
             self.retire(session);
         }
         let mut ended = Vec::new();
-        for (session, link) in std::mem::take(&mut self.retiring) {
+        for (session, link, _) in std::mem::take(&mut self.retiring) {
             ended.push((session, link.finish()));
         }
         ended
@@ -543,18 +563,18 @@ impl<L: Link> SessionSet<L> {
         }
         if let Some(entry) = self.live.remove(&session) {
             let _ = entry.link.commands().send(UiCmd::Bye);
-            self.retiring.push((session, entry.link));
+            self.retiring.push((session, entry.link, (self.clock)()));
         }
     }
 
     fn reap(&mut self) -> Vec<(SessionId, SessionEnd)> {
         let mut ended = Vec::new();
         let mut keep = Vec::new();
-        for (session, link) in std::mem::take(&mut self.retiring) {
+        for (session, link, retired) in std::mem::take(&mut self.retiring) {
             if link.is_finished() {
                 ended.push((session, link.finish()));
             } else {
-                keep.push((session, link));
+                keep.push((session, link, retired));
             }
         }
         self.retiring = keep;

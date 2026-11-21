@@ -83,17 +83,20 @@ handling][driver-finish].
 
 ### Tab lifecycle and session identity
 
-Hybrid. `Tab.status: Status` is explicit, but `session: Option<SessionId>`, `Backoff`,
-`known`, `open`, `record_pending`, and `failure` carry additional state. `Tabs.shown:
-Option<TabId>` and monotonic tab/session IDs add ownership.
+Hybrid. `Tab.status: Status` is explicit, but `session: Option<SessionId>`,
+`closing: Option<SessionId>`, `Backoff`, `known`, `open`, `record_pending`, and
+`failure` carry additional state. `Tabs.shown: Option<TabId>` and monotonic
+tab/session IDs add ownership.
 
 Conceptually: stopped, connecting, connected, retry-waiting, retry-running, gave-up, and
 forgotten. `Reconnecting.at = Some(deadline)` means waiting without a session; `None`
 means an attempt is running. Connected/HelloAck sets the tab's `Streaming` status, **not
 the first decoded or displayed picture**. Ended events with obsolete session IDs are
 ignored. Manual connection resets retry history; successful user connection records
-history once. Stop retires the session and clears reopen intent; forgetting also removes
-the tab.
+history once. Stop retires the session and clears reopen intent; a stopped tab stays
+closing until the runner has joined that session or stopped waiting for it after
+`EXIT_WAIT` plus a second, and starts nothing meanwhile.
+Forgetting also removes the tab.
 
 Invariant: stale events cannot mutate a replacement session. Selection can remain on a
 disconnected tab while input and picture routing become empty. Existing tab tests
@@ -119,12 +122,13 @@ reset. [Implementation][backoff].
 ### Live, retiring, and joined session ownership
 
 Implicit. `SessionSet.live: BTreeMap<SessionId, Entry>`, `Entry.ended: bool`, `retiring:
-Vec<(SessionId, L)>`, and `closing: bool` are separate from tab status.
+Vec<(SessionId, L, Instant)>`, and `closing: bool` are separate from tab status.
 
 `Start -> register clipboard -> start link -> Live`; failed start unregisters and feeds
 failure back to tabs. `Live --retire / detach route, remove entry, send Bye--> Retiring
 --finished / join--> Reaped`. Polling reconciles Ended events with actual thread
 completion and synthesizes a failure if a thread finishes without an Ended event.
+Poll tells the tabs which sessions it joined or stopped waiting for.
 `close_all` latches closing, removes input routing, retires all, and suppresses due
 retries. Final shutdown joins remaining sessions.
 

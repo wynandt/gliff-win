@@ -128,9 +128,5 @@ The client has run on one Windows machine. Not tried yet
   starts; see [docs/clipboard.md](docs/clipboard.md#known-gaps).
 - **The release chord cannot be turned off.** `--release-chord none` is refused
   at start.
-- **Clicking a tab while its session is closing can start a new session**
-  ([#46](https://github.com/wynandt/gliff-win/issues/46)). Disconnecting a
-  live tab ends the session and keeps the tab. A click on that tab can then
-  start a new session while the previous one is still closing.
 
 gliff-win needs `gliff-server` 0.4.1 or later on the remote machine.
