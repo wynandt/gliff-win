@@ -48,6 +48,8 @@ use crate::cli::Args;
 use crate::clip_hub::ClipHub;
 use crate::clip_win;
 use crate::clip_win::ClipWin;
+use crate::end_log::ClientExit;
+use crate::end_log::client_exit_line;
 use crate::grab::Grab;
 use crate::grab::GrabConfig;
 use crate::hook;
@@ -104,36 +106,16 @@ pub fn run(args: Args) -> ExitCode {
     let _ = unsafe { SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     let startup = match Startup::load(&args) {
         Ok(startup) => startup,
-        Err(e) => return fail(&format!("refusing to start: {e}")),
+        Err(e) => {
+            let _ = crate::logging::init(&early_log_dir(&args));
+            return fail(&format!("refusing to start: {e}"));
+        }
     };
     let settings = startup.resolved.settings.clone();
     let log_dir = settings.log_dir_or(
         std::env::var_os("LOCALAPPDATA").map(Into::into),
         std::env::temp_dir(),
     );
-    let instance_name = single_instance::instance_name(startup.dir.path());
-    let _instance = match single_instance::win::acquire(&instance_name) {
-        Ok(instance) => {
-            if instance.is_some() {
-                instance
-            } else {
-                return match single_instance::decide(true, &args.targets, false) {
-                    Launch::HandOver(forward) => {
-                        match single_instance::win::hand_over(&instance_name, &forward) {
-                            Ok(()) => ExitCode::SUCCESS,
-                            Err(e) => fail(&format!("could not reach the running client: {e}")),
-                        }
-                    }
-                    Launch::Quit | Launch::Run => ExitCode::SUCCESS,
-                };
-            }
-        }
-        Err(e) => {
-            eprintln!("gliff-windows: single-instance check failed: {e}");
-            None
-        }
-    };
-    let (tabs, effects) = Tabs::start_up(startup.config.tabs(), &args.targets);
     match crate::logging::init(&log_dir) {
         Ok(path) => crate::logging::line(&format!(
             "gliff-windows {} starting; log {}",
@@ -146,6 +128,43 @@ pub fn run(args: Args) -> ExitCode {
     for note in &startup.notes {
         crate::logging::line(&format!("config: {note}"));
     }
+    let instance_name = single_instance::instance_name(startup.dir.path());
+    let _instance = match single_instance::win::acquire(&instance_name) {
+        Ok(instance) => {
+            if instance.is_some() {
+                instance
+            } else {
+                return match single_instance::decide(true, &args.targets, false) {
+                    Launch::HandOver(forward) => {
+                        match single_instance::win::hand_over(&instance_name, &forward) {
+                            Ok(()) => {
+                                crate::logging::line(&client_exit_line(
+                                    &ClientExit::HandedOver,
+                                    Some(0),
+                                    None,
+                                ));
+                                ExitCode::SUCCESS
+                            }
+                            Err(e) => fail(&format!("could not reach the running client: {e}")),
+                        }
+                    }
+                    Launch::Quit | Launch::Run => {
+                        crate::logging::line(&client_exit_line(
+                            &ClientExit::AlreadyRunning,
+                            Some(0),
+                            None,
+                        ));
+                        ExitCode::SUCCESS
+                    }
+                };
+            }
+        }
+        Err(e) => {
+            eprintln!("gliff-windows: single-instance check failed: {e}");
+            None
+        }
+    };
+    let (tabs, effects) = Tabs::start_up(startup.config.tabs(), &args.targets);
     crate::modifiers::install_exit_paths();
     if lockreg::init().is_none() {
         crate::logging::line(
@@ -472,8 +491,24 @@ fn panel_size(hwnd: HWND) -> (u32, u32) {
     )
 }
 
+/// The log folder for a start that failed before settings were loaded:
+/// `--log-dir` when it was given, otherwise the same default `main` uses
+/// for a helper.
+fn early_log_dir(args: &Args) -> PathBuf {
+    args.log_dir.clone().unwrap_or_else(|| {
+        std::env::var_os("LOCALAPPDATA")
+            .map_or_else(std::env::temp_dir, PathBuf::from)
+            .join("gliff-windows")
+            .join("logs")
+    })
+}
+
 fn fail(message: &str) -> ExitCode {
-    crate::logging::line(message);
+    crate::logging::line(&client_exit_line(
+        &ClientExit::Failed(message.to_owned()),
+        Some(1),
+        None,
+    ));
     eprintln!("gliff-windows: {message}");
     ExitCode::from(1)
 }

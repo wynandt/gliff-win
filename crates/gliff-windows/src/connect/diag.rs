@@ -154,7 +154,7 @@ const LAST_LINE_MAX: usize = 200;
 
 /// A line safe to show: no control characters (the server can write some
 /// into a disconnect reason), bounded.
-fn sanitize(line: &str) -> String {
+pub(crate) fn sanitize(line: &str) -> String {
     let clean: String = line
         .trim()
         .chars()
@@ -169,23 +169,26 @@ fn sanitize(line: &str) -> String {
 /// Characters that draw nothing but change how the text around them reads:
 /// zero-width marks, direction overrides and isolates, line and paragraph
 /// separators, the byte order mark.
-fn is_invisible_format(c: char) -> bool {
+pub(crate) fn is_invisible_format(c: char) -> bool {
     matches!(
         c,
-        '\u{200B}'..='\u{200F}'
+        '\u{061C}'
+            | '\u{180E}'
+            | '\u{200B}'..='\u{200F}'
             | '\u{2028}'..='\u{202E}'
             | '\u{2060}'..='\u{2069}'
             | '\u{FEFF}'
+            | '\u{FFF9}'..='\u{FFFB}'
     )
 }
 
 /// `line` with every file path replaced by "(a file)": a word that holds a
-/// `/` or a `\` is a path. Punctuation around it stays.
-fn hide_paths(line: &str) -> String {
+/// `/` or a `\`, or starts with `~`, is a path. Punctuation around it stays.
+pub(crate) fn hide_paths(line: &str) -> String {
     let is_edge = |c: char| matches!(c, ':' | ';' | ',' | '.' | '\'' | '"' | '(' | ')' | '`');
     let mut out = Vec::new();
     for word in line.split_whitespace() {
-        if !word.contains(['/', '\\']) {
+        if !word.contains(['/', '\\']) && !word.trim_start_matches(is_edge).starts_with('~') {
             out.push(word.to_owned());
             continue;
         }
