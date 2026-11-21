@@ -666,8 +666,8 @@ second client.
 
 `App` (in `window.rs`) holds the `Tabs` model, the `SessionSet`, and one
 `SessionView` per live session; `app::run` builds them in this order: load the
-settings, take the single-instance name (hand over and exit when a client
-already runs), `Tabs::start_up`, the log, the window, the presenter, the
+settings, open the log, take the single-instance name (hand over and exit
+when a client already runs), `Tabs::start_up`, the window, the presenter, the
 `InputRoute`, the clipboard side, the `SessionSet` with a starter, the keyboard
 grab and pointer input (both on the route), and then runs the start effects.
 
@@ -721,6 +721,21 @@ grab and pointer input (both on the route), and then runs the start effects.
   (0.93 ms of decode per frame), three used 11.7% at 123.7 fps in all (0.94 ms
   per frame). The cost is linear: a hidden session decodes every frame, so ten
   tabs cost about ten times one.
+
+### Why a session or the client ended
+
+`end_log` is pure and builds the two lines that say why something ended.
+`SessionHandle::join` is the one place every session end passes (Bye, a
+server error, a lost link, an ssh failure, a failed spawn, a panicked
+thread), so it writes the session line there, with a bounded and sanitised
+tail of the session's ssh stderr file when ssh did not exit 0. The window
+records why it is closing (`WM_CLOSE`, the 3 s close timer, or a
+`WM_DESTROY` with no close), and `App::finish` writes the exit line with the
+exit code and a count of clean and unclean sessions. `WM_ENDSESSION` writes
+its exit line at once, because Windows may end the process when the message
+returns. `app::run` writes the exit line for a refused start, a handover to
+a running client and a startup error. The log opens before the single-instance
+check, so those exits are logged too.
 
 ### On-video statistics
 

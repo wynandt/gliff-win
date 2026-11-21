@@ -216,6 +216,27 @@ again**, **Check again**, **Edit address**, **Details** (ssh's own text) and
 matching step in [docs/ssh-keys.md](docs/ssh-keys.md), which also has a table of
 every message.
 
+### Why a session or the client ended
+
+The client log (`gliff-windows-YYYY-MM-DD.log` in the log folder) has one
+line for each session that ends and one line when the client exits, so a bug
+report can say why without guessing:
+
+    session 2: ended: the link was lost: closed; ssh exit 1; ssh stderr tail: gliff-server: out of memory
+    client exit: the window was closed; exit code 1; sessions: 1 clean, 1 not clean, 0 failed to start
+
+A session line names the reason (the client said Bye, the server sent an
+error, the server is incompatible, the link was lost, or ssh failed) and ssh's
+exit code. When ssh exits with an error, the line ends with the last lines ssh
+printed: at most 6 lines of 200 characters, joined by ` | `. Before the tail
+goes in the log, file paths become "(a file)", and host key fingerprints and
+key text become "(hidden)". The full text stays in `ssh-stderr-<n>.log`.
+
+The exit line names why the client ended: the window was closed (and whether a
+session did not say Bye within 3 seconds), Windows is signing out or shutting
+down, another client was already running, or an error stopped it. It also has
+the exit code and, after a normal close, how many sessions ended cleanly.
+
 A session that ends on its own for a reason that can pass (the server exits,
 ssh drops) is tried again by itself, up to five times with a growing wait. A
 failure a retry cannot fix, such as a refused key or a changed host key, is

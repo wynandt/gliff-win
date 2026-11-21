@@ -81,7 +81,7 @@ ssh -o BatchMode=yes user@host true
 
 ## When Gliff shows an error
 
-Gliff reads ssh's own message and says the problem in plain words, in the tab's status and in the client log. ssh's own text stays in the session log (`ssh-stderr-<n>.log` in the log folder), and the client log names that file. In these rows, "the machine" is the name you typed after the `@`.
+Gliff reads ssh's own message and says the problem in plain words, in the tab's status and in the client log. ssh's own text stays in the session log (`ssh-stderr-<n>.log` in the log folder), and the client log names that file. When the session ends, the client log also has the last lines of that text, with file paths, host key fingerprints and key text hidden. In these rows, "the machine" is the name you typed after the `@`.
 
 | Gliff says | ssh said | What to do |
 |---|---|---|
