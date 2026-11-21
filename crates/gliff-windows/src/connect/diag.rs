@@ -154,7 +154,7 @@ const LAST_LINE_MAX: usize = 200;
 
 /// A line safe to show: no control characters (the server can write some
 /// into a disconnect reason), bounded.
-fn sanitize(line: &str) -> String {
+pub(crate) fn sanitize(line: &str) -> String {
     let clean: String = line
         .trim()
         .chars()
@@ -181,7 +181,7 @@ fn is_invisible_format(c: char) -> bool {
 
 /// `line` with every file path replaced by "(a file)": a word that holds a
 /// `/` or a `\` is a path. Punctuation around it stays.
-fn hide_paths(line: &str) -> String {
+pub(crate) fn hide_paths(line: &str) -> String {
     let is_edge = |c: char| matches!(c, ':' | ';' | ',' | '.' | '\'' | '"' | '(' | ')' | '`');
     let mut out = Vec::new();
     for word in line.split_whitespace() {

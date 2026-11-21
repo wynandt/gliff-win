@@ -863,7 +863,7 @@ fn colour_line(
 }
 
 /// "session N", or "session" for an untagged one.
-fn session_name(tag: Option<u32>) -> String {
+pub(crate) fn session_name(tag: Option<u32>) -> String {
     tag.map_or_else(|| "session".to_owned(), |n| format!("session {n}"))
 }
 
