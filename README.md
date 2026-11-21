@@ -229,8 +229,14 @@ A session line names the reason (the client said Bye, the server sent an
 error, the server is incompatible, the link was lost, or ssh failed) and ssh's
 exit code. When ssh exits with an error, the line ends with the last lines ssh
 printed: at most 6 lines of 200 characters, joined by ` | `. Before the tail
-goes in the log, file paths become "(a file)", and host key fingerprints and
-key text become "(hidden)". The full text stays in `ssh-stderr-<n>.log`.
+goes in the log, file paths become "(a file)", and host key fingerprints, key
+text, long hex digests and the values of password, token and secret settings
+become "(hidden)". A private key block becomes "(private key hidden)". Control
+and invisible characters (such as line breaks, escape codes and text-direction
+marks) are removed. All of this happens before a line is cut, so a cut never
+leaves part of a secret. The server's error text and the link error get the
+same treatment. The client reads the stderr file only when it is a plain file,
+not a link. The full text stays in `ssh-stderr-<n>.log`.
 
 The exit line names why the client ended: the window was closed (and whether a
 session did not say Bye within 3 seconds), Windows is signing out or shutting

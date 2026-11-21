@@ -213,7 +213,8 @@ hyprctl message. The Linux integration test runs all of these at 640x400:
 
 `error`, `incompatible` and `crash` are for the session-end log, not the
 stream check. `error` sends server error 300 after the first StreamConfig and
-exits 0 once stdin closes. `incompatible` answers Hello with error 2 instead
+exits 0 once stdin closes. With `GWIN_FAKE_ERROR_FILE` set, the error text is
+that file's contents, so a test can send hostile text. `incompatible` answers Hello with error 2 instead
 of HelloAck and exits 0 once stdin closes. `crash` exits 1 after the first
 StreamConfig and writes one line to stderr.
 
