@@ -96,11 +96,18 @@ The client has run on one Windows machine. Not tried yet
   ([#5](https://github.com/wynandt/gliff-win/issues/5)). The hook sends a kept
   chord to Windows while it holds a lock, and Windows drops a hook that is too
   slow. Not seen yet; it needs a check under heavy load.
-- **A lone Super key-up after a stall can open the launcher**
-  ([#6](https://github.com/wynandt/gliff-win/issues/6)). When the client
-  re-syncs a private screen after a stall, it sends a key-up for every
-  modifier you are not holding, Super included. Some Linux desktops open
-  their launcher on a lone Super release.
+- **A lone Super key-up after a stall could open a launcher**
+  ([#6](https://github.com/wynandt/gliff-win/issues/6), closed as not
+  reproduced). When the client puts the keyboard hook back or re-syncs a
+  private screen, it sends a key-up for every modifier you are not holding,
+  Super included. Hyprland 0.56.2 ignores such a release. A desktop that acts
+  on a lone Super release could open its launcher.
+- **Keypad keys can arrive as arrow keys**
+  ([#53](https://github.com/wynandt/gliff-win/issues/53)). The server starts
+  with Num Lock and Caps Lock off, and the client does not send its lock
+  state. With Num Lock on in Windows, keypad digits can reach the remote as
+  Home, End, arrows and Page keys. Not reproduced yet. The fix waits for an
+  upstream protocol message.
 - **The client reconnects when the host ends the session on purpose**
   ([#19](https://github.com/wynandt/gliff-win/issues/19)). Upstream is adding
   an error code for this. Until the client knows it, it treats that end like
@@ -128,5 +135,15 @@ The client has run on one Windows machine. Not tried yet
   starts; see [docs/clipboard.md](docs/clipboard.md#known-gaps).
 - **The release chord cannot be turned off.** `--release-chord none` is refused
   at start.
+- **A click on a tab while the window is closing starts a session**
+  ([#86](https://github.com/wynandt/gliff-win/issues/86)). After you close the
+  window, a click on a tab before the window is gone can still start a new
+  session. A click after you disconnect a single tab is handled.
+- **The client can keep running after the window closes**
+  ([#85](https://github.com/wynandt/gliff-win/issues/85)). If a process left
+  over from a session still holds that session's link, the window goes away
+  but the process stays in the background until the leftover process ends.
+  Seen with a test server that never exits. Not yet seen with a real ssh
+  setup.
 
 gliff-win needs `gliff-server` 0.4.1 or later on the remote machine.

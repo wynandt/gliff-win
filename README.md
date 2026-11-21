@@ -5,8 +5,8 @@ desktop for Hyprland. gliff-win shows the Hyprland session of another machine
 in a normal, resizable Windows window, with one tab for each machine. All it
 needs between the two machines is ssh: no open ports, no accounts, no relay.
 
-This is version 0.3. It works and is used daily, and has been tried on one
-set of hardware. See [Not in 0.3](#not-in-03) and
+This is version 0.4. It works and is used daily, and has been tried on one
+set of hardware. See [Not in 0.4](#not-in-04) and
 [Verification](#verification).
 
 ## Status and contributing
@@ -47,6 +47,11 @@ privately through the Security tab, see [SECURITY.md](SECURITY.md).
   while the window has the keyboard. Your Windows layout is sent as an XKB
   keymap. A mouse wheel scrolls in notches; a precision touchpad scrolls
   smoothly. `Ctrl+Alt+Home` gives the keyboard back to Windows.
+- **A log that says why things ended.** The client log has one line for each
+  session that ends: the reason, ssh's exit code and, after an ssh error, the
+  last lines ssh printed, with secrets hidden. One more line says why the
+  client exited. See
+  [Why a session or the client ended](#why-a-session-or-the-client-ended).
 - **Clipboard.** Copy and paste text, images and files in both directions.
   Nothing is sent until something pastes. Remote copies stay out of Win+V
   history and cloud sync.
@@ -342,7 +347,7 @@ reconnect; changing it in the remote desktop's own display settings is not
 supported and blanks the picture for 10 seconds or more
 ([details](docs/settings.md#which-remote-screen-the-window-shows)).
 
-## Not in 0.3
+## Not in 0.4
 
 - **System tray.** The window is the only place the client lives. A tray
   needs its own design for what closing the window means.
@@ -427,7 +432,7 @@ than 4096 pixels (upstream lists the last two as not built).
 - **The connection fails.** Read the panel first, then
   [docs/ssh-keys.md](docs/ssh-keys.md). ssh's own message is in
   `ssh-stderr-<n>.log` in the log folder (one file per session; the first is
-  1). A typical cause is that the host key is not in `known_hosts` yet: run
+  0). A typical cause is that the host key is not in `known_hosts` yet: run
   `ssh user@host` once in a terminal.
 - **`gliff-server` is not found.** A non-interactive ssh shell may not have it
   on its `PATH`. Pass `--server-path`, or set `server_path` in `config.toml`.
@@ -472,7 +477,7 @@ What is proven, and where. Numbers are from this repository's records.
   on Windows, or right-click the exe, choose Properties, then the Digital Signatures
   tab. Releases from 0.2.1 on are signed with an Azure Artifact Signing certificate.
 - **Unit and integration tests:** `cargo test --workspace --locked` runs about
-  1,500 tests with no failures (6 more are ignored). About 1,100 of them are in the
+  1,600 tests with no failures (6 more are ignored). About 1,200 of them are in the
   client's library. The counts are rounded because they change with every fix. They run on Linux against a fake server and need no second machine.
 - **Held keys:** `formal/held-keys/run` model-checks that keys the client
   sends to the remote machine are released again, and that Windows is not

@@ -7,6 +7,8 @@ session state. Several sessions can run in one window.
 
 - TABS-1: click a tab to show it; click `+` to open the address bar; when
   the tabs do not fit, a chevron opens a menu of them; drag a tab to move it.
+  After a disconnect, a click only shows the tab until its old session has
+  closed (at most about six seconds).
 - TABS-2: the dot is Stopped, Connecting, Live, Reconnecting or Failed;
   middle-click (or a click on the dot) stops a session or forgets a tab that
   has none.
@@ -31,6 +33,11 @@ targets, recognizably different sizes or pictures.
 
 - Click, drag, `+`, chevron and the tab menu: record which tab is shown, the
   dot, and that only the selected source is drawn.
+- Click while closing (*loopback*, `GWIN_FAKE_SERVER=linger`): disconnect a
+  live tab and click it at once. Record that the click starts no second
+  session and no second remote hello, and that a click about 8 s after the
+  disconnect connects. Passed on Windows for PR #83. A click after the whole window starts closing still starts a
+  session ([#86](https://github.com/wynandt/gliff-win/issues/86)).
 - Chords: switch by next, previous and jump; record the shown session after
   each. Reconnect from the tab menu; no stale session should stay on screen.
 - Regression: `gwin-verify.exe tabs` with three authorized targets. It uses
