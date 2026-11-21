@@ -414,19 +414,24 @@ fn names_a_secret(name: &str) -> bool {
     SECRET_NAMES.iter().any(|secret| lower.contains(secret))
 }
 
+/// What [`read_stderr_tail`] puts in the log when the path is there but is
+/// not a plain file: a link, a folder, or a file with more than one name.
+pub const TAIL_NOT_READ: &str = "(not read: the file is not a plain file)";
+
 /// [`stderr_tail`] of at most the last [`STDERR_TAIL_BYTES`] of `path`.
 ///
 /// The read seeks from the end. Bytes are lossy UTF-8. When the seek did
 /// not start at the beginning and it landed in the middle of a line, that
-/// partial first line is dropped. `None` when the file cannot be read or
-/// nothing is left.
+/// partial first line is dropped. `None` when the file is missing, cannot
+/// be read or nothing is left. [`TAIL_NOT_READ`] when it is not a plain
+/// file; nothing is read from it then.
 pub fn read_stderr_tail(path: &Path) -> Option<String> {
-    let mut file = open_no_follow(path)?;
-    let meta = file.metadata().ok()?;
-    if !meta.is_file() {
-        return None;
-    }
-    let len = meta.len();
+    let mut file = match open_plain(path) {
+        Opened::File(file) => file,
+        Opened::Missing => return None,
+        Opened::NotPlain => return Some(TAIL_NOT_READ.to_owned()),
+    };
+    let len = file.metadata().ok()?.len();
     let start = len.saturating_sub(STDERR_TAIL_BYTES);
     let drop_partial = start > 0 && !previous_byte_is_newline(&mut file, start)?;
     file.seek(SeekFrom::Start(start)).ok()?;
@@ -444,33 +449,68 @@ pub fn read_stderr_tail(path: &Path) -> Option<String> {
     stderr_tail(text)
 }
 
-/// Opens `path` for reading, but not through a link: a symlink or junction
-/// planted in place of the stderr file (in a shared `--log-dir`) would copy
-/// the tail of whatever it points at into the log.
+enum Opened {
+    File(File),
+    Missing,
+    NotPlain,
+}
+
+/// Opens `path` only when it is a plain file: not a symlink, junction or
+/// folder, and not a hard link (one name only). Any of those planted in
+/// place of the stderr file (in a shared `--log-dir`) would copy the tail
+/// of whatever it points at into the log. The name is checked first, then
+/// the opened handle again, so a swap between the two is caught too.
+fn open_plain(path: &Path) -> Opened {
+    match std::fs::symlink_metadata(path) {
+        Err(_) => return Opened::Missing,
+        Ok(meta) if !meta.file_type().is_file() => return Opened::NotPlain,
+        Ok(_) => {}
+    }
+    let Some(file) = open_no_follow(path) else {
+        return Opened::Missing;
+    };
+    let plain = file.metadata().is_ok_and(|meta| meta.file_type().is_file())
+        && link_count(&file) == Some(1);
+    if plain {
+        Opened::File(file)
+    } else {
+        Opened::NotPlain
+    }
+}
+
+/// On Windows the open itself does not follow a link. Elsewhere (host
+/// tests only) the name check in [`open_plain`] does that job.
 fn open_no_follow(path: &Path) -> Option<File> {
+    let mut options = std::fs::OpenOptions::new();
+    options.read(true);
     #[cfg(windows)]
     {
         use std::os::windows::fs::OpenOptionsExt;
         /// `FILE_FLAG_OPEN_REPARSE_POINT`: open the link itself.
         const OPEN_REPARSE_POINT: u32 = 0x0020_0000;
-        let file = std::fs::OpenOptions::new()
-            .read(true)
-            .custom_flags(OPEN_REPARSE_POINT)
-            .open(path)
-            .ok()?;
-        (!file.metadata().ok()?.file_type().is_symlink()).then_some(file)
+        options.custom_flags(OPEN_REPARSE_POINT);
     }
-    #[cfg(not(windows))]
-    {
-        if std::fs::symlink_metadata(path)
-            .ok()?
-            .file_type()
-            .is_symlink()
-        {
-            return None;
-        }
-        File::open(path).ok()
-    }
+    options.open(path).ok()
+}
+
+#[cfg(windows)]
+fn link_count(file: &File) -> Option<u32> {
+    use std::os::windows::io::AsRawHandle;
+    use windows::Win32::Foundation::HANDLE;
+    use windows::Win32::Storage::FileSystem::{
+        BY_HANDLE_FILE_INFORMATION, GetFileInformationByHandle,
+    };
+    let mut info = BY_HANDLE_FILE_INFORMATION::default();
+    // SAFETY: the handle is open for the life of `file`, and `info` is a
+    // valid out-pointer for the call.
+    unsafe { GetFileInformationByHandle(HANDLE(file.as_raw_handle()), &raw mut info) }.ok()?;
+    Some(info.nNumberOfLinks)
+}
+
+#[cfg(unix)]
+fn link_count(file: &File) -> Option<u32> {
+    use std::os::unix::fs::MetadataExt;
+    u32::try_from(file.metadata().ok()?.nlink()).ok()
 }
 
 fn previous_byte_is_newline(file: &mut File, start: u64) -> Option<bool> {

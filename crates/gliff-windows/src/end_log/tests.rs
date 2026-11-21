@@ -2,6 +2,7 @@ use std::io::Write;
 
 use super::ClientExit;
 use super::RunTally;
+use super::TAIL_NOT_READ;
 use super::client_exit_line;
 use super::read_stderr_tail;
 use super::run_tally;
@@ -420,14 +421,35 @@ fn a_link_in_place_of_the_stderr_file_is_not_read() {
     std::fs::write(&secret, "line one\nnot for the log\n").expect("write secret");
     let link = dir.path().join("ssh-stderr-1.log");
     std::os::unix::fs::symlink(&secret, &link).expect("symlink");
-    assert_eq!(read_stderr_tail(&link), None);
+    assert_eq!(read_stderr_tail(&link).as_deref(), Some(TAIL_NOT_READ));
     let folder = dir.path().join("ssh-stderr-2.log");
     std::fs::create_dir(&folder).expect("a folder");
-    assert_eq!(read_stderr_tail(&folder), None);
+    assert_eq!(read_stderr_tail(&folder).as_deref(), Some(TAIL_NOT_READ));
+}
+
+#[test]
+fn a_hard_link_in_place_of_the_stderr_file_is_not_read() {
+    let dir = TestDir::new();
+    let secret = dir.path().join("secret.txt");
+    std::fs::write(&secret, "line one\nnot for the log\n").expect("write secret");
     assert_eq!(
         read_stderr_tail(&secret).as_deref(),
         Some("line one | not for the log")
     );
+    let hard = dir.path().join("ssh-stderr-1.log");
+    std::fs::hard_link(&secret, &hard).expect("hard link");
+    assert_eq!(read_stderr_tail(&hard).as_deref(), Some(TAIL_NOT_READ));
+    assert_eq!(read_stderr_tail(&dir.path().join("missing.log")), None);
+    let line = session_end_line(
+        Some(1),
+        &ended(None, Some(255), vec![]),
+        read_stderr_tail(&hard).as_deref(),
+    );
+    assert!(
+        line.ends_with("; ssh stderr tail: (not read: the file is not a plain file)"),
+        "{line}"
+    );
+    assert!(!line.contains("not for the log"), "{line}");
 }
 
 #[test]

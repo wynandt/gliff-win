@@ -235,8 +235,10 @@ become "(hidden)". A private key block becomes "(private key hidden)". Control
 and invisible characters (such as line breaks, escape codes and text-direction
 marks) are removed. All of this happens before a line is cut, so a cut never
 leaves part of a secret. The server's error text and the link error get the
-same treatment. The client reads the stderr file only when it is a plain file,
-not a link. The full text stays in `ssh-stderr-<n>.log`.
+same treatment. The client reads the stderr file only when it is a plain file
+with one name: not a symbolic link, junction, folder or hard link. Otherwise
+the tail says "(not read: the file is not a plain file)" and nothing is read
+from it. The full text stays in `ssh-stderr-<n>.log`.
 
 The exit line names why the client ended: the window was closed (and whether a
 session did not say Bye within 3 seconds), Windows is signing out or shutting
