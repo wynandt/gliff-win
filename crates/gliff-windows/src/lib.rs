@@ -28,6 +28,7 @@ pub mod connect;
 pub mod cursor;
 pub mod cursor_image;
 pub mod decode;
+pub mod end_log;
 pub mod failure_panel;
 pub mod foreground_watch;
 pub mod frame_slot;

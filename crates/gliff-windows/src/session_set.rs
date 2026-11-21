@@ -447,14 +447,16 @@ impl<L: Link> SessionSet<L> {
                     why,
                     at,
                 } => crate::logging::line(&format!(
-                    "session {}: ended ({why}); {}: retry {attempt} of {of} in {:.1} s",
+                    "session {}: ended ({}); {}: retry {attempt} of {of} in {:.1} s",
                     session.get(),
+                    crate::end_log::one_line(why),
                     view.target(),
                     at.map_or(0.0, |at| at.saturating_duration_since(now).as_secs_f64()),
                 )),
                 Status::GaveUp(why) => crate::logging::line(&format!(
-                    "session {}: ended ({why}); {}: not retrying",
+                    "session {}: ended ({}); {}: not retrying",
                     session.get(),
+                    crate::end_log::one_line(why),
                     view.target(),
                 )),
                 _ => {}
