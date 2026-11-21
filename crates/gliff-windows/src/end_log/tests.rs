@@ -312,8 +312,8 @@ fn every_fingerprint_form_is_hidden() {
         "SHA256:kewFiRGj02X1n6KzFRID5mmHmKrpaXNy_Wgiqp4o4rw-",
         "SHA512:abcd",
         "key 16:27:ac:a5:76:28:2d:36:63:1b:56:4d:eb:df:a6:48",
-        "digest 1627aca576282d36631b564debdfa648",
-        "token=3f5a9c0e1b2d4f6a8c0e2b4d6f8a0c2e4b6d8f0a2c4e6b8d0f2a4c6e8b0d2f4a",
+        "digest 1627ACA576282D36631B564DEBDFA648",
+        "token=3F5A9C0E1B2D4F6A8C0E2B4D6F8A0C2E4B6D8F0A2C4E6B8D0F2A4C6E8B0D2F4A",
     ];
     for case in cases {
         let tail = stderr_tail(case).expect("a tail");
@@ -322,8 +322,8 @@ fn every_fingerprint_form_is_hidden() {
             "Wgiqp4o4rw",
             "abcd",
             "16:27",
-            "1627aca5",
-            "3f5a9c0e",
+            "1627ACA5",
+            "3F5A9C0E",
         ] {
             assert!(!tail.contains(secret), "{case} -> {tail}");
         }
