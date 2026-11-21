@@ -24,7 +24,12 @@
 //! pattern window on another monitor), `hold30` (the ladder never steps
 //! up from level 1, so the cap stays 30, as seen against a real server) and
 //! `cap15` (the ladder steps down to level 2, 15 fps, with its
-//! StreamConfig). `reload` models a
+//! StreamConfig), `error` (after the first StreamConfig, send server error
+//! 300 "fake error on purpose", then exit 0 once stdin closes),
+//! `incompatible` (answer Hello with error 2 "fake incompatible on purpose"
+//! instead of HelloAck, then exit 0 once stdin closes) and `crash` (after
+//! the first StreamConfig, write "fake-server: crashed on purpose" to
+//! stderr and exit 1, with no Bye). `reload` models a
 //! compositor reload: 1 s after the first Resize the output is lost, as when
 //! a runtime mode is discarded. The server keeps its own record, so it sends
 //! no frame and no StreamConfig (pings go on) and returns early on a Resize
@@ -104,6 +109,12 @@ enum Fault {
     Cap15,
     Cursor,
     Reload,
+    /// Server error 300 after the first StreamConfig. Exit 0 after stdin closes.
+    Error,
+    /// Error code 2 instead of HelloAck. Exit 0 after stdin closes.
+    Incompatible,
+    /// Exit 1 after the first StreamConfig, with one stderr line and no Bye.
+    Crash,
 }
 
 impl Fault {
@@ -125,6 +136,9 @@ impl Fault {
             "cap15" => Self::Cap15,
             "cursor" => Self::Cursor,
             "reload" => Self::Reload,
+            "error" => Self::Error,
+            "incompatible" => Self::Incompatible,
+            "crash" => Self::Crash,
             other => anyhow::bail!("unknown GWIN_FAKE_SERVER={other}"),
         })
     }
@@ -205,6 +219,18 @@ async fn serve() -> anyhow::Result<()> {
     };
     let mode = model::initial_mode(caps_max);
     let mut server = Server::new(writer, fault, name, mode, caps_max)?;
+    if fault == Fault::Incompatible {
+        server
+            .writer
+            .write_msg(&ServerMsg::Error {
+                code: 2,
+                message: "fake incompatible on purpose".to_owned(),
+                version: Some(PROTOCOL_VERSION),
+            })
+            .await?;
+        wait_for_stdin_close(reader).await;
+        return Ok(());
+    }
     server
         .writer
         .write_msg(&ServerMsg::HelloAck {
@@ -232,6 +258,23 @@ async fn serve() -> anyhow::Result<()> {
         .write_msg(&ServerMsg::Ping { t: first_ping })
         .await?;
     server.send_config().await?;
+    if fault == Fault::Error {
+        server
+            .writer
+            .write_msg(&ServerMsg::Error {
+                code: 300,
+                message: "fake error on purpose".to_owned(),
+                version: Some(PROTOCOL_VERSION),
+            })
+            .await?;
+        wait_for_stdin_close(reader).await;
+        return Ok(());
+    }
+    if fault == Fault::Crash {
+        eprintln!("fake-server: crashed on purpose");
+        let _ = std::io::Write::flush(&mut std::io::stderr());
+        std::process::exit(1);
+    }
     if fault == Fault::Cursor {
         server.send_cursor().await?;
     }
@@ -616,6 +659,12 @@ fn now_ms() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |d| d.as_millis() as u64)
+}
+
+/// Read until stdin closes. A Bye and a close without one both end here,
+/// and the caller exits 0.
+async fn wait_for_stdin_close(mut reader: Framed<tokio::io::Stdin>) {
+    while reader.read_msg::<ClientMsg>().await.is_ok() {}
 }
 
 /// Upstream's `spawn_reader`: read until EOF or an error on a local task

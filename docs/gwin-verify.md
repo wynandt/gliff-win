@@ -206,10 +206,16 @@ code shown: `stall` (`fps`, `stall`), `drop` (`frames_missing`,
 (`level_rejected`), `no-pattern` (`pattern`), `misplaced` (`placement`),
 `cap15` (`fps_cap`). `reload` is for the driver test, not the stream check: it
 stops sending frames and ignores a same-size Resize, as a server whose output
-mode was reset by a compositor reload does. `hold30` passes at a 30 fps cap. `GWIN_FAKE_HYPR_INSTANCE=none`
-makes the placement probe fail with the real hyprctl message. The Linux
-integration test runs all of these at 640x400:
+mode was reset by a compositor reload does. `hold30` passes at a 30 fps cap.
+`GWIN_FAKE_HYPR_INSTANCE=none` makes the placement probe fail with the real
+hyprctl message. The Linux integration test runs all of these at 640x400:
 `cargo test -p gwin-verify --test stream`.
+
+`error`, `incompatible` and `crash` are for the session-end log, not the
+stream check. `error` sends server error 300 after the first StreamConfig and
+exits 0 once stdin closes. `incompatible` answers Hello with error 2 instead
+of HelloAck and exits 0 once stdin closes. `crash` exits 1 after the first
+StreamConfig and writes one line to stderr.
 
 On the remote machine, start the pattern first:
 `scripts/remote/gwin-pattern place` (waits for 3642x2276, the mode a
