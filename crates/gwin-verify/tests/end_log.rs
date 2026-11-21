@@ -234,3 +234,67 @@ fn a_missing_ssh_program_has_no_stderr_tail() {
     assert!(line.contains("ssh failed:"), "{line}");
     assert!(!line.contains("ssh stderr tail"), "{line}");
 }
+
+/// Text a hostile server or ssh could print: a forged log line after a CR
+/// and an LF, terminal escapes, text-direction marks, invalid UTF-8, a
+/// password, a fingerprint, a path and a private key.
+fn hostile_bytes() -> Vec<u8> {
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(b"-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAE\n-----END OPENSSH PRIVATE KEY-----\n");
+    bytes.extend_from_slice(b"debug1: password=hunter2 token ghp_shorttoken\n");
+    bytes.extend_from_slice(b"Offending key in C:\\Users\\alice\\.ssh\\known_hosts SHA256:kewFiRGj02X1n6KzFRID5mmHmKrpaXNy/Wgiqp4o4rw\n");
+    bytes.extend_from_slice(b"ok\r2026-01-01T00:00:00Z client exit: forged\x1b[2J\x1b]0;t\x07 \xff\xfe \xe2\x80\xae\xd8\x9c end\n");
+    bytes.extend_from_slice(b"Host key verification failed.\n");
+    bytes
+}
+
+fn assert_log_is_clean(log: &str) {
+    for secret in [
+        "hunter2", "ghp_", "alice", "kewFiRGj", "b3BlbnNz", "\u{1b}", "\u{202e}", "\u{61c}",
+    ] {
+        assert!(!log.contains(secret), "{secret:?} leaked into:\n{log}");
+    }
+    for line in log.lines() {
+        let rest = line.split_once(' ').map_or(line, |(_, rest)| rest);
+        assert!(!line.starts_with("2026-01-01T"), "forged line: {line}");
+        assert!(
+            !rest.starts_with("client exit: forged"),
+            "forged line: {line}"
+        );
+        assert!(!line.contains('\r'), "CR in: {line:?}");
+    }
+}
+
+#[test]
+fn a_hostile_server_error_cannot_forge_a_line_or_leak_a_secret() {
+    let text = Path::new(env!("CARGO_TARGET_TMPDIR")).join("end-log-error-8.txt");
+    std::fs::write(&text, hostile_bytes()).expect("write error text");
+    let env = format!(
+        "GWIN_FAKE_SERVER=error GWIN_FAKE_ERROR_FILE=\"{}\"",
+        text.display()
+    );
+    let handle = session_env(8, &env, SERVER);
+    wait_for(&handle, |event| matches!(event, UiEvent::Ended(_)));
+    let _ = handle.join();
+    let line = ended_line(8);
+    assert!(line.contains("the server sent error 300:"), "{line}");
+    assert_log_is_clean(&std::fs::read_to_string(client_log()).expect("read client log"));
+}
+
+#[test]
+fn a_hostile_ssh_stderr_cannot_forge_a_line_or_leak_a_secret() {
+    let stderr = Path::new(env!("CARGO_TARGET_TMPDIR")).join("end-log-ssh-9.stderr");
+    std::fs::write(&stderr, hostile_bytes()).expect("write ssh stderr");
+    let env = format!(
+        "GWIN_FAKE_SSH_STDERR=\"{}\" GWIN_FAKE_SSH_EXIT=255",
+        stderr.display()
+    );
+    let handle = session_env(9, &env, "gliff-server");
+    wait_for(&handle, |event| matches!(event, UiEvent::Ended(_)));
+    let _ = handle.join();
+    let line = ended_line(9);
+    assert!(line.contains("ssh exit 255"), "{line}");
+    assert!(line.contains("(private key hidden)"), "{line}");
+    assert!(line.contains("Host key verification failed."), "{line}");
+    assert_log_is_clean(&std::fs::read_to_string(client_log()).expect("read client log"));
+}

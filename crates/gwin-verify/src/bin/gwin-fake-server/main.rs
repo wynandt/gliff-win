@@ -25,7 +25,8 @@
 //! up from level 1, so the cap stays 30, as seen against a real server) and
 //! `cap15` (the ladder steps down to level 2, 15 fps, with its
 //! StreamConfig), `error` (after the first StreamConfig, send server error
-//! 300 "fake error on purpose", then exit 0 once stdin closes),
+//! 300 "fake error on purpose", or the text of the file named by
+//! `GWIN_FAKE_ERROR_FILE`, then exit 0 once stdin closes),
 //! `incompatible` (answer Hello with error 2 "fake incompatible on purpose"
 //! instead of HelloAck, then exit 0 once stdin closes) and `crash` (after
 //! the first StreamConfig, write "fake-server: crashed on purpose" to
@@ -263,7 +264,12 @@ async fn serve() -> anyhow::Result<()> {
             .writer
             .write_msg(&ServerMsg::Error {
                 code: 300,
-                message: "fake error on purpose".to_owned(),
+                message: std::env::var_os("GWIN_FAKE_ERROR_FILE")
+                    .and_then(|path| std::fs::read(path).ok())
+                    .map_or_else(
+                        || "fake error on purpose".to_owned(),
+                        |bytes| String::from_utf8_lossy(&bytes).into_owned(),
+                    ),
                 version: Some(PROTOCOL_VERSION),
             })
             .await?;
