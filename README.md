@@ -160,10 +160,12 @@ Each tab shows the machine's full name and a dot:
 | Reconnecting | The session ended for a reason that can pass, and the tab is trying again. |
 | Failed | The tab gave up. The panel says why. |
 
-- **Click a tab** to show it. **Click the `+`** to open the address bar, type
-  a target and press Enter to connect. The list button next to it shows
-  recent machines; its menu can forget one. Right-click in the address bar for
-  Cut, Copy, Paste and Select All.
+- **Click a tab** to show it. After you disconnect a tab, a click only shows
+  it until its previous session has finished closing (usually under a second,
+  at most about six seconds); click again to connect then. **Click the `+`**
+  to open the address bar, type a target and press Enter to connect. The list
+  button next to it shows recent machines; its menu can forget one.
+  Right-click in the address bar for Cut, Copy, Paste and Select All.
 - **Right-click a tab** for Connect, Reconnect, Disconnect, Copy address,
   Connection settings and Forget. Forget removes the tab. Copy address puts
   `user@host` on the Windows clipboard. Connection settings is a submenu for

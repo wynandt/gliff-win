@@ -7,6 +7,11 @@ release, see [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
 ## [Unreleased]
 
+- Clicking a tab just after disconnecting it could start a second session
+  while the first was still closing. A click now only shows that tab until
+  the old session has finished closing (usually under a second, at most about
+  six seconds); click again to connect.
+  ([#46](https://github.com/wynandt/gliff-win/issues/46))
 - A key pressed while the keyboard hook was too slow could reach the remote
   as down, up, then down again, and stay held there. The slow hook call now
   drops a key the window has already sent.

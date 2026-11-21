@@ -198,10 +198,12 @@ fn commands_become_calls_on_the_tabs() {
     let first = tabs.iter().next().expect("a tab").id();
     let second = tabs.iter().nth(1).expect("a tab").id();
     assert_eq!(tabs.tab(second).expect("tab").status(), &Status::Connecting);
+    let old = tabs.tab(second).expect("tab").session().expect("a session");
 
     let effects = run(Command::Disconnect, second, &mut tabs);
     assert!(effects.contains(&Effect::Persist));
     assert_eq!(tabs.tab(second).expect("tab").status(), &Status::Stopped);
+    tabs.closed(old);
 
     let effects = run(Command::Connect, second, &mut tabs);
     assert!(

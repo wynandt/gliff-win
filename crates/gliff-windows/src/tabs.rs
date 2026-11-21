@@ -10,7 +10,9 @@
 //! Two ids are kept apart on purpose. A [`TabId`] is a place in the strip and
 //! lives as long as the tab. A [`SessionId`] names one connection attempt and
 //! is never reused, so an event from a session that was stopped (a late
-//! `ended`, a late `connected`) finds no tab and does nothing.
+//! `ended`, a late `connected`) finds no tab and does nothing. Stop keeps
+//! that session id until [`Tabs::closed`] reports the runner joined it, or
+//! stopped waiting for it. While a tab is closing it starts no session.
 //!
 //! The order of the effects of a switch is part of the contract. The input
 //! route moves to the new session *first*, so no key reaches the old session
@@ -198,6 +200,10 @@ struct Tab {
     id: TabId,
     target: HostTarget,
     session: Option<SessionId>,
+    /// The session stop told to leave, until the runner joined it, or stopped
+    /// waiting for it. While set, the tab starts no session. A closing tab
+    /// has no session.
+    closing: Option<SessionId>,
     status: Status,
     /// Retries so far and uptime ([`crate::reconnect`]).
     backoff: Backoff,
@@ -389,7 +395,8 @@ impl Tabs {
     /// (stopped, gave up, or waiting to retry). A click on the shown, running tab does
     /// nothing. A tab that failed for a reason the person has to fix (a key,
     /// a host key, a missing or old server) is only shown: starting it would
-    /// fail the same way and hide the explanation behind "connecting". The
+    /// fail the same way and hide the explanation behind "connecting". A tab
+    /// whose previous session is still closing is only shown too. The
     /// failure panel's "Try again" is [`Tabs::reconnect`].
     pub fn click(&mut self, id: TabId) -> Vec<Effect> {
         let mut effects = Vec::new();
@@ -399,6 +406,7 @@ impl Tabs {
 
     /// Starts a new session for a tab that has none, at once, and shows it:
     /// "Try again" on the failure panel and "Reconnect" in the tab menu.
+    /// A tab whose previous session is still closing starts nothing.
     pub fn reconnect(&mut self, id: TabId) -> Vec<Effect> {
         let mut effects = Vec::new();
         self.start_into(id, &mut effects);
@@ -559,6 +567,17 @@ impl Tabs {
         effects
     }
 
+    /// Clears `closing` on the tab that holds `session`: the runner joined
+    /// it, or stopped waiting for it. Any other id, or a second call, does
+    /// nothing.
+    pub fn closed(&mut self, session: SessionId) {
+        for tab in &mut self.tabs {
+            if tab.closing == Some(session) {
+                tab.closing = None;
+            }
+        }
+    }
+
     /// The button on a stopped tab: remove the tab (stopping it first).
     pub fn forget(&mut self, id: TabId) -> Vec<Effect> {
         let Some(index) = self.find(id) else {
@@ -618,6 +637,7 @@ impl Tabs {
             id,
             target,
             session: None,
+            closing: None,
             status: Status::Stopped,
             backoff: Backoff::default(),
             known,
@@ -673,7 +693,10 @@ impl Tabs {
             return;
         };
         let old = self.shown_session();
-        if self.tabs[index].is_running() || self.tabs[index].needs_the_person() {
+        if self.tabs[index].is_running()
+            || self.tabs[index].needs_the_person()
+            || self.tabs[index].closing.is_some()
+        {
             if self.shown != Some(id) {
                 self.show(old, id, effects);
                 effects.push(Effect::Persist);
@@ -683,13 +706,13 @@ impl Tabs {
         self.start_into(id, effects);
     }
 
-    /// Starts a tab that has no session and shows it. A tab with a session
-    /// is left as it is.
+    /// Starts a tab that has no session and shows it. A tab with a session,
+    /// or one whose previous session is still closing, is left as it is.
     fn start_into(&mut self, id: TabId, effects: &mut Vec<Effect>) {
         let Some(index) = self.find(id) else {
             return;
         };
-        if self.tabs[index].is_running() {
+        if self.tabs[index].is_running() || self.tabs[index].closing.is_some() {
             return;
         }
         let old = self.shown_session();
@@ -711,10 +734,11 @@ impl Tabs {
         let Some(index) = self.find(id) else {
             return;
         };
-        if !self.tabs[index].is_running() {
-            effects.push(self.begin(index, Cause::User));
-            effects.push(Effect::Persist);
+        if self.tabs[index].is_running() || self.tabs[index].closing.is_some() {
+            return;
         }
+        effects.push(self.begin(index, Cause::User));
+        effects.push(Effect::Persist);
     }
 
     fn tab_for(&mut self, target: &HostTarget) -> TabId {
@@ -774,6 +798,7 @@ impl Tabs {
         }
         let tab = &mut self.tabs[index];
         tab.session = None;
+        tab.closing = Some(session);
         tab.record_pending = false;
         effects.push(Effect::ClipGone(session));
         effects.push(Effect::Stop(session));
