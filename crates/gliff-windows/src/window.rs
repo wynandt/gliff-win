@@ -14,6 +14,8 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
 use std::time::Duration;
 use std::time::Instant;
 
@@ -100,6 +102,9 @@ use crate::config::ConfigFile;
 use crate::connect::Button;
 use crate::cursor::RemoteCursor;
 use crate::cursor_image::Desktop;
+use crate::end_log::ClientExit;
+use crate::end_log::client_exit_line;
+use crate::end_log::run_tally;
 use crate::failure_panel;
 use crate::failure_panel::Action as PanelAction;
 use crate::fullscreen::Fullscreen;
@@ -187,6 +192,8 @@ const TIMER_RETRY: usize = 6;
 const MODAL_TICK: Duration = Duration::from_millis(16);
 /// How long a closing window waits for the session's Bye.
 const CLOSE_WAIT: Duration = Duration::from_secs(3);
+/// `WM_ENDSESSION` can arrive more than once. The exit line is written once.
+static WINDOWS_ENDING_LOGGED: AtomicBool = AtomicBool::new(false);
 /// How often the stats file is rewritten.
 pub const STATS_EVERY: Duration = Duration::from_secs(1);
 
@@ -343,6 +350,8 @@ pub struct App {
     /// `WM_CLOSE` sent Bye to every session; the window goes when they are
     /// over or the close timer fires.
     closing: bool,
+    /// Why the window is closing, once a close or a destroy has been seen.
+    close_cause: Option<ClientExit>,
     title: String,
     /// What the strip last told the grab about typing, and when the retry
     /// timer was last set for: the window works through both on every pass
@@ -405,6 +414,7 @@ impl App {
             ready: false,
             modal: None,
             closing: false,
+            close_cause: None,
             title: "gliff".to_owned(),
             typing_sent: Last::new(),
             retry_armed: Last::new(),
@@ -1300,6 +1310,7 @@ impl App {
         if self.closing {
             return;
         }
+        self.close_cause = Some(ClientExit::WindowClosed { waited_out: false });
         if self.set.running() == 0 {
             self.destroy();
             return;
@@ -1512,9 +1523,9 @@ impl App {
         self.screen.borrow().clone()
     }
 
-    /// After the loop: wait for every session, write the last stats file
-    /// and pick the exit code (0 only when every session ended with Bye and
-    /// ssh exit 0, and none failed to start).
+    /// After the loop: wait for every session, write the last stats file,
+    /// write the client exit line, and pick the exit code (0 only when
+    /// every session ended with Bye and ssh exit 0, and none failed to start).
     pub fn finish(mut self) -> std::process::ExitCode {
         self.begin_closing();
         let sessions = session_entries(&self.set.reports(), &self.tabs, |id| {
@@ -1531,12 +1542,14 @@ impl App {
             crate::logging::line(&format!("final stats write failed: {e}"));
         }
         let ends: Vec<_> = self.finals.iter().map(|(_, end)| end.clone()).collect();
-        let clean = crate::session::driver::run_was_clean(self.start_failures, &ends);
-        if clean {
-            std::process::ExitCode::SUCCESS
-        } else {
-            std::process::ExitCode::from(1)
-        }
+        let code = u8::from(!crate::session::driver::run_was_clean(
+            self.start_failures,
+            &ends,
+        ));
+        let tally = run_tally(self.start_failures, &ends);
+        let cause = self.close_cause.take().unwrap_or(ClientExit::WindowGone);
+        crate::logging::line(&client_exit_line(&cause, Some(code), Some(tally)));
+        std::process::ExitCode::from(code)
     }
 
     /// One message. `None` sends it on to `DefWindowProcW` (with no
@@ -1604,6 +1617,7 @@ impl App {
                     TIMER_SETTLE => self.on_settle_timer(),
                     TIMER_MODAL => self.on_modal_tick(),
                     TIMER_CLOSE => {
+                        self.close_cause = Some(ClientExit::WindowClosed { waited_out: true });
                         crate::logging::line("close: no Bye within 3 s");
                         self.destroy();
                     }
@@ -1665,6 +1679,9 @@ impl App {
     }
 
     fn on_destroy(&mut self) {
+        if self.close_cause.is_none() {
+            self.close_cause = Some(ClientExit::WindowGone);
+        }
         self.input.shutdown();
         self.kill_timer(TIMER_GRAB);
         self.kill_timer(TIMER_STATS);
@@ -1768,6 +1785,10 @@ const LPARAM_KEY_REPEAT: isize = 1 << 30;
 
 /// The window procedure.
 pub extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+    if msg == WM_ENDSESSION && wparam.0 != 0 && !WINDOWS_ENDING_LOGGED.swap(true, Ordering::Relaxed)
+    {
+        crate::logging::line(&client_exit_line(&ClientExit::WindowsEnding, None, None));
+    }
     if matches!(
         msg,
         WM_LBUTTONDOWN | WM_RBUTTONDOWN | WM_MBUTTONDOWN | WM_XBUTTONDOWN
