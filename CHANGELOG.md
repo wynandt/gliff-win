@@ -7,6 +7,24 @@ release, see [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
 ## [Unreleased]
 
+## [0.4.0]
+
+- The client log now says why each session and the client ended. Each
+  session that ends gets one line with the reason (the client said Bye, the
+  server sent an error, the server is incompatible, the link was lost, or ssh
+  failed) and ssh's exit code. After an ssh error the line also has the last
+  lines ssh printed: at most 6 lines of 200 characters. One more line says
+  why the client exited (the window was closed, Windows is signing out or
+  shutting down, another client was already running, or an error), with the
+  exit code and how many sessions ended cleanly. Before any of this text goes
+  in the log, file paths, host key fingerprints, key text, long hex digests,
+  private key blocks and the values of password, token and secret settings
+  are hidden, and control and invisible characters are removed. The client
+  reads ssh's stderr file only when it is a plain file with one name. A
+  symbolic link, junction, folder or hard link in its place is not read, and
+  the line says "(not read: the file is not a plain file)". See the README
+  section "Why a session or the client ended".
+  ([#2](https://github.com/wynandt/gliff-win/issues/2))
 - Clicking a tab just after disconnecting it could start a second session
   while the first was still closing. A click now only shows that tab until
   the old session has finished closing (usually under a second, at most about

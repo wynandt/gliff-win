@@ -16,6 +16,7 @@ point separately.
 - [Clipboard](clipboard.md): text, pictures and files in both directions.
 - [Settings](settings.md): flags, config file, connection settings, `--print-settings`.
 - [Stats](stats.md): graph toggle, live/idle metrics, JSON sample.
+- [End log](end-log.md): the session end and client exit lines, hidden secrets.
 
 A configured authorized server, SSH trust and an unlocked disposable Windows
 session are preconditions, not things these recipes may silently create.
