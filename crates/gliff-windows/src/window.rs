@@ -590,15 +590,6 @@ impl App {
 
     /// A session is over and joined: keep how it ended, drop its view.
     fn on_session_over(&mut self, session: SessionId, end: SessionEnd) {
-        for error in &end.errors {
-            crate::logging::line(&format!("session {}: error: {error}", session.get()));
-        }
-        crate::logging::line(&format!(
-            "session {}: over: {:?}, ssh exit {:?}",
-            session.get(),
-            end.reason,
-            end.ssh_exit
-        ));
         self.views.remove(&session);
         if self.shown == Some(session) {
             self.shown = None;

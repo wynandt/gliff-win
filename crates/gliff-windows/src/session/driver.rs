@@ -131,6 +131,8 @@ pub struct SessionHandle {
     slot: Arc<FrameSlot>,
     stats: Arc<Mutex<SessionStats>>,
     thread: Option<std::thread::JoinHandle<SessionEnd>>,
+    /// [`SshSpec::log_tag`](crate::ssh::SshSpec::log_tag) for the end line.
+    tag: Option<u32>,
 }
 
 impl SessionHandle {
@@ -168,8 +170,8 @@ impl SessionHandle {
             .is_none_or(std::thread::JoinHandle::is_finished)
     }
 
-    /// Waits for the thread: send [`UiCmd::Bye`] first, or this waits for
-    /// the server to end the session.
+    /// Waits for the thread and writes the session end line. Send
+    /// [`UiCmd::Bye`] first, or this waits for the server to end the session.
     pub fn join(mut self) -> SessionEnd {
         let stats = self.stats();
         let end = match self.thread.take().map(std::thread::JoinHandle::join) {
@@ -191,10 +193,23 @@ impl SessionHandle {
                 stderr_log: None,
             },
         };
-        SessionEnd {
+        let end = SessionEnd {
             slot_dropped: self.slot.dropped(),
             ..end
-        }
+        };
+        let tail = if end.ssh_exit == Some(0) {
+            None
+        } else {
+            end.stderr_log
+                .as_deref()
+                .and_then(crate::end_log::read_stderr_tail)
+        };
+        crate::logging::line(&crate::end_log::session_end_line(
+            self.tag,
+            &end,
+            tail.as_deref(),
+        ));
+        end
     }
 }
 
@@ -216,6 +231,7 @@ pub fn start_with_clipboard(
     let (event_tx, events) = std::sync::mpsc::channel();
     let slot = Arc::new(FrameSlot::default());
     let stats = Arc::new(Mutex::new(SessionStats::default()));
+    let tag = opts.spec.log_tag;
     let thread = std::thread::Builder::new()
         .name("gliff-session".to_owned())
         .spawn({
@@ -242,6 +258,7 @@ pub fn start_with_clipboard(
         slot,
         stats,
         thread: Some(thread),
+        tag,
     })
 }
 
