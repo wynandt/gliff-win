@@ -11,7 +11,7 @@ use std::io::SeekFrom;
 use std::path::Path;
 
 use crate::connect::diag::hide_paths;
-use crate::connect::diag::sanitize;
+use crate::connect::diag::is_invisible_format;
 use crate::session::EndReason;
 use crate::session::driver::SessionEnd;
 use crate::session::driver::session_name;
@@ -155,35 +155,75 @@ fn reason_text(reason: Option<&EndReason>) -> String {
     }
 }
 
-/// `text` with control characters removed, so it cannot break a log line.
-fn one_line(text: &str) -> String {
-    text.chars().filter(|c| !c.is_control()).collect()
+/// `text` as one log line that is safe to share: [`scrub`] at
+/// [`FREE_TEXT_MAX`] characters. Server and link text can carry the same
+/// secrets as ssh's own output, so it gets the same treatment.
+pub fn one_line(text: &str) -> String {
+    scrub(text, FREE_TEXT_MAX)
 }
 
 /// Non-blank lines of an ssh stderr file kept on one session line.
 const TAIL_LINES: usize = 6;
+/// The most characters kept of one stderr line.
+const TAIL_LINE_MAX: usize = 200;
+/// The most characters kept of one server, link or error text.
+const FREE_TEXT_MAX: usize = 512;
 /// Bytes read from the end of an ssh stderr file.
 const STDERR_TAIL_BYTES: u64 = 16 * 1024;
 /// A run of base64 characters this long is key text and is not logged.
 const HIDDEN_RUN: usize = 40;
+/// A run of hex digits this long is a digest or a token.
+const HIDDEN_HEX_RUN: usize = 32;
+/// Colon-separated hex pairs this many or more are a fingerprint.
+const HIDDEN_HEX_PAIRS: usize = 8;
+/// What a private key block becomes.
+const PRIVATE_KEY_HIDDEN: &str = "(private key hidden)";
+/// Fingerprint prefixes, matched without regard to case.
+const DIGEST_PREFIXES: [&str; 5] = ["sha1:", "sha256:", "sha384:", "sha512:", "md5:"];
+/// Words that name a secret in `name=value` or `name: value`.
+const SECRET_NAMES: [&str; 8] = [
+    "pass",
+    "pwd",
+    "token",
+    "secret",
+    "auth",
+    "cookie",
+    "credential",
+    "apikey",
+];
 
 /// The last [`TAIL_LINES`] non-blank lines of `text`, each at most 200
 /// characters, joined by ` | `.
 ///
-/// File paths become `(a file)`. A `SHA256:` or `MD5:` fingerprint becomes
-/// `SHA256:(hidden)` or `MD5:(hidden)`. A run of 40 or more base64
-/// characters becomes `(hidden)`. `None` when nothing is left.
+/// A private key block becomes `(private key hidden)`. Each line is then
+/// [`scrub`]bed before it is cut, so a cut never leaves part of a secret.
+/// `None` when nothing is left.
 pub fn stderr_tail(text: &str) -> Option<String> {
-    let mut lines: Vec<&str> = text
-        .lines()
-        .filter(|line| !line.trim().is_empty())
-        .collect();
+    let mut lines: Vec<&str> = Vec::new();
+    let mut in_key = false;
+    for line in text.lines().filter(|line| !line.trim().is_empty()) {
+        let upper = line.to_ascii_uppercase();
+        let marker = upper.contains("PRIVATE KEY");
+        if marker && upper.contains("BEGIN") {
+            in_key = true;
+        }
+        if in_key {
+            if lines.last() != Some(&PRIVATE_KEY_HIDDEN) {
+                lines.push(PRIVATE_KEY_HIDDEN);
+            }
+            if marker && upper.contains("END") {
+                in_key = false;
+            }
+            continue;
+        }
+        lines.push(line);
+    }
     if lines.len() > TAIL_LINES {
         lines.drain(..lines.len() - TAIL_LINES);
     }
     let kept: Vec<String> = lines
         .into_iter()
-        .map(redact_stderr_line)
+        .map(|line| scrub(line, TAIL_LINE_MAX))
         .filter(|line| !line.is_empty())
         .collect();
     if kept.is_empty() {
@@ -193,83 +233,185 @@ pub fn stderr_tail(text: &str) -> Option<String> {
     }
 }
 
-fn redact_stderr_line(line: &str) -> String {
-    let clean = sanitize(line);
-    let marked = redact_prefix(&clean, "SHA256:", b64_body_len);
-    let marked = redact_prefix(&marked, "MD5:", md5_body_len);
-    hide_paths(&redact_base64_runs(&marked))
+/// One line safe to share, at most `max` characters: control and invisible
+/// format characters removed, then fingerprints, key text, hex digests,
+/// secret values and file paths hidden, and only then cut.
+fn scrub(text: &str, max: usize) -> String {
+    let clean: String = text
+        .chars()
+        .filter(|c| !c.is_control() && !is_invisible_format(*c))
+        .collect();
+    let hidden = redact_private_keys(clean.trim());
+    let hidden = redact_digest_prefixes(&hidden);
+    let hidden = redact_runs(&hidden, |c| c.is_ascii_hexdigit() || c == ':', is_hex_pairs);
+    let hidden = redact_runs(&hidden, is_b64, |run| {
+        run.len() >= HIDDEN_RUN
+            || (run.len() >= HIDDEN_HEX_RUN && run.chars().all(|c| c.is_ascii_hexdigit()))
+    });
+    let hidden = hide_paths(&redact_secrets(&hidden));
+    match hidden.char_indices().nth(max) {
+        Some((cut, _)) => format!("{}...", &hidden[..cut]),
+        None => hidden,
+    }
+}
+
+/// A private key block inside one line (a server text whose line breaks
+/// were replaced) becomes [`PRIVATE_KEY_HIDDEN`], from its `BEGIN` marker to
+/// its `END` marker, or to the end of the text when there is none.
+fn redact_private_keys(text: &str) -> String {
+    let mut out = String::new();
+    let mut rest = text;
+    loop {
+        let upper = rest.to_ascii_uppercase();
+        let Some(key) = upper.find("PRIVATE KEY") else {
+            break;
+        };
+        let Some(begin) = upper[..key].rfind("BEGIN") else {
+            out.push_str(&rest[..key + "PRIVATE KEY".len()]);
+            rest = &rest[key + "PRIVATE KEY".len()..];
+            continue;
+        };
+        let start = upper[..begin].trim_end_matches('-').len();
+        out.push_str(&rest[..start]);
+        out.push_str(PRIVATE_KEY_HIDDEN);
+        let after = key + "PRIVATE KEY".len();
+        rest = match upper[after..].find("END") {
+            Some(end) => match upper[after + end..].find("PRIVATE KEY") {
+                Some(close) => {
+                    let close = after + end + close + "PRIVATE KEY".len();
+                    let dashes = rest[close..].len() - rest[close..].trim_start_matches('-').len();
+                    &rest[close + dashes..]
+                }
+                None => "",
+            },
+            None => "",
+        };
+    }
+    out.push_str(rest);
+    out
 }
 
 fn is_b64(c: char) -> bool {
-    c.is_ascii_alphanumeric() || matches!(c, '+' | '/' | '=')
+    c.is_ascii_alphanumeric() || matches!(c, '+' | '/' | '=' | '-' | '_')
 }
 
-/// How many leading base64 characters `chars` has, when it has at least one.
-fn b64_body_len(chars: &[char]) -> Option<usize> {
-    let n = chars.iter().take_while(|c| is_b64(**c)).count();
-    (n >= 1).then_some(n)
+/// `hh:hh:...` with at least [`HIDDEN_HEX_PAIRS`] pairs.
+fn is_hex_pairs(run: &str) -> bool {
+    let pairs: Vec<&str> = run.split(':').collect();
+    pairs.len() >= HIDDEN_HEX_PAIRS && pairs.iter().all(|pair| pair.len() == 2)
 }
 
-fn hex2(chars: &[char], at: usize) -> bool {
-    chars.get(at).is_some_and(|c| c.is_ascii_hexdigit())
-        && chars.get(at + 1).is_some_and(|c| c.is_ascii_hexdigit())
-}
-
-/// Length of `hh(:hh)+` at the start of `chars`.
-fn md5_body_len(chars: &[char]) -> Option<usize> {
-    if !hex2(chars, 0) {
-        return None;
-    }
-    let mut i = 2;
-    let mut pairs = 1;
-    while chars.get(i) == Some(&':') && hex2(chars, i + 1) {
-        i += 3;
-        pairs += 1;
-    }
-    (pairs >= 2).then_some(i)
-}
-
-fn redact_prefix(line: &str, prefix: &str, body_len: fn(&[char]) -> Option<usize>) -> String {
-    let chars: Vec<char> = line.chars().collect();
-    let prefix: Vec<char> = prefix.chars().collect();
+/// `SHA256:<anything fingerprint-like>` and the other prefixes, any case,
+/// become `<prefix>(hidden)`.
+fn redact_digest_prefixes(line: &str) -> String {
+    let lower = line.to_ascii_lowercase();
     let mut out = String::new();
     let mut i = 0;
-    while i < chars.len() {
-        if chars[i..].starts_with(&prefix)
-            && let Some(n) = body_len(&chars[i + prefix.len()..])
-        {
-            out.extend(prefix.iter().copied());
+    while i < line.len() {
+        let hit = DIGEST_PREFIXES.iter().find(|p| lower[i..].starts_with(*p));
+        if let Some(prefix) = hit {
+            let body = line[i + prefix.len()..]
+                .find(|c: char| !(is_b64(c) || c == ':'))
+                .unwrap_or(line.len() - i - prefix.len());
+            if body > 0 {
+                out.push_str(&line[i..i + prefix.len()]);
+                out.push_str("(hidden)");
+                i += prefix.len() + body;
+                continue;
+            }
+        }
+        let c = line[i..]
+            .chars()
+            .next()
+            .expect("i is a char boundary below len");
+        out.push(c);
+        i += c.len_utf8();
+    }
+    out
+}
+
+/// Every maximal run of `in_run` characters for which `hide` holds becomes
+/// `(hidden)`.
+fn redact_runs(line: &str, in_run: impl Fn(char) -> bool, hide: impl Fn(&str) -> bool) -> String {
+    let mut out = String::new();
+    let mut run = String::new();
+    let flush = |run: &mut String, out: &mut String| {
+        if hide(run) {
             out.push_str("(hidden)");
-            i += prefix.len() + n;
+        } else {
+            out.push_str(run);
+        }
+        run.clear();
+    };
+    for c in line.chars() {
+        if in_run(c) {
+            run.push(c);
+        } else {
+            flush(&mut run, &mut out);
+            out.push(c);
+        }
+    }
+    flush(&mut run, &mut out);
+    out
+}
+
+/// Hides the value of `name=value`, `name: value` and `name = value` when
+/// the name looks like a secret, the word after `Bearer`, `Basic`,
+/// `password`, `passphrase`, `token`, `secret` or `apikey`, and
+/// everything after ` = ` in ssh's `setting env NAME = value`.
+fn redact_secrets(line: &str) -> String {
+    if let Some(at) = line.find(" env ")
+        && let Some(eq) = line[at..].find(" = ")
+    {
+        return format!("{} = (hidden)", &line[..at + eq]);
+    }
+    let words: Vec<&str> = line.split_whitespace().collect();
+    let mut out: Vec<String> = Vec::with_capacity(words.len());
+    let mut hide_next = false;
+    for word in words {
+        let bare = word.trim_start_matches(|c: char| !c.is_ascii_alphanumeric());
+        let lower = bare.to_ascii_lowercase();
+        let named = lower.trim_end_matches(|c: char| !c.is_ascii_alphanumeric());
+        if matches!(named, "bearer" | "basic") {
+            out.push(word.to_owned());
+            hide_next = true;
             continue;
         }
-        out.push(chars[i]);
-        i += 1;
-    }
-    out
-}
-
-fn redact_base64_runs(line: &str) -> String {
-    let chars: Vec<char> = line.chars().collect();
-    let mut out = String::new();
-    let mut i = 0;
-    while i < chars.len() {
-        if is_b64(chars[i]) {
-            let start = i;
-            while i < chars.len() && is_b64(chars[i]) {
-                i += 1;
+        if hide_next && word != "=" {
+            out.push("(hidden)".to_owned());
+            hide_next = false;
+            continue;
+        }
+        if matches!(
+            named,
+            "password" | "passphrase" | "token" | "secret" | "apikey"
+        ) {
+            out.push(word.to_owned());
+            hide_next = true;
+            continue;
+        }
+        match word.find(['=', ':']) {
+            Some(sep) if names_a_secret(&word[..sep]) => {
+                let value = &word[sep + 1..];
+                if value.is_empty() {
+                    hide_next = true;
+                    out.push(word.to_owned());
+                } else {
+                    out.push(format!("{}(hidden)", &word[..=sep]));
+                }
             }
-            if i - start >= HIDDEN_RUN {
-                out.push_str("(hidden)");
-            } else {
-                out.extend(chars[start..i].iter().copied());
-            }
-        } else {
-            out.push(chars[i]);
-            i += 1;
+            _ => out.push(word.to_owned()),
+        }
+        if word == "=" && out.len() >= 2 && names_a_secret(&out[out.len() - 2]) {
+            hide_next = true;
         }
     }
-    out
+    out.join(" ")
+}
+
+fn names_a_secret(name: &str) -> bool {
+    let lower = name.to_ascii_lowercase().replace(['_', '-'], "");
+    SECRET_NAMES.iter().any(|secret| lower.contains(secret))
 }
 
 /// [`stderr_tail`] of at most the last [`STDERR_TAIL_BYTES`] of `path`.
@@ -279,8 +421,12 @@ fn redact_base64_runs(line: &str) -> String {
 /// partial first line is dropped. `None` when the file cannot be read or
 /// nothing is left.
 pub fn read_stderr_tail(path: &Path) -> Option<String> {
-    let mut file = File::open(path).ok()?;
-    let len = file.metadata().ok()?.len();
+    let mut file = open_no_follow(path)?;
+    let meta = file.metadata().ok()?;
+    if !meta.is_file() {
+        return None;
+    }
+    let len = meta.len();
     let start = len.saturating_sub(STDERR_TAIL_BYTES);
     let drop_partial = start > 0 && !previous_byte_is_newline(&mut file, start)?;
     file.seek(SeekFrom::Start(start)).ok()?;
@@ -296,6 +442,35 @@ pub fn read_stderr_tail(path: &Path) -> Option<String> {
         text.as_ref()
     };
     stderr_tail(text)
+}
+
+/// Opens `path` for reading, but not through a link: a symlink or junction
+/// planted in place of the stderr file (in a shared `--log-dir`) would copy
+/// the tail of whatever it points at into the log.
+fn open_no_follow(path: &Path) -> Option<File> {
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        /// `FILE_FLAG_OPEN_REPARSE_POINT`: open the link itself.
+        const OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+        let file = std::fs::OpenOptions::new()
+            .read(true)
+            .custom_flags(OPEN_REPARSE_POINT)
+            .open(path)
+            .ok()?;
+        (!file.metadata().ok()?.file_type().is_symlink()).then_some(file)
+    }
+    #[cfg(not(windows))]
+    {
+        if std::fs::symlink_metadata(path)
+            .ok()?
+            .file_type()
+            .is_symlink()
+        {
+            return None;
+        }
+        File::open(path).ok()
+    }
 }
 
 fn previous_byte_is_newline(file: &mut File, start: u64) -> Option<bool> {

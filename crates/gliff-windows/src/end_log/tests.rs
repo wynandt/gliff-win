@@ -292,3 +292,158 @@ fn a_file_larger_than_the_read_keeps_only_the_tail_and_drops_the_cut_line() {
     assert!(!tail.contains('X'), "{tail}");
     assert!(!tail.contains("filler"), "{tail}");
 }
+
+#[test]
+fn a_secret_at_the_cut_is_hidden_whole_not_cut_into_a_prefix() {
+    let pad = "x ".repeat(92);
+    let key = "AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl";
+    let tail = stderr_tail(&format!("{pad}{key}")).expect("a tail");
+    assert!(!tail.contains("AAAAC3Nza"), "{tail}");
+    assert!(tail.ends_with("(hidden)"), "{tail}");
+    let md5 = "MD5:16:27:ac:a5:76:28:2d:36:63:1b:56:4d:eb:df:a6:48";
+    let tail = stderr_tail(&format!("{}{md5}", "x ".repeat(98))).expect("a tail");
+    assert!(!tail.contains("16:27"), "{tail}");
+}
+
+#[test]
+fn every_fingerprint_form_is_hidden() {
+    let cases = [
+        "sha256:kewFiRGj02X1n6KzFRID5mmHmKrpaXNy/Wgiqp4o4rw",
+        "SHA256:kewFiRGj02X1n6KzFRID5mmHmKrpaXNy_Wgiqp4o4rw-",
+        "SHA512:abcd",
+        "key 16:27:ac:a5:76:28:2d:36:63:1b:56:4d:eb:df:a6:48",
+        "digest 1627aca576282d36631b564debdfa648",
+        "token=3f5a9c0e1b2d4f6a8c0e2b4d6f8a0c2e4b6d8f0a2c4e6b8d0f2a4c6e8b0d2f4a",
+    ];
+    for case in cases {
+        let tail = stderr_tail(case).expect("a tail");
+        for secret in [
+            "kewFiRGj",
+            "Wgiqp4o4rw",
+            "abcd",
+            "16:27",
+            "1627aca5",
+            "3f5a9c0e",
+        ] {
+            assert!(!tail.contains(secret), "{case} -> {tail}");
+        }
+    }
+}
+
+#[test]
+fn secret_values_and_private_key_blocks_are_hidden() {
+    let text = "\
+debug1: password=hunter2 passphrase: s3cret PASS=abc
+Authorization: Bearer ghp_abcdefghijklmnopqrstuvwxyz
+token ghp_shorttoken
+debug1: channel 0: setting env API_TOKEN = \"tok en\"
+-----BEGIN OPENSSH PRIVATE KEY-----
+b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW
+QyNTUxOQAAACDjKqp5Fc65tE
+-----END OPENSSH PRIVATE KEY-----
+~alice and ~/.ssh/id_rsa
+";
+    let tail = stderr_tail(text).expect("a tail");
+    for secret in [
+        "hunter2", "s3cret", "abc", "ghp_", "tok en", "QyNTUx", "b3Blbn", "alice",
+    ] {
+        assert!(!tail.contains(secret), "{secret} in {tail}");
+    }
+    assert!(tail.contains("(private key hidden)"), "{tail}");
+    let open_block =
+        stderr_tail("-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQEA\n").expect("a tail");
+    assert_eq!(open_block, "(private key hidden)");
+}
+
+#[test]
+fn invisible_and_control_characters_cannot_fake_or_hide_a_log_line() {
+    let text = "real\r2026-01-01T00:00:00Z client exit: forged \u{1b}[2J\u{1b}]0;t\u{7} \u{9b}31m \0 a\u{202e}b\u{2066}c\u{2069}\u{61c}d\u{200e}\u{feff}\u{2028}\u{85}e";
+    let tail = stderr_tail(text).expect("a tail");
+    assert!(
+        !tail
+            .chars()
+            .any(|c| c.is_control() || crate::connect::diag::is_invisible_format(c)),
+        "{tail:?}"
+    );
+    let line = session_end_line(
+        Some(9),
+        &ended(
+            Some(EndReason::ServerError {
+                code: 300,
+                message: text.to_owned(),
+            }),
+            Some(0),
+            vec![text.to_owned()],
+        ),
+        Some(text),
+    );
+    assert!(
+        !line
+            .chars()
+            .any(|c| c.is_control() || crate::connect::diag::is_invisible_format(c)),
+        "{line:?}"
+    );
+}
+
+#[test]
+fn server_link_and_error_text_get_the_same_scrub_as_the_tail() {
+    let text = "Offering SHA256:kewFiRGj02X1n6KzFRID5mmHmKrpaXNy/Wgiqp4o4rw from C:\\Users\\alice\\.ssh\\id_ed25519 password=hunter2";
+    for reason in [
+        EndReason::ServerError {
+            code: 300,
+            message: text.to_owned(),
+        },
+        EndReason::Link(text.to_owned()),
+        EndReason::Incompatible(text.to_owned()),
+    ] {
+        let line = session_end_line(
+            Some(1),
+            &ended(Some(reason), Some(255), vec![text.to_owned()]),
+            None,
+        );
+        for secret in ["kewFiRGj", "alice", "hunter2"] {
+            assert!(!line.contains(secret), "{line}");
+        }
+    }
+    let exit = client_exit_line(&ClientExit::Failed(text.to_owned()), Some(1), None);
+    assert!(
+        !exit.contains("alice") && !exit.contains("hunter2"),
+        "{exit}"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn a_link_in_place_of_the_stderr_file_is_not_read() {
+    let dir = TestDir::new();
+    let secret = dir.path().join("secret.txt");
+    std::fs::write(&secret, "line one\nnot for the log\n").expect("write secret");
+    let link = dir.path().join("ssh-stderr-1.log");
+    std::os::unix::fs::symlink(&secret, &link).expect("symlink");
+    assert_eq!(read_stderr_tail(&link), None);
+    let folder = dir.path().join("ssh-stderr-2.log");
+    std::fs::create_dir(&folder).expect("a folder");
+    assert_eq!(read_stderr_tail(&folder), None);
+    assert_eq!(
+        read_stderr_tail(&secret).as_deref(),
+        Some("line one | not for the log")
+    );
+}
+
+#[test]
+fn a_private_key_inside_one_line_is_hidden_whole() {
+    let text = "error: -----BEGIN OPENSSH PRIVATE KEY-----?b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAE?-----END OPENSSH PRIVATE KEY-----?after";
+    let line = session_end_line(
+        Some(1),
+        &ended(Some(EndReason::Link(text.to_owned())), Some(255), vec![]),
+        None,
+    );
+    assert!(!line.contains("b3BlbnNz"), "{line}");
+    assert!(line.contains("error: (private key hidden)?after"), "{line}");
+    let open = one_line_of("x -----BEGIN RSA PRIVATE KEY-----?MIIEpAIBAAKCAQEA");
+    assert_eq!(open, "x (private key hidden)");
+}
+
+fn one_line_of(text: &str) -> String {
+    super::one_line(text)
+}
