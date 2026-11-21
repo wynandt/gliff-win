@@ -130,6 +130,25 @@ fn a_click_on_the_shown_running_tab_does_nothing() {
 }
 
 #[test]
+fn a_click_while_the_stopped_session_is_closing_only_shows_the_tab() {
+    let mut tabs = Tabs::new();
+    let a = started(&tabs.open(&host("a@x")));
+    tabs.connected(a, at(0));
+    let b = started(&tabs.open(&host("b@x")));
+    tabs.connected(b, at(0));
+    assert_eq!(status_of(&tabs, "b@x"), Status::Streaming);
+    let hidden = tab_of(&tabs, "a@x");
+    assert_ne!(tabs.shown(), Some(hidden));
+    tabs.stop(hidden);
+    let effects = tabs.click(hidden);
+    assert!(
+        !effects.iter().any(|e| matches!(e, Effect::Start { .. })),
+        "a closing tab starts nothing: {effects:?}"
+    );
+    assert_eq!(tabs.shown(), Some(hidden));
+}
+
+#[test]
 fn a_click_on_a_stopped_tab_starts_it_before_the_route_moves() {
     let mut tabs = three();
     let c = tab_of(&tabs, "c@x");
