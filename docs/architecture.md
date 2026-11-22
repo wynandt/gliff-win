@@ -702,11 +702,13 @@ grab and pointer input (both on the route), and then runs the start effects.
   to `gliff` when that session's first picture after the resync arrives. An
   ended tab's reason wins over a re-sync.
 - **Closing.** The close button (or `WM_CLOSE`) with sessions running sets
-  `closing`, calls `SessionSet::close_all` (a `Bye` to each, without telling
-  the model, so the tabs stay open for the next start) and waits until none
-  runs, or 3 s; with none running it closes at once. The exit code is 0 only
-  when at least one session ran, every session ended with a `Bye` and ssh
-  exit 0, and none failed to start.
+  `closing`, calls `SessionSet::close_all` (a `Bye` to each) and waits until
+  none runs, or 3 s; with none running it closes at once. `close_all` tells
+  the tabs the window is closing and leaves them as they were for the next
+  start: a click, Connect, Reconnect or a retry starts no session and does
+  not change which tab is shown. The exit code is 0 only when at least one
+  session ran, every session ended with a `Bye` and ssh exit 0, and none
+  failed to start.
 - **A second launch** (`single_instance`) sends its targets (or "show") to the
   first as `WM_COPYDATA`; the window opens each target as a tab and brings
   itself to the front.

@@ -95,7 +95,9 @@ the first decoded or displayed picture**. Ended events with obsolete session IDs
 ignored. Manual connection resets retry history; successful user connection records
 history once. Stop retires the session and clears reopen intent; a stopped tab stays
 closing until the runner has joined that session or stopped waiting for it after
-`EXIT_WAIT` plus a second, and starts nothing meanwhile.
+`EXIT_WAIT` plus a second, and starts nothing meanwhile. Once the window is
+closing, a click, connect, reconnect or retry starts nothing and does not
+change which tab is shown.
 Forgetting also removes the tab.
 
 Invariant: stale events cannot mutate a replacement session. Selection can remain on a
@@ -129,8 +131,9 @@ failure back to tabs. `Live --retire / detach route, remove entry, send Bye--> R
 --finished / join--> Reaped`. Polling reconciles Ended events with actual thread
 completion and synthesizes a failure if a thread finishes without an Ended event.
 Poll tells the tabs which sessions it joined or stopped waiting for.
-`close_all` latches closing, removes input routing, retires all, and suppresses due
-retries. Final shutdown joins remaining sessions.
+`close_all` latches closing, tells the tabs the window is closing, removes input
+routing, retires all, and suppresses due retries. A click, connect or retry then
+starts nothing. Final shutdown joins remaining sessions.
 
 Invariant: retiring sessions no longer receive user input, even if their threads still
 exist. Tests use fake links and clipboard sides to exercise effects and reaping.
