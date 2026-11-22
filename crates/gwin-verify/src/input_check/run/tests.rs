@@ -19,6 +19,7 @@ struct Fake {
     stops: usize,
     fail_start: bool,
     fail_act: bool,
+    fail_dismiss: bool,
     log_reads_allowed: Option<usize>,
     log_reads: usize,
     away: bool,
@@ -40,6 +41,9 @@ impl Harness for Fake {
 
     fn act(&mut self, act: &Act) -> anyhow::Result<()> {
         self.acts.push(act.clone());
+        if self.fail_dismiss && matches!(act, Act::Dismiss) {
+            anyhow::bail!("dismiss refused");
+        }
         if self.fail_act && !matches!(act, Act::Dismiss) {
             anyhow::bail!("SendInput refused");
         }
@@ -262,6 +266,29 @@ fn a_risky_chord_with_the_client_not_in_front_trips_the_guard_and_is_dismissed()
         on_pause: vec![vec!["A"]],
         ..Fake::default()
     });
+}
+
+#[test]
+fn a_failed_dismiss_stays_on_the_risky_case() {
+    let mut h = Fake {
+        fail_dismiss: true,
+        on_pause: vec![vec!["A"]],
+        ..Fake::default()
+    };
+    let results = run_cases(&mut h, &[risky("one", &["A"]), case("plain", &[], &[])]);
+    assert_eq!(dismissals(&h), 1, "the risky case is dismissed");
+    assert!(
+        results[0]
+            .reasons
+            .iter()
+            .any(|reason| reason.contains("dismiss refused")),
+        "the dismiss failure stays on the case: {results:?}"
+    );
+    assert!(!results[0].passed(), "the case does not pass");
+    assert!(
+        results[1].passed(),
+        "the next case is not that failure: {results:?}"
+    );
 }
 
 #[test]
