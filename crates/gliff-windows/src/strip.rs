@@ -88,11 +88,24 @@ pub struct Metrics {
     pub bar_inset: i32,
 }
 
+/// The dpi the strip and the fullscreen reveal rule share.
+/// A value below 48 is 48. A value that does not fit in `i32` is 96.
+fn scale_dpi(dpi: u32) -> u32 {
+    let dpi = dpi.max(48);
+    if i32::try_from(dpi).is_ok() { dpi } else { 96 }
+}
+
+/// Device pixels for `logical` pixels at [`scale_dpi`].
+fn device_px(logical: i32, dpi: u32) -> i32 {
+    let dpi = i32::try_from(scale_dpi(dpi)).unwrap_or(96);
+    (logical * dpi + 48) / 96
+}
+
 impl Metrics {
     /// The name font sizes the strip tries, largest first: the full size
     /// down to the floor, one logical pixel at a time.
     pub fn text_sizes(&self) -> Vec<i32> {
-        let px = |logical: i32| (logical * self.dpi as i32 + 48) / 96;
+        let px = |logical: i32| device_px(logical, self.dpi);
         let mut sizes = vec![self.text];
         for logical in (9..13).rev() {
             let size = px(logical).clamp(self.text_floor, self.text);
@@ -106,9 +119,11 @@ impl Metrics {
         sizes
     }
 
+    /// Sizes at `dpi`. A dpi below 48 counts as 48. A dpi that does not fit
+    /// in `i32` counts as 96.
     pub fn at(dpi: u32) -> Self {
-        let dpi = dpi.max(48);
-        let px = |logical: i32| (logical * dpi as i32 + 48) / 96;
+        let dpi = scale_dpi(dpi);
+        let px = |logical: i32| device_px(logical, dpi);
         Metrics {
             dpi,
             strip_height: px(32),

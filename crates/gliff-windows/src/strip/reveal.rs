@@ -21,16 +21,13 @@ pub struct Rule {
     pub height: i32,
 }
 
-/// Logical px to device px.
-fn px_at(logical: i32, dpi: u32) -> i32 {
-    (logical * i32::try_from(dpi).unwrap_or(96) + 48) / 96
-}
-
 impl Rule {
+    /// The edge, the leave margin and `height` at `dpi`, on the strip's scale.
+    /// A dpi below 48 counts as 48. A dpi that does not fit in `i32` counts as 96.
     pub fn at(dpi: u32, height: i32) -> Self {
         Self {
-            edge: px_at(EDGE, dpi),
-            leave: px_at(LEAVE, dpi),
+            edge: super::device_px(EDGE, dpi),
+            leave: super::device_px(LEAVE, dpi),
             height,
         }
     }
