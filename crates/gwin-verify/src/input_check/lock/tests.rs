@@ -733,11 +733,49 @@ fn a_client_that_never_gets_the_foreground_asks_for_no_press_and_is_closed() {
 }
 
 #[test]
-fn a_placement_that_fails_once_and_then_works_leaves_no_reason_behind() {
+fn a_placement_that_fails_once_and_then_works_keeps_the_failed_try() {
     let mut h = Fake::new(None);
     h.focus_errors = 1;
-    let failed = failures(&run(&mut h));
-    assert_eq!(failed, Vec::<String>::new());
+    let results = run(&mut h);
+    let l2 = results
+        .iter()
+        .find(|r| r.name == "L2 launch and grab")
+        .expect("L2");
+    let kept: Vec<_> = l2
+        .reasons
+        .iter()
+        .filter(|r| r.contains("placement failed") && r.contains("was refused"))
+        .collect();
+    assert_eq!(kept.len(), 1, "{:?}", l2.reasons);
+    assert!(
+        l2.reasons
+            .iter()
+            .all(|r| !r.contains("kept losing the foreground")),
+        "{:?}",
+        l2.reasons
+    );
+    for name in [
+        "L3 focused Win+L",
+        "L4 hover only",
+        "L5 blur and leave",
+        "L6 exit paths",
+        "L7 kill",
+        "End",
+    ] {
+        let row = results.iter().find(|r| r.name == name).expect(name);
+        assert!(
+            row.reasons.iter().all(|r| !r.contains("was refused")),
+            "{name}: {:?}",
+            row.reasons
+        );
+        assert!(row.passed(), "{name}: {:?}", row.reasons);
+    }
+    assert_eq!(
+        h.countdowns.len(),
+        3,
+        "the recovered placement still asks for the presses: {:?}",
+        h.countdowns
+    );
 }
 
 #[test]
