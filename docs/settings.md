@@ -21,7 +21,7 @@ The folder holds two files:
 - `config.toml`: the `[settings]` table, and the machine list (`machines`, `open`, `shown`; see below).
 - `recent-hosts.toml`: the recent hosts history, kept apart so that a damaged file in one cannot lose the other.
 
-Logs and the clipboard spool stay under `%LOCALAPPDATA%`. The client keeps the newest 14 daily log files (`gliff-windows-YYYY-MM-DD.log`, each stopping at 4 MiB) and deletes older ones from the log folder when it starts; other files there are left alone. The client never writes the Windows registry for settings or history. Tests and checks pass their own folder, so they never touch a real one.
+Logs and the clipboard spool stay under `%LOCALAPPDATA%`. The client keeps the newest 14 daily log files (`gliff-windows-YYYY-MM-DD.log`, each stopping at 4 MiB) and deletes older ones from the log folder when it starts; other files there are left alone. A panic while one line is being written still leaves the later lines in the file. When the log was never opened, or a write fails, that line is absent and the client continues. The client never writes the Windows registry for settings or history. Tests and checks pass their own folder, so they never touch a real one.
 
 ## What a file does
 

@@ -105,8 +105,9 @@ fn is_log_name(name: &str) -> bool {
         })
 }
 
-/// One line, `<UTC timestamp> <message>`. Silent when [`init`] was not
-/// called or the write fails: logging never stops the client.
+/// One line, `<UTC timestamp> <message>`. A lock left poisoned by a panic
+/// still writes the line. Silent when [`init`] was not called or the write
+/// fails: logging never stops the client.
 pub fn line(message: &str) {
     let Some(log) = LOG.get() else {
         return;
