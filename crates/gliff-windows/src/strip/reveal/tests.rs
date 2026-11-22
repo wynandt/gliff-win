@@ -27,13 +27,24 @@ fn the_trigger_and_the_leave_margin_scale_with_the_display() {
 #[test]
 fn the_reveal_distances_use_the_strip_scale() {
     use crate::strip::Metrics;
-    let cases = [(0, 48), (36, 48), (96, 96), (120, 120), (192, 192), (u32::MAX, 96)];
+    let cases = [
+        (0, 48),
+        (36, 48),
+        (96, 96),
+        (120, 120),
+        (192, 192),
+        (u32::MAX, 96),
+    ];
     for (dpi, scale) in cases {
         let metrics = Metrics::at(dpi);
         let rule = Rule::at(dpi, metrics.strip_height);
         assert_eq!(metrics.dpi, scale, "dpi {dpi}");
         let scale = i32::try_from(scale).expect("scale fits");
-        assert_eq!(metrics.strip_height, (32 * scale + 48) / 96, "dpi {dpi} height");
+        assert_eq!(
+            metrics.strip_height,
+            (32 * scale + 48) / 96,
+            "dpi {dpi} height"
+        );
         assert_eq!(rule.height, metrics.strip_height, "dpi {dpi} rule height");
         assert_eq!(rule.edge, (2 * scale + 48) / 96, "dpi {dpi} edge");
         assert_eq!(rule.leave, (8 * scale + 48) / 96, "dpi {dpi} leave");
