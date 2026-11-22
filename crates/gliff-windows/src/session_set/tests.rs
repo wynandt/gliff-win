@@ -652,6 +652,84 @@ fn a_closing_window_starts_no_retry() {
 }
 
 #[test]
+fn a_click_after_close_all_starts_nothing_when_the_session_has_ended() {
+    let (mut fx, _) = fixture(&["a@x", "b@x"], &TabSet::default());
+    let b = session_of(&fx.tabs, "b@x");
+    let id = fx
+        .tabs
+        .iter()
+        .find(|tab| tab.target().same(&host("b@x")))
+        .expect("the tab")
+        .id();
+    lose(&fx, b);
+    fx.set.poll(&mut fx.tabs);
+    let shown = fx.tabs.shown();
+    let saved = fx.tabs.tab_set();
+    let status = status_of(&fx.tabs, "b@x");
+    fx.set.close_all();
+    for effects in [
+        fx.tabs.click(id),
+        fx.tabs.reconnect(id),
+        fx.tabs.open(&host("b@x")),
+    ] {
+        fx.set.run(&mut fx.tabs, effects);
+    }
+    fx.advance(60_000);
+    let due = fx.tabs.due(fx.clock.get());
+    fx.set.run(&mut fx.tabs, due);
+    assert_eq!(*fx.world.started.borrow(), ["a@x", "b@x"]);
+    assert_eq!(fx.tabs.shown(), shown);
+    assert_eq!(fx.tabs.tab_set(), saved);
+    assert_eq!(status_of(&fx.tabs, "b@x"), status);
+}
+
+#[test]
+fn a_click_after_close_all_starts_nothing_once_a_stopped_tab_may_start_again() {
+    let (mut fx, _) = fixture(&["a@x", "b@x"], &TabSet::default());
+    let id = fx
+        .tabs
+        .iter()
+        .find(|tab| tab.target().same(&host("b@x")))
+        .expect("the tab")
+        .id();
+    let stop = fx.tabs.stop(id);
+    fx.set.run(&mut fx.tabs, stop);
+    fx.advance(8_000);
+    fx.set.poll(&mut fx.tabs);
+    assert_eq!(status_of(&fx.tabs, "b@x"), Status::Stopped);
+    let shown = fx.tabs.shown();
+    let saved = fx.tabs.tab_set();
+    fx.set.close_all();
+    let click = fx.tabs.click(id);
+    fx.set.run(&mut fx.tabs, click);
+    assert_eq!(*fx.world.started.borrow(), ["a@x", "b@x"]);
+    assert_eq!(status_of(&fx.tabs, "b@x"), Status::Stopped);
+    assert_eq!(fx.tabs.shown(), shown);
+    assert_eq!(fx.tabs.tab_set(), saved);
+}
+
+#[test]
+fn a_click_on_a_live_tab_after_close_all_changes_nothing() {
+    let (mut fx, _) = fixture(&["a@x", "b@x"], &TabSet::default());
+    let id = fx
+        .tabs
+        .iter()
+        .find(|tab| tab.target().same(&host("b@x")))
+        .expect("the tab")
+        .id();
+    let shown = fx.tabs.shown();
+    let saved = fx.tabs.tab_set();
+    fx.set.close_all();
+    let click = fx.tabs.click(id);
+    fx.set.run(&mut fx.tabs, click);
+    let switched = fx.tabs.switch(crate::tabs::SwitchTo::Next);
+    fx.set.run(&mut fx.tabs, switched);
+    assert_eq!(*fx.world.started.borrow(), ["a@x", "b@x"]);
+    assert_eq!(fx.tabs.shown(), shown);
+    assert_eq!(fx.tabs.tab_set(), saved);
+}
+
+#[test]
 fn closing_a_tab_while_it_waits_starts_nothing() {
     let (mut fx, _) = fixture(&["a@x", "b@x"], &TabSet::default());
     let b = session_of(&fx.tabs, "b@x");
