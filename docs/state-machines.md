@@ -832,13 +832,17 @@ Receiver<()> }` encode startup races and child/pipe lifetimes.
 
 `Acquire -> first owner`, or `existing owner -> wait for marked window -> synchronous
 bounded WM_COPYDATA handover -> exit`. Window lookup waits up to five seconds. Helper
-execution drains both pipes concurrently, waits until command deadline, kills/reaps on
-timeout, and only waits a bounded grace for inherited pipes after child exit. Each
+execution drains both pipes concurrently and waits until the command deadline. A
+`try_wait` error is reported as a wait error. When the deadline passes while the child
+is still running, the runner kills and reaps it and reports a timeout. After the child
+has exited, the runner waits only a bounded grace for pipes a helper still holds. Each
 reader retains at most 64 KiB while continuing to drain.
 
 Invariant: full output pipes or a descendant retaining stdout must not make
-version/diagnostic helpers wait forever. Runner/single-instance tests exist. Native
-mutex/window transfer requires runtime validation. [Single instance][single-instance];
+version/diagnostic helpers wait forever. A failed wait is reported as a wait error, and
+a deadline that passes while the child is still running is reported as a timeout.
+Runner/single-instance tests exist. Native mutex/window transfer requires runtime
+validation. [Single instance][single-instance];
 [process/pipe runner][runner].
 
 ### Bounded log admission and delayed recovery work

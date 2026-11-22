@@ -91,6 +91,40 @@ fn the_session_and_the_version_check_share_their_ssh_options() {
     );
 }
 
+#[test]
+fn a_try_wait_error_stays_a_wait_error() {
+    struct WaitFails {
+        error: Option<std::io::Error>,
+    }
+
+    impl super::ChildWait for WaitFails {
+        fn try_wait(&mut self) -> std::io::Result<Option<std::process::ExitStatus>> {
+            Err(self.error.take().expect("polled once"))
+        }
+
+        fn kill(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+
+        fn wait(&mut self) -> std::io::Result<std::process::ExitStatus> {
+            Err(std::io::Error::other("the wait already failed"))
+        }
+    }
+
+    let mut child = WaitFails {
+        error: Some(std::io::Error::other("wait failed")),
+    };
+    let deadline = std::time::Instant::now()
+        .checked_sub(std::time::Duration::from_secs(1))
+        .expect("a past deadline");
+    let error = super::wait_until(&mut child, deadline).expect_err("try_wait failed");
+    let super::ToolError::Wait(error) = error else {
+        panic!("a try_wait error stayed a wait error, got {error:?}");
+    };
+    assert_eq!(error.kind(), std::io::ErrorKind::Other);
+    assert_eq!(error.to_string(), "wait failed");
+}
+
 #[cfg(unix)]
 mod real {
     use std::path::Path;

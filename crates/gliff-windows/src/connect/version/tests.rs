@@ -148,6 +148,17 @@ fn a_call_that_does_not_finish_is_a_machine_that_did_not_answer() {
 }
 
 #[test]
+fn a_wait_error_is_not_a_machine_that_did_not_answer() {
+    let tools = Canned::new(Err(ToolError::Wait(std::io::Error::other("wait failed"))));
+    assert_eq!(
+        check_server(&tools, &spec()),
+        Err(SshFailure::Other {
+            last_line: "wait failed".to_owned(),
+        })
+    );
+}
+
+#[test]
 fn a_missing_ssh_program_is_a_missing_client() {
     let gone = std::io::Error::from(std::io::ErrorKind::NotFound);
     let tools = Canned::new(Err(ToolError::Spawn(gone)));
