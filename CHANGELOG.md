@@ -7,6 +7,11 @@ release, see [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
 ## [Unreleased]
 
+- In fullscreen, the distance that shows the strip and the strip's own
+  sizes could use different scales when the display dpi was below 48, or
+  when it did not fit in a signed 32-bit integer. Both use one scale now:
+  a dpi below 48 counts as 48, and a dpi that does not fit counts as 96.
+  ([#66](https://github.com/wynandt/gliff-win/issues/66))
 - A save no longer replaces `config.toml` or `recent-hosts.toml` when the
   last read, just before the rename, cannot read the file. The save fails
   and the file stays, including text that read never copied. A missing file

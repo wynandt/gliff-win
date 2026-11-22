@@ -183,7 +183,8 @@ Each tab shows the machine's full name and a dot:
   and to forget it if it has none (stopped or failed). The dot does the same when you click it.
 - **Too many tabs** for the width? A chevron opens a menu of them.
 - **Fullscreen** hides the strip. Move the pointer to the top edge and it
-  slides in; move away and it slides out.
+  slides in; move away and it slides out. The edge and the margin use the
+  same scale as the strip.
 
 When resizing the remote desktop, returning to an earlier window size still
 requests that final size, even if the remote has not applied the first resize.

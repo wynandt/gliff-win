@@ -479,7 +479,9 @@ of the picture, not above it in the layout, so `height_of` is 0 and the picture
 does not move. `strip::reveal` holds the rule, with no Win32: the strip comes out
 when the pointer is within 2 logical px of the top edge, goes when it is more than
 8 logical px below the strip or has left the window, and stays out while the
-address bar or one of its menus is in use. `Slide` gives the strip's top for a
+address bar or one of its menus is in use. The strip's sizes and those two
+distances are one scale: a dpi below 48 counts as 48, and a dpi that does not
+fit in a signed 32-bit integer counts as 96. `Slide` gives the strip's top for a
 time (150 ms, eased). The window feeds the pointer from `WM_MOUSEMOVE` and, while
 the strip is out, from a timer that reads the cursor position, so a pointer that
 leaves without a message still hides it.

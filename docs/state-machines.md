@@ -753,7 +753,9 @@ Implicit. `Reveal { rule, out: bool, held: bool, pointer: Pointer }`, `Slide { h
 from: f64, to: f64, start: u32 }`, and StripWin's
 `overlay/menu_open/bar_open/revealing/spinning` carry reveal and timer ownership.
 
-Hidden enters at the top two logical pixels. Once out, it stays until the pointer passes
+Hidden enters at the top two logical pixels, on the same scale as the strip: a
+dpi below 48 counts as 48, and a dpi that does not fit in a signed 32-bit
+integer counts as 96. Once out, it stays until the pointer passes
 strip height plus eight pixels; an open menu/bar holds it out. Exit-fullscreen resets
 it. Animation retargets from current progress over 150 ms, rather than jumping to the
 old endpoint. Timers exist only while reveal polling/animation or visible connection
