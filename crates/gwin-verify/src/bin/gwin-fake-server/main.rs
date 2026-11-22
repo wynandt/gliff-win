@@ -159,7 +159,6 @@ const CAP15_FPS: u32 = 15;
 /// from now. It bounds the burst after a late wake-up, so a capped stream
 /// stays within a frame or two of its cap over any window.
 const MAX_LAG_FRAMES: u32 = 2;
-const PING_EVERY: Duration = Duration::from_secs(1);
 /// The fake's home monitor, for hyprctl.
 const HOME: (u32, u32) = (2560, 1600);
 
@@ -288,7 +287,6 @@ async fn serve() -> anyhow::Result<()> {
     let mut inbound = spawn_reader(reader);
     let mut ponged = false;
     let mut next_frame = Instant::now();
-    let mut ping = tokio::time::interval(PING_EVERY);
     loop {
         tokio::select! {
             msg = inbound.recv() => match msg {
@@ -306,11 +304,6 @@ async fn serve() -> anyhow::Result<()> {
             },
             _ = tokio::time::sleep_until(next_frame) => {
                 next_frame = server.tick(next_frame).await?;
-            }
-            _ = ping.tick() => {
-                if !server.stalled() {
-                    server.writer.write_msg(&ServerMsg::Ping { t: now_ms() }).await?;
-                }
             }
         }
     }
