@@ -721,8 +721,10 @@ fn a_click_on_a_live_tab_after_close_all_changes_nothing() {
     let saved = fx.tabs.tab_set();
     fx.set.close_all();
     let click = fx.tabs.click(id);
+    assert!(click.is_empty(), "{click:?}");
     fx.set.run(&mut fx.tabs, click);
     let switched = fx.tabs.switch(crate::tabs::SwitchTo::Next);
+    assert!(switched.is_empty(), "{switched:?}");
     fx.set.run(&mut fx.tabs, switched);
     assert_eq!(*fx.world.started.borrow(), ["a@x", "b@x"]);
     assert_eq!(fx.tabs.shown(), shown);
