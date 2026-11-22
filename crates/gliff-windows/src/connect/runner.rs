@@ -113,6 +113,10 @@ fn reap(child: &mut impl ChildWait) {
 }
 
 /// Polls until the child exits, the deadline passes, or `try_wait` fails.
+///
+/// A `try_wait` error is [`ToolError::Wait`], including after the deadline.
+/// A child still running at the deadline is killed and reaped, and that is
+/// [`ToolError::Timeout`].
 fn wait_until(
     child: &mut impl ChildWait,
     deadline: Instant,
@@ -123,9 +127,13 @@ fn wait_until(
             Ok(None) if Instant::now() < deadline => {
                 std::thread::sleep(Duration::from_millis(20));
             }
-            Ok(None) | Err(_) => {
+            Ok(None) => {
                 reap(child);
                 return Err(ToolError::Timeout);
+            }
+            Err(error) => {
+                reap(child);
+                return Err(ToolError::Wait(error));
             }
         }
     }
@@ -159,12 +167,9 @@ impl Tools for RealTools {
         let stdout = drain(child.stdout.take());
         let stderr = drain(child.stderr.take());
         let deadline = Instant::now() + cmd.timeout();
-        let status = match wait_until(&mut child, deadline) {
-            Ok(status) => status,
-            // Platform: a helper the killed ssh started can keep the pipes open, so the
-            // readers are not joined.
-            Err(error) => return Err(error),
-        };
+        // Platform: a helper the killed ssh started can keep the pipes open, so a
+        // failed wait returns without joining the readers.
+        let status = wait_until(&mut child, deadline)?;
         let until = Instant::now() + PIPE_GRACE;
         Ok(Output {
             stdout: collect(stdout, until),
