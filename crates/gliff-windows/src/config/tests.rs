@@ -807,6 +807,49 @@ mod config_file {
         );
     }
 
+    fn deny_read(path: &Path) {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = fs::metadata(path).expect("the file").permissions();
+            perms.set_mode(0o0);
+            fs::set_permissions(path, perms).expect("mode 0");
+        }
+        #[cfg(not(unix))]
+        {
+            fs::remove_file(path).expect("remove");
+            fs::create_dir(path).expect("a folder where the file was");
+        }
+    }
+
+    #[cfg(unix)]
+    fn allow_read(path: &Path) {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(path).expect("the file").permissions();
+        perms.set_mode(0o644);
+        fs::set_permissions(path, perms).expect("mode");
+    }
+
+    #[test]
+    fn a_file_that_becomes_unreadable_before_the_rename_is_left_as_it_is() {
+        let dir = TestDir::new();
+        let text = "machines = [\"me@kept\"]\n";
+        let path = write(&dir, text);
+        let (_read, mut guard) = super::read_file(&path);
+        let err = guard
+            .write_between("machines = [\"me@new\"]\n", |_| true, || deny_read(&path))
+            .expect_err("the save stops");
+        assert!(err.to_string().contains("left as it is"), "{err}");
+        #[cfg(unix)]
+        {
+            allow_read(&path);
+            assert_eq!(fs::read_to_string(&path).expect("still there"), text);
+        }
+        #[cfg(not(unix))]
+        assert!(path.is_dir(), "the folder that replaced the file stays");
+        assert_eq!(files_in(dir.path()), ["config.toml"]);
+    }
+
     #[test]
     fn a_file_that_could_not_be_read_but_parses_at_the_save_is_kept_then_saved() {
         let dir = TestDir::new();

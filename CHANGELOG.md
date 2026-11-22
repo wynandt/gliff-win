@@ -7,6 +7,11 @@ release, see [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
 ## [Unreleased]
 
+- A save no longer replaces `config.toml` or `recent-hosts.toml` when the
+  last read, just before the rename, cannot read the file. The save fails
+  and the file stays, including text that read never copied. A missing file
+  is still replaced.
+  ([#65](https://github.com/wynandt/gliff-win/issues/65))
 - Clicking a tab after the window had started closing could start a new
   session. A click then starts nothing, and the saved tabs stay as they were.
   ([#86](https://github.com/wynandt/gliff-win/issues/86))
