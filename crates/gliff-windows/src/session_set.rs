@@ -24,8 +24,9 @@
 //! owns (`Instant::now`, or a test's fake through [`SessionSet::with_clock`])
 //! and starts the retries that are due at the end of every [`SessionSet::poll`],
 //! so the window needs only a timer that makes it poll at
-//! [`Tabs::next_due`]. After [`SessionSet::close_all`] or
-//! [`SessionSet::shutdown`] no retry starts.
+//! [`Tabs::next_due`]. [`SessionSet::close_all`] tells the tabs the window
+//! is closing, so a later click or retry starts nothing.
+//! [`SessionSet::shutdown`] starts no retry either.
 
 use std::collections::BTreeMap;
 use std::io;
@@ -479,11 +480,13 @@ impl<L: Link> SessionSet<L> {
         self.live.len() + self.retiring.len()
     }
 
-    /// Says `Bye` to every live session without waiting and without telling
-    /// the model, so the tabs stay as they were for the next start. `poll`
-    /// joins each thread once it has finished.
-    pub fn close_all(&mut self) {
+    /// Says `Bye` to every live session without waiting. Tells `tabs` the
+    /// window is closing, so a later click or retry starts nothing, and
+    /// leaves the tabs as they were for the next start. `poll` joins each
+    /// thread once it has finished.
+    pub fn close_all(&mut self, tabs: &mut Tabs) {
         self.closing = true;
+        tabs.on_window_close();
         self.input_to(None);
         for session in self.sessions() {
             self.retire(session);

@@ -13,6 +13,8 @@
 //! `ended`, a late `connected`) finds no tab and does nothing. Stop keeps
 //! that session id until [`Tabs::closed`] reports the runner joined it, or
 //! stopped waiting for it. While a tab is closing it starts no session.
+//! Once the window is closing, a click, connect, reconnect or retry returns
+//! no effects.
 //!
 //! The order of the effects of a switch is part of the contract. The input
 //! route moves to the new session *first*, so no key reaches the old session
@@ -274,6 +276,9 @@ pub struct Tabs {
     next_tab: u32,
     next_session: u32,
     policy: Policy,
+    /// Set by [`Tabs::on_window_close`]. Clicks and retries then return no
+    /// effects.
+    window_closing: bool,
 }
 
 impl Tabs {
@@ -396,9 +401,13 @@ impl Tabs {
     /// nothing. A tab that failed for a reason the person has to fix (a key,
     /// a host key, a missing or old server) is only shown: starting it would
     /// fail the same way and hide the explanation behind "connecting". A tab
-    /// whose previous session is still closing is only shown too. The
+    /// whose previous session is still closing is only shown too. Once the
+    /// window is closing, the click returns nothing. The
     /// failure panel's "Try again" is [`Tabs::reconnect`].
     pub fn click(&mut self, id: TabId) -> Vec<Effect> {
+        if self.window_closing {
+            return Vec::new();
+        }
         let mut effects = Vec::new();
         self.click_into(id, &mut effects);
         effects
@@ -406,16 +415,24 @@ impl Tabs {
 
     /// Starts a new session for a tab that has none, at once, and shows it:
     /// "Try again" on the failure panel and "Reconnect" in the tab menu.
-    /// A tab whose previous session is still closing starts nothing.
+    /// A tab whose previous session is still closing starts nothing. Once
+    /// the window is closing, this returns nothing.
     pub fn reconnect(&mut self, id: TabId) -> Vec<Effect> {
+        if self.window_closing {
+            return Vec::new();
+        }
         let mut effects = Vec::new();
         self.start_into(id, &mut effects);
         effects
     }
 
     /// A host the user typed or named: the tab with that target is clicked;
-    /// with none, a tab is added at the end and clicked.
+    /// with none, a tab is added at the end and clicked. Once the window is
+    /// closing, this returns nothing.
     pub fn open(&mut self, target: &HostTarget) -> Vec<Effect> {
+        if self.window_closing {
+            return Vec::new();
+        }
         let mut effects = Vec::new();
         self.open_one(target, &mut effects);
         effects
@@ -518,8 +535,12 @@ impl Tabs {
 
     /// Starts every retry whose time has come. A hidden tab only starts; a
     /// shown one also takes the route and the picture, as a click would.
-    /// Calling it early, or twice, does nothing.
+    /// Calling it early, or twice, does nothing. Once the window is closing,
+    /// it returns nothing.
     pub fn due(&mut self, now: Instant) -> Vec<Effect> {
+        if self.window_closing {
+            return Vec::new();
+        }
         let mut effects = Vec::new();
         for index in 0..self.tabs.len() {
             let ripe = matches!(
@@ -536,6 +557,13 @@ impl Tabs {
             }
         }
         effects
+    }
+
+    /// The window has started closing. A later [`Tabs::click`],
+    /// [`Tabs::reconnect`], [`Tabs::open`], [`Tabs::switch`] or [`Tabs::due`]
+    /// returns no effects.
+    pub fn on_window_close(&mut self) {
+        self.window_closing = true;
     }
 
     /// When the earliest waiting retry is due, for the window's timer.

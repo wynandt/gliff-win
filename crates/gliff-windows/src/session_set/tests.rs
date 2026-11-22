@@ -504,7 +504,7 @@ fn close_all_says_bye_at_once_and_running_falls_as_threads_finish() {
     let (mut fx, _) = fixture(&["a@x", "b@x"], &TabSet::default());
     let (a, b) = (session_of(&fx.tabs, "a@x"), session_of(&fx.tabs, "b@x"));
     assert_eq!(fx.set.running(), 2);
-    fx.set.close_all();
+    fx.set.close_all(&mut fx.tabs);
     assert_eq!(fx.route.target(), None);
     assert_eq!(fx.world.commands_of(a.get()), ["bye"]);
     assert_eq!(fx.world.commands_of(b.get()), ["bye"]);
@@ -522,7 +522,7 @@ fn close_all_says_bye_at_once_and_running_falls_as_threads_finish() {
 fn close_all_leaves_the_tabs_wanted_open_for_the_next_start() {
     let (mut fx, _) = fixture(&["a@x"], &TabSet::default());
     let before = fx.tabs.tab_set();
-    fx.set.close_all();
+    fx.set.close_all(&mut fx.tabs);
     assert_eq!(fx.tabs.tab_set(), before);
 }
 
@@ -645,7 +645,7 @@ fn a_closing_window_starts_no_retry() {
     let b = session_of(&fx.tabs, "b@x");
     lose(&fx, b);
     fx.set.poll(&mut fx.tabs);
-    fx.set.close_all();
+    fx.set.close_all(&mut fx.tabs);
     fx.advance(60_000);
     fx.set.poll(&mut fx.tabs);
     assert_eq!(fx.world.started.borrow().len(), 2);
@@ -666,7 +666,7 @@ fn a_click_after_close_all_starts_nothing_when_the_session_has_ended() {
     let shown = fx.tabs.shown();
     let saved = fx.tabs.tab_set();
     let status = status_of(&fx.tabs, "b@x");
-    fx.set.close_all();
+    fx.set.close_all(&mut fx.tabs);
     for effects in [
         fx.tabs.click(id),
         fx.tabs.reconnect(id),
@@ -699,7 +699,7 @@ fn a_click_after_close_all_starts_nothing_once_a_stopped_tab_may_start_again() {
     assert_eq!(status_of(&fx.tabs, "b@x"), Status::Stopped);
     let shown = fx.tabs.shown();
     let saved = fx.tabs.tab_set();
-    fx.set.close_all();
+    fx.set.close_all(&mut fx.tabs);
     let click = fx.tabs.click(id);
     fx.set.run(&mut fx.tabs, click);
     assert_eq!(*fx.world.started.borrow(), ["a@x", "b@x"]);
@@ -719,7 +719,7 @@ fn a_click_on_a_live_tab_after_close_all_changes_nothing() {
         .id();
     let shown = fx.tabs.shown();
     let saved = fx.tabs.tab_set();
-    fx.set.close_all();
+    fx.set.close_all(&mut fx.tabs);
     let click = fx.tabs.click(id);
     assert!(click.is_empty(), "{click:?}");
     fx.set.run(&mut fx.tabs, click);
