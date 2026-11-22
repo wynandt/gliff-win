@@ -826,7 +826,8 @@ Three pure modules, with no Win32 import, so they cannot reach the registry.
   numbered `.broken` or `.replaced` copy of the text the save replaces (unless it
   is what was loaded and is in the client's own layout; one copy serves failed
   tries of the same text; a last look just before the rename keeps text written
-  in between), an unreadable file left alone, unknown keys kept in
+  in between, and leaves the file alone when that look cannot read it), an
+  unreadable file left alone, unknown keys kept in
   `config.toml`, atomic save with a unique temporary name and a retry only for
   transient errors. `history` rewrites the `hosts` list only.
 - `history` holds `HostTarget` (a `user@host`, alias or IPv6 address parsed once, where it enters; the
