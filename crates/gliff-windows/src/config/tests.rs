@@ -812,7 +812,7 @@ mod config_file {
         {
             use std::os::unix::fs::PermissionsExt;
             let mut perms = fs::metadata(path).expect("the file").permissions();
-            perms.set_mode(0);
+            perms.set_mode(0o0);
             fs::set_permissions(path, perms).expect("mode 0");
         }
         #[cfg(not(unix))]
