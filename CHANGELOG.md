@@ -7,6 +7,10 @@ release, see [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
 ## [Unreleased]
 
+- When the keys check cannot dismiss a window a chord may have opened, that
+  case fails. Escape still goes only to the text sink, so it is not sent to
+  the client.
+  ([#65](https://github.com/wynandt/gliff-win/issues/65))
 - A version check whose wait for ssh fails reports that wait error. A check
   that runs out of time still reports that the machine did not answer.
   ([#65](https://github.com/wynandt/gliff-win/issues/65))

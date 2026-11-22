@@ -63,8 +63,8 @@ pub enum Act {
     ClearNotepad,
     /// Close whatever Windows opened over the client (a flyout, an overlay):
     /// the text sink takes the focus, then Escape goes to it, so Escape
-    /// never reaches the remote machine. Best effort, and a no-op when the sink
-    /// cannot be focused.
+    /// never reaches the remote machine. When the sink cannot be focused,
+    /// this returns success and sends nothing. Any other failure is returned.
     Dismiss,
     /// A left click at a remote logical point (the client's picture is
     /// inverted back to a screen point).

@@ -384,6 +384,10 @@ judge what the remote machine's `gwin-keys` logged. The design, every case and
 its pass rule are in `crates/gwin-verify/src/input_check/`; the chord list is
 [phase4/super-chords.tsv](phase4/super-chords.tsv).
 
+A chord Windows could open a window for is dismissed afterwards. The text sink
+is focused and Escape is sent there, so Escape is not sent to the client. When
+that dismiss fails, the failure stays on that case and the case fails.
+
 Run order for a hardware gate:
 
 1. On the remote machine: `scripts/remote/gwin-pattern follow`, then
