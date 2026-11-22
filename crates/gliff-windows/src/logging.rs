@@ -9,6 +9,7 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use std::sync::OnceLock;
+use std::sync::PoisonError;
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
 
@@ -114,16 +115,15 @@ pub fn line(message: &str) {
     };
     let stamp = timestamp(unix_secs(SystemTime::now()));
     let text = format!("{stamp} {message}\n");
-    if let Ok(mut sink) = log.lock() {
-        let text = match sink.budget.admit(text.len() as u64) {
-            Fate::Write => text,
-            Fate::Notice => format!(
-                "{stamp} log size limit reached; the rest of this file's lines are dropped\n"
-            ),
-            Fate::Drop => return,
-        };
-        let _ = sink.file.write_all(text.as_bytes());
-    }
+    let mut sink = log.lock().unwrap_or_else(PoisonError::into_inner);
+    let text = match sink.budget.admit(text.len() as u64) {
+        Fate::Write => text,
+        Fate::Notice => {
+            format!("{stamp} log size limit reached; the rest of this file's lines are dropped\n")
+        }
+        Fate::Drop => return,
+    };
+    let _ = sink.file.write_all(text.as_bytes());
 }
 
 fn unix_secs(t: SystemTime) -> u64 {
