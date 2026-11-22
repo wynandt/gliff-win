@@ -393,7 +393,8 @@ impl FileGuard {
         usable: &impl Fn(&toml::Table) -> bool,
     ) -> Result<(), FileError> {
         let (now, usable_now) = match read_raw(&self.path) {
-            Raw::Missing | Raw::Unreadable(_) => return Ok(()),
+            Raw::Missing => return Ok(()),
+            Raw::Unreadable(error) => return Err(FileError::unreadable(&self.path, &error)),
             Raw::TooLarge => (Seen::TooLarge, false),
             Raw::Bytes(bytes) => {
                 let ok = matches!(parse_bytes(&bytes), Read::Parsed(table) if usable(&table));
