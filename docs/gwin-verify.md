@@ -126,6 +126,9 @@ StreamConfig, says Bye, closes stdin, and waits for the server to exit. `ok`
 needs protocol version 1, the right mode (headless, or a mirror), a
 Pong, a stream size, and a clean exit after Bye inside `--timeout-s`.
 
+The fake server sends that one Ping, after HelloAck and before StreamConfig.
+It answers a client Ping with Pong. It does not send a Ping on a timer.
+
 Without `--output` the check starts the server with `--headless`, the private
 screen the gates were built for. `--output NAME` mirrors that screen and needs
 the server to report it. `--output auto` is the client's own default: the
@@ -205,8 +208,8 @@ code shown: `stall` (`fps`, `stall`), `drop` (`frames_missing`,
 `decode_errors`), `ignore-resize` (`resize_ignored`), `level60`
 (`level_rejected`), `no-pattern` (`pattern`), `misplaced` (`placement`),
 `cap15` (`fps_cap`). `reload` is for the driver test, not the stream check: it
-stops sending frames and ignores a same-size Resize, as a server whose output
-mode was reset by a compositor reload does. `hold30` passes at a 30 fps cap.
+stops sending frames, sends no further Ping, and ignores a same-size Resize,
+as a server whose output mode was reset by a compositor reload does. `hold30` passes at a 30 fps cap.
 `GWIN_FAKE_HYPR_INSTANCE=none` makes the placement probe fail with the real
 hyprctl message. The Linux integration test runs all of these at 640x400:
 `cargo test -p gwin-verify --test stream`.

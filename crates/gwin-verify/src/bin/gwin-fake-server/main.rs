@@ -5,10 +5,11 @@
 //! `model.rs`).
 //!
 //! Order: read Hello, write HelloAck
-//! for the output `gliff-<pid>`, Ping, then StreamConfig at the clamped
-//! first mode, then stream. A Bye before the first Pong, or the pipe
-//! closing without a Bye, exits non-zero, so `exit_after_bye` proves the
-//! client answered the Ping and said Bye.
+//! for the output `gliff-<pid>`, one Ping, then StreamConfig at the clamped
+//! first mode, then stream. That Ping is the only one. A client Ping is
+//! answered with Pong. Nothing sends a Ping on a timer. A Bye before the
+//! first Pong, or the pipe closing without a Bye, exits non-zero, so
+//! `exit_after_bye` proves the client answered the Ping and said Bye.
 //!
 //! Shutdown: after Bye it exits only once the client closes stdin.
 //!
@@ -33,7 +34,7 @@
 //! stderr and exit 1, with no Bye). `reload` models a
 //! compositor reload: 1 s after the first Resize the output is lost, as when
 //! a runtime mode is discarded. The server keeps its own record, so it sends
-//! no frame and no StreamConfig (pings go on) and returns early on a Resize
+//! no frame, no StreamConfig and no further Ping, and returns early on a Resize
 //! equal to that record; a Resize that differs sets the
 //! mode again and ends the fault. `cursor` is not a
 //! fault: it sends one 4x4 `CursorShape` after the first StreamConfig, for
