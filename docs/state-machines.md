@@ -923,9 +923,10 @@ and stop/seen flags. Lock steps track `prior: Option<Reading>` and `armed_here: 
 kill/reap if needed -> restore layouts/remote arming owned by this run`. Launch first
 stops a previous client. Pollers and sink windows have separate stop/drop lifetimes.
 Invariant: cleanup restores only resources this run changed and must still run after
-failed checks. Pure fake-harness tests exercise orchestration, not actual restoration on
-Windows. [Input resources and startup/stop][verify-harness]; [lock-step
-ownership][verify-lock].
+failed checks. A refused placement is tried again, and what a failed try said stays
+on that step when a later try puts the window in front. Pure fake-harness tests
+exercise orchestration, not actual restoration on Windows. [Input resources and
+startup/stop][verify-harness]; [lock-step ownership][verify-lock].
 
 ### Procedural verification plans and file parsing
 

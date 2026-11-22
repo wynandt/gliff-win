@@ -401,6 +401,9 @@ Run order for a hardware gate:
    in `chord` mode). It needs a person at the machine to press Win+L and
    unlock once. `gwin-verify` itself only reads the registry. If the run is cut
    short, `gliff-windows.exe --restore-lock-policy` puts the value back.
+   A placement is tried again when the Windows machine refuses to put the
+   window in front. A later try that succeeds still leaves what the failed
+   try said on that step, and the step fails.
 4. `keys --manual`: the chords only a person can press (Win+Space,
    Win+Shift+S, the full 20, Ctrl+Alt+Del then Esc, a UAC prompt then cancel).
 5. The 150% step: a person changes Settings > System > Display > **Scale** (the

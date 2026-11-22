@@ -7,6 +7,9 @@ release, see [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
 ## [Unreleased]
 
+- The lock step tries a refused placement again. A later try that puts the
+  window in front still leaves what the failed try said, and that step fails.
+  ([#67](https://github.com/wynandt/gliff-win/issues/67))
 - When the keys check cannot dismiss a window a chord may have opened, that
   case fails. Escape still goes only to the text sink, so it is not sent to
   the client.
