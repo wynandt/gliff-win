@@ -43,7 +43,9 @@ Host companions (not native proof):
   JSON. It does not connect. Off Windows the client still runs
   `--print-settings`. See `docs/gwin-verify.md`.
 - Unit tests of `settings`, `config`, `history` and `startup` in
-  `crates/gliff-windows`.
+  `crates/gliff-windows`. One `config` test makes the file unreadable after
+  the save's first read: the save fails and the bytes stay. A native save of
+  a read-denied file on a Windows machine was not run.
 
 ## Gotchas
 

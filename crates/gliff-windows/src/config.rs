@@ -288,8 +288,10 @@ pub(crate) fn read_file(path: &Path) -> (Read, FileGuard) {
 /// - What the guard remembers (the text last seen) changes only after a
 ///   write succeeds, so a failed save can be tried again, and the next one
 ///   still compares with the right text.
-/// - The file is read once more just before the rename; if it changed
-///   since the first read, that text is kept too.
+/// - The file is read once more just before the rename. If it changed
+///   since the first read, that text is kept too. If it cannot be read,
+///   the save fails and the file is left as it is, including text that
+///   look never copied. A file that is missing is still replaced.
 #[derive(Debug)]
 pub(crate) struct FileGuard {
     path: PathBuf,
@@ -382,9 +384,9 @@ impl FileGuard {
         Ok(())
     }
 
-    /// The last look before the file is replaced: if it is not what
-    /// [`Self::prepare`] saw, someone wrote in between, and that text is
-    /// kept as well.
+    /// The last look before the file is replaced. A file that cannot be read
+    /// fails the save and is left as it is. A missing file is still replaced.
+    /// Text that is not what [`Self::prepare`] saw is kept first.
     fn recheck(
         &mut self,
         examined: &Seen,

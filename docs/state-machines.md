@@ -791,8 +791,10 @@ temporary file.
 
 `Read -> classify -> prepare backup if needed -> write/sync temp -> recheck current file
 -> rename -> commit new snapshot`. Invalid previous contents get broken backup; valid
-replacement gets replaced backup. Unreadable files refuse overwrite. A changed file is
-checked again immediately before rename. Transient rename errors have bounded retries;
+replacement gets replaced backup. Unreadable files refuse overwrite, including one
+the last look cannot read after an earlier look in that save succeeded. A changed file is
+checked again immediately before rename. A file that is missing at that look is still
+replaced. Transient rename errors have bounded retries;
 failure cleans the temp and leaves in-memory dirty state. History changes retry saving
 while unsaved. Turning remember off clears memory then attempts guarded deletion,
 retaining the choice even if deletion fails.
