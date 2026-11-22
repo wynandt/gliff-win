@@ -59,6 +59,8 @@ impl fmt::Display for ServerVersion {
 /// the version when it is new enough, else the failure to show.
 ///
 /// A failed call is classified like a failed session ([`Phase::VersionCheck`]).
+/// A call that does not finish in time is unreachable. A wait error is
+/// [`SshFailure::Other`] carrying that error's text: the wait failed.
 /// A call that ends but prints no version is `Other`, since the server ran
 /// and said something this client does not know.
 pub fn check_server(tools: &dyn Tools, spec: &SshSpec) -> Result<ServerVersion, SshFailure> {
@@ -69,6 +71,11 @@ pub fn check_server(tools: &dyn Tools, spec: &SshSpec) -> Result<ServerVersion, 
         Ok(output) => output,
         Err(ToolError::Spawn(e)) => return Err(from_spawn_error(&e)),
         Err(ToolError::Timeout) => return Err(SshFailure::Unreachable),
+        Err(ToolError::Wait(e)) => {
+            return Err(SshFailure::Other {
+                last_line: super::diag::sanitize(&e.to_string()),
+            });
+        }
     };
     if output.exit != Some(0) {
         return Err(classify(&output.stderr, output.exit, Phase::VersionCheck));

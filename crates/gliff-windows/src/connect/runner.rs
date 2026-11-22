@@ -81,6 +81,54 @@ pub enum ToolError {
     Spawn(std::io::Error),
     /// It did not finish in time and was killed.
     Timeout,
+    /// `try_wait` failed. The child is killed and reaped when it is still
+    /// there. This is a failed wait, including when the deadline has passed.
+    Wait(std::io::Error),
+}
+
+/// A child the runner can poll, kill, and reap.
+trait ChildWait {
+    fn try_wait(&mut self) -> std::io::Result<Option<std::process::ExitStatus>>;
+    fn kill(&mut self) -> std::io::Result<()>;
+    fn wait(&mut self) -> std::io::Result<std::process::ExitStatus>;
+}
+
+impl ChildWait for std::process::Child {
+    fn try_wait(&mut self) -> std::io::Result<Option<std::process::ExitStatus>> {
+        std::process::Child::try_wait(self)
+    }
+
+    fn kill(&mut self) -> std::io::Result<()> {
+        std::process::Child::kill(self)
+    }
+
+    fn wait(&mut self) -> std::io::Result<std::process::ExitStatus> {
+        std::process::Child::wait(self)
+    }
+}
+
+fn reap(child: &mut impl ChildWait) {
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
+/// Polls until the child exits, the deadline passes, or `try_wait` fails.
+fn wait_until(
+    child: &mut impl ChildWait,
+    deadline: Instant,
+) -> Result<std::process::ExitStatus, ToolError> {
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => return Ok(status),
+            Ok(None) if Instant::now() < deadline => {
+                std::thread::sleep(Duration::from_millis(20));
+            }
+            Ok(None) | Err(_) => {
+                reap(child);
+                return Err(ToolError::Timeout);
+            }
+        }
+    }
 }
 
 /// Runs the client's ssh calls.
@@ -111,32 +159,18 @@ impl Tools for RealTools {
         let stdout = drain(child.stdout.take());
         let stderr = drain(child.stderr.take());
         let deadline = Instant::now() + cmd.timeout();
-        let status = loop {
-            match child.try_wait() {
-                Ok(Some(status)) => break Some(status),
-                Ok(None) if Instant::now() < deadline => {
-                    std::thread::sleep(Duration::from_millis(20));
-                }
-                Ok(None) | Err(_) => {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                    break None;
-                }
-            }
-        };
-        match status {
-            Some(status) => {
-                let until = Instant::now() + PIPE_GRACE;
-                Ok(Output {
-                    stdout: collect(stdout, until),
-                    stderr: collect(stderr, until),
-                    exit: status.code(),
-                })
-            }
+        let status = match wait_until(&mut child, deadline) {
+            Ok(status) => status,
             // Platform: a helper the killed ssh started can keep the pipes open, so the
             // readers are not joined.
-            None => Err(ToolError::Timeout),
-        }
+            Err(error) => return Err(error),
+        };
+        let until = Instant::now() + PIPE_GRACE;
+        Ok(Output {
+            stdout: collect(stdout, until),
+            stderr: collect(stderr, until),
+            exit: status.code(),
+        })
     }
 }
 
