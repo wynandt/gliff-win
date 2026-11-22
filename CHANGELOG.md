@@ -7,6 +7,9 @@ release, see [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
 ## [Unreleased]
 
+- A version check whose wait for ssh fails reports that wait error. A check
+  that runs out of time still reports that the machine did not answer.
+  ([#65](https://github.com/wynandt/gliff-win/issues/65))
 - A panic while a log line is being written leaves the later lines in the
   file. When the log was never opened, or a write fails, that line is absent
   and the client continues.
