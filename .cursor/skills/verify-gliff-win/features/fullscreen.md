@@ -34,6 +34,9 @@ Host companions (not native proof):
 
 - `gwin-verify strip-shot` includes the `hover-fullscreen` scene.
 - Unit tests of `fullscreen` and `strip` reveal in `crates/gliff-windows`.
+  `the_reveal_distances_use_the_strip_scale` checks that a dpi below 48, and a
+  dpi that does not fit in a signed 32-bit integer, use one scale for the
+  strip and the reveal edge. A Windows session at a dpi below 48 was not run.
 - `cargo test -p gwin-verify --bin gwin-verify present_check`: the present
   judge and step sequence against a fake harness on Linux.
 

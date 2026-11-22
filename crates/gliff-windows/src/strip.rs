@@ -6,7 +6,9 @@
 //!
 //! All pixel values are device pixels. Sizes are given in logical pixels
 //! (96 dpi) and [`Metrics::at`] scales them; 100, 125, 150 and 200% give
-//! strip heights of 32, 40, 48 and 64.
+//! strip heights of 32, 40, 48 and 64. A dpi below 48 counts as 48, and a
+//! dpi that does not fit in `i32` counts as 96. The fullscreen reveal
+//! rule uses that same scale.
 
 use crate::connect::SshFailure;
 use crate::tabs::Status;

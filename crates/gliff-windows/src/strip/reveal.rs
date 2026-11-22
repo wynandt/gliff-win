@@ -1,6 +1,7 @@
 //! Full screen: the strip is out of the layout and comes over the top of the
 //! picture when the pointer asks for it. This is the rule and the slide, with no
 //! Win32 in them, so both are tested on any machine. The window feeds them.
+//! The edge and the leave margin use the strip's scale.
 
 /// How long the strip takes to come out or go back.
 pub const SLIDE_MS: u32 = 150;
