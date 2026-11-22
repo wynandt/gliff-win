@@ -213,9 +213,10 @@ impl<H: LockHarness> Steps<'_, H> {
 
     /// Puts the client or the text field in front of it (`front`), waits
     /// [`SETTLE`], and looks, up to [`PLACE_TRIES`] times. What a failed
-    /// try said is kept only when no try succeeds.
+    /// try said stays on the step even when a later try succeeds.
     fn place(&mut self, front: Front, what: &str, reasons: &mut Vec<String>) -> bool {
         let mut errors = Vec::new();
+        let mut placed = false;
         for _ in 0..PLACE_TRIES {
             let moves = match front {
                 Front::Client => vec![self.h.focus(Window::Client)],
@@ -233,11 +234,15 @@ impl<H: LockHarness> Steps<'_, H> {
             }
             self.h.sleep(SETTLE);
             if !failed && self.h.foreground_is_client() == (front == Front::Client) {
-                return true;
+                placed = true;
+                break;
             }
         }
         errors.dedup();
         reasons.append(&mut errors);
+        if placed {
+            return true;
+        }
         reasons.push(format!(
             "{what}: the {} kept {} the foreground after {PLACE_TRIES} tries; a click or a \
              window opening or closing outside this run is moving it",
