@@ -901,8 +901,9 @@ faults alter individual paths. Bye/EOF drives the fake server's exit mode, inclu
 deliberate linger/bad exit.
 
 Invariant: fake behavior must preserve the protocol properties the test claims to
-measure. Model, stream, reconnect, and driver integration tests exercise subsets; the
-fake is not the real server. [Server fields][fake-state]; [transitions][fake-state].
+measure. It sends one Ping after it is ready and answers a client Ping with Pong.
+It does not send a Ping on a timer. Model, stream, reconnect, and driver integration
+tests exercise subsets; the fake is not the real server. [Server fields][fake-state]; [transitions][fake-state].
 
 ### Native verification-resource ownership
 

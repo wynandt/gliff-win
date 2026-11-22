@@ -53,11 +53,12 @@ Loopback (no remote machine):
 
 Host companions (not native proof):
 
-- `gwin-verify ssh <target>`: HelloAck, Ping/Pong, StreamConfig, Bye. Stand-ins
-  on Linux, or a real server. See `docs/gwin-verify.md`.
+- `gwin-verify ssh <target>`: HelloAck, one Ping and its Pong, StreamConfig,
+  Bye. The fake sends that Ping and no later one. Stand-ins on Linux, or a
+  real server. See `docs/gwin-verify.md`.
 - `gwin-verify stream --host <target> ...`: the session core, resize, fps and
   the test pattern, headless.
-- `cargo test -p gwin-verify --test ssh --test stream --test reconnect --locked`.
+- `cargo test -p gwin-verify --test ssh --test stream --test reconnect --test fake_ping --locked`.
 - `gwin-verify strip-shot`: address-bar scenes (`bar-empty`, `bar-typed`,
   `bar-error`, and the others listed in `docs/gwin-verify.md`), no window.
 
