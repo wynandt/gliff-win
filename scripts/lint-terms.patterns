@@ -7,5 +7,10 @@
 # Paths of documents that are not in this repository, so a link to one is dead.
 docs/(history|evidence|design)/|docs/decisions\.(md|tsv)\b
 
+# A closing keyword immediately before an issue number. GitHub treats that as
+# closing the issue, including when the sentence says not to. A title prefix
+# such as "fix:" and "Part of #N" stay legal.
+(?i)\b(?:close[sd]?|fix(?:es|ed)?|resolve[sd]?)\s+#\d+
+
 # Personal data (a home directory, a private address, a login at an address): see
 # scripts/lint-terms.personal.patterns, which is also scanned inside the lint files.

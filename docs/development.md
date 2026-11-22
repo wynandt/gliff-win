@@ -184,11 +184,14 @@ One bullet per tool; what it needs is in the same line.
   modules imports the `windows` crate.
 - **`scripts/lint-terms`**: fails on personal data (home directories, private
   IP addresses, `user@host` forms with a real login) and on paths of documents
-  that are not in the repository, in any tracked text file. The three lint files
-  spell those paths out, so only the personal-data patterns and your private patterns
-  scan them; the self-test builds its address-like strings at run time, so
-  the files hold no address. `scripts/lint-terms --text FILE` checks other
-  text, such as a pull request description.
+  that are not in the repository, in any tracked text file. A closing keyword
+  (close, closes, closed, fix, fixes, fixed, resolve, resolves, or resolved)
+  immediately before an issue number is rejected too, including in text
+  checked with `--text`. The three lint files spell those paths out, so only
+  the personal-data patterns and your private patterns scan them; the
+  self-test builds its address-like strings at run time, so the files hold
+  no address. `scripts/lint-terms --text FILE` checks other text, such as a
+  pull request description.
 - **`gwin-verify` on Linux**: `decode`, `ssh`, `make-clip`, `render` and
   `stream` run against the stand-ins. Needs `ffmpeg` with `libx264` for the
   clips (`scripts/gwv doctor` says whether it is there).
