@@ -856,7 +856,9 @@ notice floods the log and repeatedly sweeping modifiers can interfere with user-
 input. These are bounded obligations rather than independent cache entries.
 
 Invariant: limit notice fires at most once per budget lifetime, and an armed sweep fires
-once unless rearmed. Both have pure tests. Diagnostic deduplication `Last<T>`,
+once unless rearmed. Both have pure tests. A poisoned log lock is recovered and the
+record still reaches admission. When the log was never opened, or the write fails, there
+is no line and the client continues. Diagnostic deduplication `Last<T>`,
 layout/font caches, MRU ordering, and bare statistics counters are excluded as
 independent machines. [Log budget][logging]; [recovery sweep][sweep].
 

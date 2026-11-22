@@ -7,6 +7,10 @@ release, see [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
 ## [Unreleased]
 
+- A panic while a log line is being written leaves the later lines in the
+  file. When the log was never opened, or a write fails, that line is absent
+  and the client continues.
+  ([#65](https://github.com/wynandt/gliff-win/issues/65))
 - In fullscreen, the distance that shows the strip and the strip's own
   sizes could use different scales when the display dpi was below 48, or
   when it did not fit in a signed 32-bit integer. Both use one scale now:

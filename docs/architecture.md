@@ -739,7 +739,9 @@ exit code and a count of clean and unclean sessions. `WM_ENDSESSION` writes
 its exit line at once, because Windows may end the process when the message
 returns. `app::run` writes the exit line for a refused start, a handover to
 a running client and a startup error. The log opens before the single-instance
-check, so those exits are logged too.
+check, so those exits are logged too. `logging::line` writes its line when a
+panic has poisoned the log lock. When the log was never opened, or the write
+fails, the call adds no line and the client continues.
 
 ### On-video statistics
 

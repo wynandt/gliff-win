@@ -287,7 +287,10 @@ pointer's position or about other programs' windows. Every line has the time it
 was written, so a line that says the release chord was used, or that a local
 chord was kept on Windows (its modifiers, never its key), also says when. With
 the default list the only local chord is `Win+Shift+S`. It is bounded: a file
-stops growing at 4 MiB, and the client keeps the newest 14 daily files.
+stops growing at 4 MiB, and the client keeps the newest 14 daily files. A
+panic while one line is being written still leaves the later lines in the
+file. When the log was never opened, or a write fails, that line is absent
+and the client continues.
 
 ### Clipboard
 
