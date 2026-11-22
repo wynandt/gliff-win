@@ -4,9 +4,9 @@ use std::time::Instant;
 use gliff_proto::msg::ServerMsg;
 use gliff_transport::Framed;
 use gliff_windows::link::read_server;
+use gliff_windows::session::Colour;
 use gliff_windows::session::client_caps;
 use gliff_windows::session::hello;
-use gliff_windows::session::Colour;
 
 const SERVER: &str = env!("CARGO_BIN_EXE_gwin-fake-server");
 const AFTER_FIRST: Duration = Duration::from_millis(1100);
