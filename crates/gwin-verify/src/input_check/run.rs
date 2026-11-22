@@ -101,11 +101,15 @@ pub fn run_cases(h: &mut impl Harness, cases: &[Case]) -> Vec<CaseResult> {
 /// The result, and whether the keys got to the remote machine with the client
 /// still in front (false: Windows may have taken them). Anything short of
 /// seeing both counts as false, errors included: a risky chord that could
-/// not be followed is treated as one Windows may have acted on.
+/// not be followed is treated as one Windows may have acted on. A failed
+/// dismiss after a risky case is a reason on that case.
 fn run_case(h: &mut impl Harness, case: &Case) -> (CaseResult, bool) {
-    let (result, reached) = try_case(h, case);
+    let (mut result, reached) = try_case(h, case);
     if case.risky {
-        let _ = h.act(&Act::Dismiss);
+        let act = Act::Dismiss;
+        if let Err(e) = h.act(&act) {
+            result.reasons.push(format!("{act:?} failed: {e:#}"));
+        }
     }
     (result, reached)
 }

@@ -939,7 +939,8 @@ finally flushes pending output. `.gwclip` read/write uses file position, declare
 records and payloads rather than a persistent application machine.
 
 Invariant: a missing prerequisite must not be mistaken for a measured failure or
-success. Fake harnesses/judges and integration tests cover these plans. Arithmetic
+success. After a chord Windows could act on, a failed dismiss is a reason on that
+case. Fake harnesses/judges and integration tests cover these plans. Arithmetic
 judges, SHA256, image generation, and command selection are not counted as standalone
 application machines. [Present plan][verify-present]; [clipboard polling][verify-clip];
 [tabs plan][verify-tabs]; [decode lifecycle][verify-decode].
