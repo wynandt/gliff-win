@@ -7,6 +7,10 @@ release, see [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
 ## [Unreleased]
 
+- Clicking a tab after the window had started closing could start a new
+  session. A click then starts nothing, and the saved tabs stay as they were.
+  ([#86](https://github.com/wynandt/gliff-win/issues/86))
+
 ## [0.4.0]
 
 - The client log now says why each session and the client ended. Each

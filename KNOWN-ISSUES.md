@@ -135,10 +135,6 @@ The client has run on one Windows machine. Not tried yet
   starts; see [docs/clipboard.md](docs/clipboard.md#known-gaps).
 - **The release chord cannot be turned off.** `--release-chord none` is refused
   at start.
-- **A click on a tab while the window is closing starts a session**
-  ([#86](https://github.com/wynandt/gliff-win/issues/86)). After you close the
-  window, a click on a tab before the window is gone can still start a new
-  session. A click after you disconnect a single tab is handled.
 - **The client can keep running after the window closes**
   ([#85](https://github.com/wynandt/gliff-win/issues/85)). If a process left
   over from a session still holds that session's link, the window goes away

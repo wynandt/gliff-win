@@ -167,7 +167,8 @@ Each tab shows the machine's full name and a dot:
 
 - **Click a tab** to show it. After you disconnect a tab, a click only shows
   it until its previous session has finished closing (usually under a second,
-  at most about six seconds); click again to connect then. **Click the `+`**
+  at most about six seconds); click again to connect then. Once the window
+  itself is closing, a click starts no session. **Click the `+`**
   to open the address bar, type a target and press Enter to connect. The list
   button next to it shows recent machines; its menu can forget one.
   Right-click in the address bar for Cut, Copy, Paste and Select All.

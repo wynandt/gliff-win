@@ -332,7 +332,7 @@ fn closing_the_tab_while_it_waits_stops_the_retries() {
 fn closing_the_window_while_a_tab_waits_stops_the_retries() {
     let mut rig = Rig::new("close", &[("a@one", "refused")]);
     assert!(rig.run(Duration::from_secs(30), |r| waiting(r, "a@one")));
-    rig.set.close_all();
+    rig.set.close_all(&mut rig.tabs);
     let before = rig.attempts("a@one");
     rig.run(Duration::from_secs(4), |_| false);
     assert_eq!(rig.attempts("a@one"), before);

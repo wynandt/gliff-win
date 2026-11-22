@@ -1311,6 +1311,7 @@ impl App {
             return;
         }
         self.close_cause = Some(ClientExit::WindowClosed { waited_out: false });
+        self.tabs.on_window_close();
         if self.set.running() == 0 {
             self.destroy();
             return;
@@ -1318,7 +1319,7 @@ impl App {
         crate::logging::line("close: sending Bye");
         self.closing = true;
         self.begin_closing();
-        self.set.close_all();
+        self.set.close_all(&mut self.tabs);
         self.shown = None;
         self.set_timer(TIMER_CLOSE, CLOSE_WAIT);
         self.drain_events();
