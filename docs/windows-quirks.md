@@ -308,6 +308,15 @@ the registry route off for this window (the menu says the registry refused
 it, and the log has the error). A restore that fails this way keeps the
 marker and tries again.
 
+The helper is the same program, with no console window, and with
+`CREATE_BREAKAWAY_FROM_JOB` so it sits outside the client's job when that job
+allows a child to leave. When the job refuses that flag, CreateProcess returns
+error 5 (`ERROR_ACCESS_DENIED`) and the helper is started again without the
+flag, inside the job. If that second start fails, its error is the one
+returned. Any other failure to start is returned as that first error and is
+not started again. The log says the helper did not start, and the lock setting
+stays off.
+
 By default no machine's switch is on and `--super-l` is `chord`, so the client
 does not change the setting (it only repairs a dead client's leftover,
 above): Win+L locks
