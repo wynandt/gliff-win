@@ -41,8 +41,7 @@
 //! the client's session driver test.
 //!
 //! `--version` prints `gliff-server 0.4.1` (the number is
-//! `GWIN_FAKE_SERVER_VERSION` when set), the call the client's version check
-//! makes; it needs no protocol and no fault.
+//! `GWIN_FAKE_SERVER_VERSION` when set). It needs no protocol and no fault.
 //!
 //! `GWIN_FAKE_TINT=r,g,b` is not a fault either: it draws one flat colour in
 //! place of the grid, so a test with several fake servers can tell their

@@ -27,4 +27,3 @@ pub use diag::log_line;
 pub use diag::message;
 pub use version::MIN_SERVER;
 pub use version::ServerVersion;
-pub use version::check_server;

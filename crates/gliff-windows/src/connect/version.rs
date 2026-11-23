@@ -1,16 +1,7 @@
-//! The server version: what `gliff-server --version` prints, the lowest
-//! version this client accepts, and the one extra ssh call that asks.
+//! The server version: what `gliff-server --version` prints, and the lowest
+//! version this client accepts.
 
 use std::fmt;
-
-use super::diag::Phase;
-use super::diag::SshFailure;
-use super::diag::classify;
-use super::diag::from_spawn_error;
-use super::runner::Cmd;
-use super::runner::ToolError;
-use super::runner::Tools;
-use crate::ssh::SshSpec;
 
 /// The lowest `gliff-server` this client accepts: the one it is tested with.
 pub const MIN_SERVER: ServerVersion = ServerVersion::new(0, 4, 1);
@@ -52,40 +43,6 @@ impl ServerVersion {
 impl fmt::Display for ServerVersion {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}.{}.{}", self.major, self.minor, self.patch)
-    }
-}
-
-/// Asks the server for its version over its own ssh and judges the answer:
-/// the version when it is new enough, else the failure to show.
-///
-/// A failed call is classified like a failed session ([`Phase::VersionCheck`]).
-/// A call that does not finish in time is unreachable. A wait error is
-/// [`SshFailure::Other`] carrying that error's text: the wait failed.
-/// A call that ends but prints no version is `Other`, since the server ran
-/// and said something this client does not know.
-pub fn check_server(tools: &dyn Tools, spec: &SshSpec) -> Result<ServerVersion, SshFailure> {
-    let cmd = Cmd::version(spec).map_err(|e| SshFailure::Other {
-        last_line: e.to_string(),
-    })?;
-    let output = match tools.run(&cmd) {
-        Ok(output) => output,
-        Err(ToolError::Spawn(e)) => return Err(from_spawn_error(&e)),
-        Err(ToolError::Timeout) => return Err(SshFailure::Unreachable),
-        Err(ToolError::Wait(e)) => {
-            return Err(SshFailure::Other {
-                last_line: super::diag::sanitize(&e.to_string()),
-            });
-        }
-    };
-    if output.exit != Some(0) {
-        return Err(classify(&output.stderr, output.exit, Phase::VersionCheck));
-    }
-    match ServerVersion::parse(&output.stdout) {
-        Some(found) if found >= MIN_SERVER => Ok(found),
-        Some(found) => Err(SshFailure::ServerOld { found }),
-        None => Err(SshFailure::Other {
-            last_line: "the server did not print a version".to_owned(),
-        }),
     }
 }
 
