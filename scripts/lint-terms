@@ -111,6 +111,9 @@ self_test() {
     "host $(ip 10 0 0 2)"
     "host $(ip 172 16 3 4)"
     "the Zorbo approved it"
+    "This fixes #67"
+    "does not close #12"
+    "resolved #3"
   )
   good=(
     "tested on the build machine"
@@ -124,6 +127,10 @@ self_test() {
     "a zorbonaut"
     "the remote machine's package"
     "scripts/remote/gwin-keys"
+    "Part of #67. #67 stays open."
+    "fix: keep a failed placement try"
+    "the window closes"
+    "resolved the layout"
   )
   for line in "${bad[@]}"; do
     printf '%s\n' "$line" > "$dir/f.txt"

@@ -221,6 +221,18 @@ fn luma_of(grey: u8) -> i32 {
     16 + (i32::from(grey) * 219 + 127) / 255
 }
 
+fn reports_the_asked_size(set: &SessionSet<SessionHandle>) -> bool {
+    let reports = set.reports();
+    reports.len() == 3
+        && reports.iter().all(|report| {
+            report.stats.frames >= 5
+                && report
+                    .stats
+                    .stream_info
+                    .is_some_and(|info| info.geometry.stream == (SIZE.width, SIZE.height))
+        })
+}
+
 fn frames_of(set: &SessionSet<SessionHandle>) -> Vec<(u64, u64)> {
     set.reports()
         .iter()
@@ -492,7 +504,11 @@ fn stream_samples_follow_session_ids_through_tab_switches() {
         &mut tabs,
         None,
         Duration::from_secs(15),
-        |_, set| set.reports().len() == 3 && set.reports().iter().all(|r| r.stats.frames >= 5),
+        |_, set| reports_the_asked_size(set),
+    );
+    assert!(
+        reports_the_asked_size(&set),
+        "each session reports 1280 by 800 after the resize"
     );
     let reports = set.reports();
     assert_eq!(reports.len(), 3);
