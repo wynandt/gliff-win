@@ -296,10 +296,12 @@ and the client continues.
 
 Copy on one machine and paste on the other: text, pictures and files. The
 other side only learns what kinds of data are available, and the data moves
-when something pastes. The server trusts the machine it is connected to and
-withholds nothing from the clipboard. Use `--no-clipboard` on a host you do
-not trust. Limits, formats and the file rules are in
-[docs/clipboard.md](docs/clipboard.md).
+when something pastes. A paste over 32 MiB is refused. Text read from the
+Windows clipboard stops at twice that plus 4096 bytes; PNG, JPEG, GIF, HTML
+and rich text stop at 32 MiB plus 4096 bytes. The server trusts the machine
+it is connected to and withholds nothing from the clipboard. Use
+`--no-clipboard` on a host you do not trust. Limits, formats and the file
+rules are in [docs/clipboard.md](docs/clipboard.md).
 
 ### Options
 

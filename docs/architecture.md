@@ -225,8 +225,10 @@ Each choice names the alternative that was rejected.
   fast sender is slowed by the pipe. The server's error text is cut to 512
   characters, with control characters shown as `?`, before it reaches the log
   or the screen. Reading the local clipboard stops at a size no legal body
-  needs (twice the item limit; for a bitmap, its pixel limit as 32-bit pixels)
-  instead of copying the whole item first.
+  needs, instead of copying the whole item first. Text stops at twice the
+  item limit plus 4096 bytes. PNG, JPEG, GIF, HTML, rich text, a file list
+  and any other registered format stop at the item limit plus 4096 bytes. A
+  bitmap stops at its pixel limit as 32-bit pixels.
 
 ## The session core
 

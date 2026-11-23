@@ -7,6 +7,13 @@ release, see [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
 ## [Unreleased]
 
+- PNG, JPEG, GIF, HTML and rich text read from the Windows clipboard stop
+  at 32 MiB plus 4096 bytes. A file list and any other registered format
+  stop there too. Text still stops at twice 32 MiB plus 4096 bytes, and a
+  bitmap still stops at its pixel limit. A body over 32 MiB after conversion
+  is still refused. An HTML Format payload larger than 32 MiB plus 4096
+  bytes is no longer read, even when the copied fragment would have fit.
+  ([#68](https://github.com/wynandt/gliff-win/issues/68))
 - The stream check flushes a held picture after the client's idle drain
   (150 ms) and waits the client's 5 s for the server to exit after Bye.
   It had kept a second drain and a 10 s wait.
