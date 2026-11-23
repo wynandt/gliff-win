@@ -27,8 +27,12 @@ use windows::Win32::UI::WindowsAndMessaging::CreateWindowExW;
 use windows::Win32::UI::WindowsAndMessaging::DispatchMessageW;
 use windows::Win32::UI::WindowsAndMessaging::IDC_ARROW;
 use windows::Win32::UI::WindowsAndMessaging::LoadCursorW;
+use windows::Win32::UI::WindowsAndMessaging::MB_ICONERROR;
+use windows::Win32::UI::WindowsAndMessaging::MB_OK;
+use windows::Win32::UI::WindowsAndMessaging::MB_SETFOREGROUND;
 use windows::Win32::UI::WindowsAndMessaging::MSG;
 use windows::Win32::UI::WindowsAndMessaging::MWMO_INPUTAVAILABLE;
+use windows::Win32::UI::WindowsAndMessaging::MessageBoxW;
 use windows::Win32::UI::WindowsAndMessaging::MsgWaitForMultipleObjectsEx;
 use windows::Win32::UI::WindowsAndMessaging::PM_REMOVE;
 use windows::Win32::UI::WindowsAndMessaging::PeekMessageW;
@@ -133,11 +137,26 @@ pub fn run(args: Args) -> ExitCode {
     }
     let instance_name = single_instance::instance_name(startup.dir.path());
     let _instance = match single_instance::win::acquire(&instance_name) {
-        Ok(instance) => {
-            if instance.is_some() {
-                instance
-            } else {
-                return match single_instance::decide(true, &args.targets, false) {
+        Ok(Some(instance)) => {
+            match single_instance::after_check(
+                single_instance::LockCheck::Held,
+                &args.targets,
+                false,
+            ) {
+                single_instance::Start::Run => instance,
+                single_instance::Start::Stop(message) => return lock_stopped(&message),
+                single_instance::Start::Second(_) => {
+                    return lock_stopped("single-instance check failed: the held lock did not run");
+                }
+            }
+        }
+        Ok(None) => {
+            return match single_instance::after_check(
+                single_instance::LockCheck::AlreadyRunning,
+                &args.targets,
+                false,
+            ) {
+                single_instance::Start::Second(launch) => match launch {
                     Launch::HandOver(forward) => {
                         match single_instance::win::hand_over(&instance_name, &forward) {
                             Ok(()) => {
@@ -159,12 +178,26 @@ pub fn run(args: Args) -> ExitCode {
                         ));
                         ExitCode::SUCCESS
                     }
-                };
-            }
+                },
+                single_instance::Start::Stop(message) => lock_stopped(&message),
+                single_instance::Start::Run => lock_stopped(
+                    "single-instance check failed: an existing client was treated as the first",
+                ),
+            };
         }
-        Err(e) => {
-            eprintln!("gliff-windows: single-instance check failed: {e}");
-            None
+        Err(error) => {
+            let error = error.to_string();
+            let message = match single_instance::after_check(
+                single_instance::LockCheck::Failed(error.clone()),
+                &args.targets,
+                false,
+            ) {
+                single_instance::Start::Stop(message) => message,
+                single_instance::Start::Run | single_instance::Start::Second(_) => {
+                    format!("single-instance check failed: {error}")
+                }
+            };
+            return lock_stopped(&message);
         }
     };
     let (tabs, effects) = Tabs::start_up(startup.config.tabs(), &args.targets);
@@ -523,4 +556,32 @@ fn fail(message: &str) -> ExitCode {
     ));
     eprintln!("gliff-windows: {message}");
     ExitCode::from(1)
+}
+
+/// Stops the launch when the instance lock cannot be created or checked.
+///
+/// Writes the client exit line for `message`, shows that text, and returns
+/// exit code 1.
+fn lock_stopped(message: &str) -> ExitCode {
+    crate::logging::line(&client_exit_line(
+        &ClientExit::Failed(message.to_owned()),
+        Some(1),
+        None,
+    ));
+    show_lock_error(message);
+    ExitCode::from(1)
+}
+
+/// Shows `message` in an error box titled `gliff`, with an OK button.
+fn show_lock_error(message: &str) {
+    let text = windows::core::HSTRING::from(message);
+    // SAFETY: `text` outlives the call. No owner window exists yet.
+    let _ = unsafe {
+        MessageBoxW(
+            None,
+            &text,
+            w!("gliff"),
+            MB_OK | MB_ICONERROR | MB_SETFOREGROUND,
+        )
+    };
 }
