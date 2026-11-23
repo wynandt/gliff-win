@@ -2,7 +2,10 @@ use std::collections::HashMap;
 use std::io::Cursor;
 
 use super::ConvertError;
+use super::NON_TEXT_RAW_LIMIT;
+use super::RAW_SLACK;
 use super::Render;
+use super::TEXT_RAW_LIMIT;
 use super::WinFormat;
 use super::cf_html_to_fragment;
 use super::dib_to_png;
@@ -473,10 +476,30 @@ fn local_body_over_the_limit_is_refused_and_missing_data_is_reported() {
         local_body("text/plain", &formats, 10, &mut empty),
         Err(ConvertError::Missing(_))
     ));
+}
+
+#[test]
+fn raw_limit_locks_the_text_bound_and_the_bound_for_png_jpeg_gif_html_and_rtf() {
     let item = usize::try_from(gliff_proto::clipboard::MAX_ITEM).expect("fits");
-    assert!(raw_limit(&WinFormat::UnicodeText) >= 2 * item);
-    assert!(raw_limit(&WinFormat::Dib) >= 4 * 64 * 1024 * 1024);
-    assert!(raw_limit(&WinFormat::Png) < 1 << 28);
+    assert_eq!(TEXT_RAW_LIMIT, 2 * item + RAW_SLACK);
+    assert_eq!(NON_TEXT_RAW_LIMIT, item + RAW_SLACK);
+    assert_eq!(raw_limit(&WinFormat::UnicodeText), TEXT_RAW_LIMIT);
+    for format in [
+        WinFormat::Png,
+        WinFormat::Jfif,
+        WinFormat::Gif,
+        WinFormat::Html,
+        WinFormat::Rtf,
+    ] {
+        assert_eq!(raw_limit(&format), NON_TEXT_RAW_LIMIT, "{format:?}");
+    }
+    assert_eq!(raw_limit(&WinFormat::Hdrop), NON_TEXT_RAW_LIMIT);
+    assert_eq!(
+        raw_limit(&WinFormat::Registered("image/webp".to_owned())),
+        NON_TEXT_RAW_LIMIT
+    );
+    assert_eq!(raw_limit(&WinFormat::Dib), super::image::MAX_DIB_BYTES);
+    assert_eq!(raw_limit(&WinFormat::DibV5), super::image::MAX_DIB_BYTES);
 }
 
 #[test]
