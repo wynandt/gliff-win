@@ -12,6 +12,7 @@
 
 use windows::Win32::Foundation::CloseHandle;
 use windows::Win32::Foundation::DXGI_STATUS_OCCLUDED;
+use windows::Win32::Foundation::E_FAIL;
 use windows::Win32::Foundation::HANDLE;
 use windows::Win32::Foundation::HMODULE;
 use windows::Win32::Foundation::HWND;
@@ -87,6 +88,9 @@ use windows::core::s;
 use crate::cli::AdapterChoice;
 use crate::layout::Filter;
 use crate::layout::Viewport;
+use crate::output_list::OutputList;
+use crate::output_list::enum_outputs_ended;
+use crate::output_list::output_list;
 use crate::present_log::PresentOutcome;
 use crate::present_math::PRESENT_HLSL;
 use crate::stats_out::AdapterInfo;
@@ -651,7 +655,9 @@ fn blob_bytes(blob: &ID3DBlob) -> &[u8] {
 }
 
 /// The adapter for `choice`: `None` means the system default (only when
-/// no adapter has an output on `monitor`).
+/// no adapter has an output on `monitor`). An `EnumOutputs` error other
+/// than the end of that adapter's list is returned, and the adapter is
+/// not skipped.
 fn pick_adapter(
     factory: &IDXGIFactory6,
     choice: AdapterChoice,
@@ -666,7 +672,7 @@ fn pick_adapter(
                     Err(e) if e.code() == DXGI_ERROR_NOT_FOUND => break,
                     Err(e) => return Err(e),
                 };
-                if drives(&adapter, monitor) {
+                if drives(&adapter, monitor)? {
                     return Ok(Some(adapter));
                 }
             }
@@ -682,20 +688,52 @@ fn pick_adapter(
 }
 
 /// Whether one of `adapter`'s outputs is `monitor`.
-fn drives(adapter: &IDXGIAdapter1, monitor: HMONITOR) -> bool {
-    for i in 0.. {
-        // SAFETY: enumeration by index.
-        let Ok(output) = (unsafe { adapter.EnumOutputs(i) }) else {
-            return false;
-        };
-        // SAFETY: a COM call on a live output.
-        if let Ok(desc) = unsafe { output.GetDesc() }
-            && desc.Monitor == monitor
-        {
-            return true;
-        }
+///
+/// `Ok(false)` means the list ended on `DXGI_ERROR_NOT_FOUND` with no
+/// match. Any other `EnumOutputs` error is returned. A list that stops
+/// without that code is `E_FAIL`, which is not the end of the list.
+fn drives(adapter: &IDXGIAdapter1, monitor: HMONITOR) -> windows::core::Result<bool> {
+    let mut index = 0u32;
+    let listed = output_list(
+        std::iter::from_fn(|| {
+            if index == u32::MAX {
+                return None;
+            }
+            let i = index;
+            index += 1;
+            Some(enum_output(adapter, i, monitor))
+        }),
+        |error| enum_outputs_ended(error.code().0),
+    );
+    match listed {
+        OutputList::Drives => Ok(true),
+        OutputList::Ended => Ok(false),
+        OutputList::Failed(error) => Err(error),
+        OutputList::Unended => Err(windows::core::Error::new(
+            E_FAIL,
+            "EnumOutputs stopped before the end of the list",
+        )),
     }
-    false
+}
+
+/// One `EnumOutputs` step. `Ok(true)` is the window's monitor. `Ok(false)`
+/// is any other output, including one whose description could not be read.
+/// `Err` is the `EnumOutputs` failure.
+fn enum_output(
+    adapter: &IDXGIAdapter1,
+    index: u32,
+    monitor: HMONITOR,
+) -> windows::core::Result<bool> {
+    // SAFETY: enumeration by index. NOT_FOUND ends it.
+    let output = match unsafe { adapter.EnumOutputs(index) } {
+        Ok(output) => output,
+        Err(error) => return Err(error),
+    };
+    // SAFETY: a COM call on a live output.
+    Ok(match unsafe { output.GetDesc() } {
+        Ok(desc) => desc.Monitor == monitor,
+        Err(_) => false,
+    })
 }
 
 /// `DXGI_ADAPTER_DESC1` of the adapter the device runs on.
@@ -721,6 +759,6 @@ fn adapter_info(
         vendor_id: desc.VendorId,
         device_id: desc.DeviceId,
         choice: choice.name().to_string(),
-        drives_monitor: drives(&adapter, monitor),
+        drives_monitor: drives(&adapter, monitor)?,
     })
 }
