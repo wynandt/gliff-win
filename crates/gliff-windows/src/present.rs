@@ -725,10 +725,7 @@ fn enum_output(
     monitor: HMONITOR,
 ) -> windows::core::Result<bool> {
     // SAFETY: enumeration by index. NOT_FOUND ends it.
-    let output = match unsafe { adapter.EnumOutputs(index) } {
-        Ok(output) => output,
-        Err(error) => return Err(error),
-    };
+    let output = unsafe { adapter.EnumOutputs(index) }?;
     // SAFETY: a COM call on a live output.
     Ok(match unsafe { output.GetDesc() } {
         Ok(desc) => desc.Monitor == monitor,
