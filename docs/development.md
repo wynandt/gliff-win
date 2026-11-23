@@ -129,7 +129,7 @@ stand-ins, so a change can be exercised with no second machine:
 | `scripts/fake-bin/ffplay` | `ffplay` | Registers a window in the fake hyprctl world instead of opening one. |
 | `scripts/fake-bin/wev` | `wev` | Prints the keysyms the `gwin-keys` script's `typed:` lines read. |
 | `scripts/fake-bin/wl-copy`, `wl-paste` | `wl-copy`, `wl-paste` | Keep one clipboard (and its `--type`) in a file, `$GWIN_FAKE_CLIPBOARD`, so the remote half of `gwin-verify clipboard` runs on Linux. |
-| `scripts/remote/gwin-keys` | (a real script) | Runs on the remote Hyprland machine: arms a test submap that logs every chord, key, click and wheel event, read back over ssh by `keys` and `pointer`. Its Linux tests use the fake `hyprctl`. Manual: [phase4/gwin-keys.md](phase4/gwin-keys.md). |
+| `scripts/remote/gwin-keys` | (a real script) | Runs on the remote Hyprland machine: arms a test submap that logs every chord, key, click and wheel event, read back over ssh by `keys` and `pointer`. When `HYPRLAND_INSTANCE_SIGNATURE` is unset it sources `scripts/remote/hypr-instance.sh`, the same newest-socket picker the placement probe runs. Its Linux tests use the fake `hyprctl`. Manual: [phase4/gwin-keys.md](phase4/gwin-keys.md). |
 | `scripts/remote/gwin-pattern` | (a real script) | Runs on the remote Hyprland machine and shows the moving test pattern fullscreen on the gliff output. Its Linux tests use the fakes above. |
 
 Example: start the server over the fake ssh, as the client does:

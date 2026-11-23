@@ -207,6 +207,12 @@ is saved as a PNG and compared with the 32-cell test pattern.
   and waits the session's `EXIT_WAIT` (5 s) for the server to exit, then kills
   it. Those two durations are the client's pair. The hyprctl probe keeps its
   own timeout.
+- The probe and `gwin-keys` share one instance picker,
+  `scripts/remote/hypr-instance.sh`. When `HYPRLAND_INSTANCE_SIGNATURE` is
+  unset, it takes the newest `.socket.sock` under `$XDG_RUNTIME_DIR/hypr`
+  (or `/run/user/<uid>/hypr`). A newer directory with an older socket is a
+  previous instance and is not chosen. A signature that is already set is
+  left as it is.
 - `--placement skip` drops the hyprctl probe (non-Hyprland host); pattern
   placement is then unproven.
 - `--present-ms 100` takes pictures from the frame slot only every 100 ms, so

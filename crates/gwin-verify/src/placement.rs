@@ -9,24 +9,17 @@ use serde_json::Value;
 ///
 /// A non-interactive ssh has no `HYPRLAND_INSTANCE_SIGNATURE`, and without
 /// it hyprctl exits 1 with "HYPRLAND_INSTANCE_SIGNATURE not set!" on
-/// stdout (hyprwm/Hyprland hyprctl/src/main.cpp, `main`). So when it is
-/// unset the command finds the instance itself, where hyprctl looks for
-/// its socket (`getRuntimeDir`: `$XDG_RUNTIME_DIR/hypr`, else
-/// `/run/user/<uid>/hypr`, then `<sig>/.socket.sock`), taking the newest
-/// socket: a crashed Hyprland can leave an older one behind. What it
-/// picked, or that it found none, goes to stderr. `sh -c` keeps it POSIX
-/// whatever the login shell is.
+/// stdout (hyprwm/Hyprland hyprctl/src/main.cpp, `main`). When it is unset
+/// the command includes `scripts/remote/hypr-instance.sh`, which
+/// `gwin-keys` sources: the newest `.socket.sock` under
+/// `$XDG_RUNTIME_DIR/hypr`, else `/run/user/<uid>/hypr`. A crashed Hyprland
+/// can leave an older socket in a directory that was touched later. What
+/// it picked, or that it found none, goes to stderr. `sh -c` keeps it
+/// POSIX whatever the login shell is. A signature that is already set is
+/// left as it is.
 pub const PLACEMENT_COMMAND: &str = concat!(
     "sh -c '",
-    "if [ -z \"${HYPRLAND_INSTANCE_SIGNATURE:-}\" ]; then ",
-    "d=\"${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/hypr\"; ",
-    "s=$(ls -td \"$d\"/*/.socket.sock 2>/dev/null | head -n 1); ",
-    "if [ -n \"$s\" ]; then ",
-    "HYPRLAND_INSTANCE_SIGNATURE=$(basename \"$(dirname \"$s\")\"); ",
-    "export HYPRLAND_INSTANCE_SIGNATURE; ",
-    "echo \"gwin: HYPRLAND_INSTANCE_SIGNATURE=$HYPRLAND_INSTANCE_SIGNATURE (newest socket under $d)\" >&2; ",
-    "else echo \"gwin: no Hyprland instance socket under $d\" >&2; fi; ",
-    "fi; ",
+    include_str!("../../../scripts/remote/hypr-instance.sh"),
     "hyprctl -j monitors all && hyprctl -j clients",
     "'"
 );
@@ -309,6 +302,229 @@ mod tests {
             placement.describe().contains("gliff-1") && placement.describe().contains("gliff-2"),
             "names both: {}",
             placement.describe()
+        );
+    }
+}
+
+#[cfg(all(test, unix))]
+mod instance_picker {
+    use std::path::Path;
+    use std::path::PathBuf;
+    use std::process::Command;
+    use std::process::Output;
+    use std::sync::atomic::AtomicU32;
+    use std::sync::atomic::Ordering;
+
+    use super::PLACEMENT_COMMAND;
+
+    const LIVE: &str = "a1b2c3_1761250000_200";
+    const DEAD: &str = "0d1e_1761000000_100";
+
+    struct Scratch(PathBuf);
+
+    impl Scratch {
+        fn new() -> Self {
+            static NEXT: AtomicU32 = AtomicU32::new(0);
+            let n = NEXT.fetch_add(1, Ordering::Relaxed);
+            let path =
+                std::env::temp_dir().join(format!("gwin-hypr-instance-{}-{n}", std::process::id()));
+            std::fs::create_dir_all(&path).expect("scratch dir");
+            Scratch(path)
+        }
+
+        fn path(&self) -> &Path {
+            &self.0
+        }
+    }
+
+    impl Drop for Scratch {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn repo() -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
+    }
+
+    fn output_text(out: &Output) -> String {
+        let mut text = String::from_utf8_lossy(&out.stdout).into_owned();
+        text.push('\n');
+        text.push_str(&String::from_utf8_lossy(&out.stderr));
+        text
+    }
+
+    fn instance_in(text: &str) -> String {
+        if let Some(sig) = text
+            .lines()
+            .find_map(|line| line.split("HYPRLAND_INSTANCE_SIGNATURE=").nth(1))
+        {
+            return sig
+                .split(|c: char| c.is_whitespace() || c == '(')
+                .next()
+                .unwrap_or("")
+                .to_owned();
+        }
+        for line in text.lines() {
+            if let Some(idx) = line.find("/.socket.sock") {
+                let path = &line[..idx];
+                if let Some(sig) = path.rsplit('/').next()
+                    && !sig.is_empty()
+                {
+                    return sig.to_owned();
+                }
+            }
+        }
+        panic!("no Hyprland instance in:\n{text}");
+    }
+
+    fn touch_date(path: &Path, date: &str) {
+        let out = Command::new("touch")
+            .arg("-d")
+            .arg(date)
+            .arg(path)
+            .output()
+            .expect("touch");
+        assert!(
+            out.status.success(),
+            "touch {date}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+
+    fn first_line(script: &str, dir: &Path) -> String {
+        let out = Command::new("sh")
+            .arg("-c")
+            .arg(script)
+            .arg("sh")
+            .arg(dir)
+            .output()
+            .expect("sh");
+        assert!(
+            out.status.success(),
+            "{script} failed: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        String::from_utf8(out.stdout)
+            .expect("utf8")
+            .lines()
+            .next()
+            .unwrap_or("")
+            .trim()
+            .to_owned()
+    }
+
+    fn run(
+        program: &str,
+        args: &[&str],
+        run_dir: &Path,
+        path: &str,
+        signature: Option<&str>,
+    ) -> Output {
+        let mut cmd = Command::new(program);
+        cmd.args(args)
+            .env("XDG_RUNTIME_DIR", run_dir)
+            .env("PATH", path)
+            .env("HOME", run_dir)
+            .env_remove("HYPRLAND_INSTANCE_SIGNATURE");
+        if let Some(sig) = signature {
+            cmd.env("HYPRLAND_INSTANCE_SIGNATURE", sig);
+        }
+        cmd.output().expect("spawn")
+    }
+
+    #[test]
+    fn one_picker_takes_the_newest_socket() {
+        let scratch = Scratch::new();
+        let run_dir = scratch.path().join("run");
+        let hypr = run_dir.join("hypr");
+        let dead = hypr.join(DEAD);
+        let live = hypr.join(LIVE);
+        std::fs::create_dir_all(&dead).expect("dead instance");
+        std::fs::create_dir_all(&live).expect("live instance");
+        std::fs::write(dead.join(".socket.sock"), "").expect("dead socket");
+        std::fs::write(live.join(".socket.sock"), "").expect("live socket");
+        std::fs::write(dead.join(".dead"), "").expect("dead marker");
+        touch_date(&dead.join(".socket.sock"), "2020-01-01 00:00:00");
+        touch_date(&live.join(".socket.sock"), "2024-06-01 00:00:00");
+        touch_date(&dead, "2026-01-01 00:00:00");
+        touch_date(&live, "2021-01-01 00:00:00");
+
+        assert_eq!(
+            first_line(r#"ls -1t "$1""#, &hypr),
+            DEAD,
+            "fixture: the newest directory is the previous instance"
+        );
+        assert_eq!(
+            first_line(
+                r#"basename "$(dirname "$(ls -td "$1"/*/.socket.sock | head -n 1)")""#,
+                &hypr,
+            ),
+            LIVE,
+            "fixture: the newest socket is the running instance"
+        );
+
+        let path = format!(
+            "{}:{}",
+            repo().join("scripts/fake-bin").display(),
+            std::env::var("PATH").expect("PATH")
+        );
+        let placement = run("bash", &["-c", PLACEMENT_COMMAND], &run_dir, &path, None);
+        let placement_text = output_text(&placement);
+        assert!(
+            placement.status.success(),
+            "placement failed: {placement_text}"
+        );
+        assert_eq!(
+            instance_in(&placement_text),
+            LIVE,
+            "placement:\n{placement_text}"
+        );
+
+        let script = repo().join("scripts/remote/gwin-keys");
+        let script = script.to_str().expect("utf-8 script path");
+        let keys = run("bash", &[script, "diag"], &run_dir, &path, None);
+        let keys_text = output_text(&keys);
+        assert!(keys.status.success(), "gwin-keys diag failed: {keys_text}");
+        assert_eq!(
+            instance_in(&keys_text),
+            LIVE,
+            "gwin-keys took a different instance than the newest socket:\n{keys_text}"
+        );
+
+        let kept = run(
+            "bash",
+            &["-c", PLACEMENT_COMMAND],
+            &run_dir,
+            &path,
+            Some(DEAD),
+        );
+        let kept_text = output_text(&kept);
+        assert!(
+            !kept.status.success(),
+            "a preset signature must stay on the previous instance: {kept_text}"
+        );
+        assert_eq!(
+            instance_in(&kept_text),
+            DEAD,
+            "preset signature:\n{kept_text}"
+        );
+        assert!(
+            !kept_text.contains("newest socket"),
+            "picker replaced a set signature: {kept_text}"
+        );
+
+        let picker = std::fs::read_to_string(repo().join("scripts/remote/hypr-instance.sh"))
+            .expect("scripts/remote/hypr-instance.sh");
+        let keys_src =
+            std::fs::read_to_string(repo().join("scripts/remote/gwin-keys")).expect("gwin-keys");
+        assert!(
+            keys_src.contains("hypr-instance.sh"),
+            "gwin-keys sources the shared picker"
+        );
+        assert!(
+            PLACEMENT_COMMAND.contains(picker.trim()),
+            "the placement command is the shared picker"
         );
     }
 }
