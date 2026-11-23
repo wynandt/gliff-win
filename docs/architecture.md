@@ -291,9 +291,11 @@ perform, in order: `Send`, `Decode`, `ResetDecoder`, `Present` and `Ui`.
   as the only exceptions: one the pipeline holds but the user does not is released too.
 
 `session::driver` owns the I/O: a writer task fed by a channel, a reader task
-that reads whole messages, the decoder, the 150 ms idle drain, and the Bye
-sequence (Bye, then stdin EOF, then a 5 s wait for ssh). `gwin-verify stream`
-keeps its own instrumented copy of this loop.
+that reads whole messages, the decoder, the 150 ms idle drain (`IDLE_DRAIN`),
+and the Bye sequence (Bye, then stdin EOF, then a 5 s wait for ssh,
+`EXIT_WAIT`). `gwin-verify stream` keeps its own instrumented copy of this
+loop and uses that same `IDLE_DRAIN` and that same `EXIT_WAIT`. The placement
+probe keeps its own timeout.
 
 ## Decode and present
 

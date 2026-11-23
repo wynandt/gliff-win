@@ -202,6 +202,11 @@ is saved as a PNG and compared with the 32-cell test pattern.
   full; it cannot create a 3840x2400 headless mode.
 - The end placement probe runs before Bye because upstream drops the output on
   Bye.
+- A picture the decoder still holds is flushed after the session's idle drain,
+  `IDLE_DRAIN` (150 ms with nothing to feed). After Bye the check closes stdin
+  and waits the session's `EXIT_WAIT` (5 s) for the server to exit, then kills
+  it. Those two durations are the client's pair. The hyprctl probe keeps its
+  own timeout.
 - `--placement skip` drops the hyprctl probe (non-Hyprland host); pattern
   placement is then unproven.
 - `--present-ms 100` takes pictures from the frame slot only every 100 ms, so
