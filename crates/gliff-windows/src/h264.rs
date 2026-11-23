@@ -144,38 +144,133 @@ fn restrict_sps(nal: &[u8]) -> Option<Vec<u8>> {
     }
     let rbsp = unescape(&nal[1..]);
     let sps = parse_sps_rbsp(&rbsp).ok()?;
-    if sps.has_vui {
+    if sps.vui_parameters_present_flag {
         return None;
     }
+    let vui = VuiParameters::bitstream_restriction_only(BitstreamRestriction::no_reorder(
+        sps.max_num_ref_frames,
+    ));
     let mut w = BitWriter::default();
-    for i in 0..sps.vui_flag_bit {
-        w.bit((rbsp[i / 8] >> (7 - i % 8)) & 1 == 1);
-    }
-    w.bit(true);
-    for _ in 0..8 {
-        w.bit(false);
-    }
-    w.bit(true);
-    w.bit(true);
-    w.ue(2);
-    w.ue(1);
-    w.ue(16);
-    w.ue(16);
-    w.ue(0);
-    w.ue(sps.max_num_ref_frames.max(1));
-    w.bit(true);
+    w.copy_bits(&rbsp, sps.vui_parameters_present_flag_bit);
+    let vui_parameters_present_flag = true;
+    w.bit(vui_parameters_present_flag);
+    vui.write_to(&mut w);
     let mut out = vec![nal[0]];
-    out.extend(escape(&w.finish()));
+    out.extend(escape(&w.finish_rbsp()));
     Some(out)
+}
+
+/// `vui_parameters()` syntax elements (ITU-T H.264 §E.1.1) for a VUI that
+/// carries only `bitstream_restriction`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct VuiParameters {
+    aspect_ratio_info_present_flag: bool,
+    overscan_info_present_flag: bool,
+    video_signal_type_present_flag: bool,
+    chroma_loc_info_present_flag: bool,
+    timing_info_present_flag: bool,
+    nal_hrd_parameters_present_flag: bool,
+    vcl_hrd_parameters_present_flag: bool,
+    pic_struct_present_flag: bool,
+    bitstream_restriction: Option<BitstreamRestriction>,
+}
+
+/// `bitstream_restriction` syntax elements inside `vui_parameters()`
+/// (ITU-T H.264 §E.1.1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct BitstreamRestriction {
+    motion_vectors_over_pic_boundaries_flag: bool,
+    max_bytes_per_pic_denom: u32,
+    max_bits_per_mb_denom: u32,
+    log2_max_mv_length_horizontal: u32,
+    log2_max_mv_length_vertical: u32,
+    max_num_reorder_frames: u32,
+    max_dec_frame_buffering: u32,
+}
+
+impl BitstreamRestriction {
+    /// ITU-T H.264 §E.2.1 defaults with `max_num_reorder_frames = 0` and
+    /// `max_dec_frame_buffering = max_num_ref_frames.max(1)`.
+    fn no_reorder(max_num_ref_frames: u32) -> Self {
+        Self {
+            motion_vectors_over_pic_boundaries_flag: true,
+            max_bytes_per_pic_denom: 2,
+            max_bits_per_mb_denom: 1,
+            log2_max_mv_length_horizontal: 16,
+            log2_max_mv_length_vertical: 16,
+            max_num_reorder_frames: 0,
+            max_dec_frame_buffering: max_num_ref_frames.max(1),
+        }
+    }
+
+    fn write_to(&self, w: &mut BitWriter) {
+        w.bit(self.motion_vectors_over_pic_boundaries_flag);
+        w.ue(self.max_bytes_per_pic_denom);
+        w.ue(self.max_bits_per_mb_denom);
+        w.ue(self.log2_max_mv_length_horizontal);
+        w.ue(self.log2_max_mv_length_vertical);
+        w.ue(self.max_num_reorder_frames);
+        w.ue(self.max_dec_frame_buffering);
+    }
+}
+
+impl VuiParameters {
+    /// A VUI with every optional block before `bitstream_restriction` absent.
+    fn bitstream_restriction_only(bitstream_restriction: BitstreamRestriction) -> Self {
+        Self {
+            aspect_ratio_info_present_flag: false,
+            overscan_info_present_flag: false,
+            video_signal_type_present_flag: false,
+            chroma_loc_info_present_flag: false,
+            timing_info_present_flag: false,
+            nal_hrd_parameters_present_flag: false,
+            vcl_hrd_parameters_present_flag: false,
+            pic_struct_present_flag: false,
+            bitstream_restriction: Some(bitstream_restriction),
+        }
+    }
+
+    fn write_to(&self, w: &mut BitWriter) {
+        assert!(
+            !self.aspect_ratio_info_present_flag
+                && !self.overscan_info_present_flag
+                && !self.video_signal_type_present_flag
+                && !self.chroma_loc_info_present_flag
+                && !self.timing_info_present_flag
+                && !self.nal_hrd_parameters_present_flag
+                && !self.vcl_hrd_parameters_present_flag
+                && !self.pic_struct_present_flag,
+            "VuiParameters::write_to only encodes absent preceding VUI flags"
+        );
+        w.bit(self.aspect_ratio_info_present_flag);
+        w.bit(self.overscan_info_present_flag);
+        w.bit(self.video_signal_type_present_flag);
+        w.bit(self.chroma_loc_info_present_flag);
+        w.bit(self.timing_info_present_flag);
+        w.bit(self.nal_hrd_parameters_present_flag);
+        w.bit(self.vcl_hrd_parameters_present_flag);
+        w.bit(self.pic_struct_present_flag);
+        match &self.bitstream_restriction {
+            Some(restriction) => {
+                let bitstream_restriction_flag = true;
+                w.bit(bitstream_restriction_flag);
+                restriction.write_to(w);
+            }
+            None => {
+                let bitstream_restriction_flag = false;
+                w.bit(bitstream_restriction_flag);
+            }
+        }
+    }
 }
 
 /// What [`restrict_sps`] needs beyond [`SpsInfo`].
 struct ParsedSps {
     info: SpsInfo,
     max_num_ref_frames: u32,
-    has_vui: bool,
-    /// The bit offset of vui_parameters_present_flag in the RBSP.
-    vui_flag_bit: usize,
+    vui_parameters_present_flag: bool,
+    /// The bit offset of `vui_parameters_present_flag` in the RBSP.
+    vui_parameters_present_flag_bit: usize,
 }
 
 fn parse_sps_rbsp(rbsp: &[u8]) -> Result<ParsedSps, SpsError> {
@@ -261,8 +356,8 @@ fn parse_sps_rbsp(rbsp: &[u8]) -> Result<ParsedSps, SpsError> {
     if crop_w >= coded_w || crop_h >= coded_h {
         return Err(SpsError::Invalid("frame cropping"));
     }
-    let vui_flag_bit = r.pos;
-    let has_vui = r.bits(1)? == 1;
+    let vui_parameters_present_flag_bit = r.pos;
+    let vui_parameters_present_flag = r.bits(1)? == 1;
     Ok(ParsedSps {
         info: SpsInfo {
             profile_idc,
@@ -272,8 +367,8 @@ fn parse_sps_rbsp(rbsp: &[u8]) -> Result<ParsedSps, SpsError> {
             height: coded_h - crop_h,
         },
         max_num_ref_frames,
-        has_vui,
-        vui_flag_bit,
+        vui_parameters_present_flag,
+        vui_parameters_present_flag_bit,
     })
 }
 
@@ -400,6 +495,12 @@ impl BitWriter {
         self.bits += 1;
     }
 
+    fn copy_bits(&mut self, rbsp: &[u8], bit_count: usize) {
+        for i in 0..bit_count {
+            self.bit((rbsp[i / 8] >> (7 - i % 8)) & 1 == 1);
+        }
+    }
+
     /// Unsigned exp-Golomb.
     fn ue(&mut self, v: u32) {
         let code = u64::from(v) + 1;
@@ -412,8 +513,15 @@ impl BitWriter {
         }
     }
 
-    /// The bytes, the last one zero-padded.
-    fn finish(self) -> Vec<u8> {
+    /// Appends `rbsp_trailing_bits()` (ITU-T H.264 §7.3.2.11) and returns
+    /// the RBSP bytes.
+    fn finish_rbsp(mut self) -> Vec<u8> {
+        let rbsp_stop_one_bit = true;
+        self.bit(rbsp_stop_one_bit);
+        while !self.bits.is_multiple_of(8) {
+            let rbsp_alignment_zero_bit = false;
+            self.bit(rbsp_alignment_zero_bit);
+        }
         self.bytes
     }
 }
