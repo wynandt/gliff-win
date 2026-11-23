@@ -1,3 +1,7 @@
+use std::fs;
+use std::path::Path;
+use std::path::PathBuf;
+
 use super::Button;
 use super::GUIDE_FILE;
 use super::Guide;
@@ -341,4 +345,78 @@ fn the_unreachable_sentence_uses_the_ssh_connect_timeout() {
         "title must follow CONNECT_TIMEOUT_SECS: {}",
         msg.what
     );
+}
+
+#[test]
+fn check_again_starts_the_tab_again_and_the_version_check_entry_point_is_gone() {
+    let root = repo_root();
+    let window =
+        fs::read_to_string(root.join("crates/gliff-windows/src/window.rs")).expect("window.rs");
+    let arm = check_again_arm(&window);
+    assert!(
+        arm.contains("tabs.reconnect"),
+        "Check again starts the tab again: {arm}"
+    );
+    assert!(
+        !arm.contains("check_server"),
+        "Check again asks the server for its version: {arm}"
+    );
+
+    let mut named = Vec::new();
+    for rel in ["crates/gliff-windows/src", "crates/gwin-verify/src"] {
+        collect_version_check(&root.join(rel), &root, &mut named);
+    }
+    assert!(
+        named.is_empty(),
+        "the version-check entry point remains: {named:?}"
+    );
+}
+
+fn repo_root() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .canonicalize()
+        .expect("repository root from the gliff-windows manifest")
+}
+
+fn check_again_arm(window: &str) -> &str {
+    const ARM: &str = "Button::TryAgain | Button::CheckAgain =>";
+    let start = window
+        .find(ARM)
+        .expect("Check again is grouped with Try again");
+    let rest = &window[start + ARM.len()..];
+    let end = rest.find("Button::").expect("the next button arm");
+    &rest[..end]
+}
+
+fn collect_version_check(dir: &Path, root: &Path, named: &mut Vec<String>) {
+    let entries = match fs::read_dir(dir) {
+        Ok(entries) => entries,
+        Err(err) => panic!("read {}: {err}", dir.display()),
+    };
+    for entry in entries {
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(err) => panic!("read {}: {err}", dir.display()),
+        };
+        let path = entry.path();
+        if path.is_dir() {
+            collect_version_check(&path, root, named);
+            continue;
+        }
+        if path.extension().and_then(|ext| ext.to_str()) != Some("rs") {
+            continue;
+        }
+        if path.file_name().and_then(|name| name.to_str()) == Some("tests.rs") {
+            continue;
+        }
+        let text = match fs::read_to_string(&path) {
+            Ok(text) => text,
+            Err(err) => panic!("read {}: {err}", path.display()),
+        };
+        if text.contains("check_server") {
+            let shown = path.strip_prefix(root).unwrap_or(&path);
+            named.push(shown.display().to_string());
+        }
+    }
 }

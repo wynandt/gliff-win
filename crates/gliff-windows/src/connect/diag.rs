@@ -245,7 +245,7 @@ pub enum Button {
     EditAddress,
     /// Start the session again.
     TryAgain,
-    /// Run the version check again ([`super::check_server`]).
+    /// Start the session again. The panel's label for this button is "Check again".
     CheckAgain,
     /// Dismiss the panel; nothing is offered, because a changed identity must
     /// not be waved through.
