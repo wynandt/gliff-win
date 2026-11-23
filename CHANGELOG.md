@@ -7,6 +7,10 @@ release, see [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
 ## [Unreleased]
 
+- The stream check flushes a held picture after the client's idle drain
+  (150 ms) and waits the client's 5 s for the server to exit after Bye.
+  It had kept a second drain and a 10 s wait.
+  ([#66](https://github.com/wynandt/gliff-win/issues/66))
 - The lock step tries a refused placement again. A later try that puts the
   window in front still leaves what the failed try said, and that step fails.
   ([#67](https://github.com/wynandt/gliff-win/issues/67))

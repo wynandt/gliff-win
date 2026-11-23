@@ -888,10 +888,13 @@ slot, `tx`, probe tasks, `end_probe`, and `end_result` Options.
 
 Matching resize starts settlement, then timed measurement. Measurement ends with an
 optional placement probe while the session continues acknowledging; probe result or
-deadline sends Bye and ends the phase. Errors record failure and end the run. Invariant:
-teardown cannot remove the output before the end-placement probe observes it. Stream
-integration and measurement-judge tests exist. [Phase/state][verify-stream]; [phase
-deadlines][verify-stream].
+deadline sends Bye and ends the phase. After Bye, stdin is closed and the check waits
+the session driver's `EXIT_WAIT` for the server to exit. A picture the decoder still
+holds is flushed after that driver's `IDLE_DRAIN`. The placement probe keeps its own
+timeout. Errors record failure and end the run. Invariant: teardown cannot remove the
+output before the end-placement probe observes it. Stream integration and
+measurement-judge tests exist. A host test requires the drain and the exit wait to be
+that driver's pair. [Phase/state][verify-stream]; [phase deadlines][verify-stream].
 
 ### Fake-server congestion, pacing, and fault lifecycle
 
