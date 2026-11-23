@@ -227,7 +227,7 @@ pub fn restore_if_owned(
     registry: &mut dyn Registry,
     only: Option<Owner>,
 ) -> Result<Option<Marker>, RegError> {
-    let _hold = registry.hold();
+    let _hold = registry.hold()?;
     let StoredMarker::Complete(marker) = registry.read_marker()? else {
         return Ok(None);
     };
@@ -246,7 +246,10 @@ pub fn restore_if_owned(
 /// incomplete marker is removed: left alone it would make every later start
 /// fail to read it.
 pub fn recover(registry: &mut dyn Registry, processes: &dyn Processes) -> Recovery {
-    let _hold = registry.hold();
+    let _hold = match registry.hold() {
+        Ok(hold) => hold,
+        Err(error) => return Recovery::Failed(error),
+    };
     let marker = match registry.read_marker() {
         Ok(StoredMarker::Complete(marker)) => marker,
         Ok(StoredMarker::Absent) => return Recovery::Nothing,
@@ -379,7 +382,10 @@ impl<R: Registry> LockPolicy<R> {
         match (want, self.state) {
             (_, State::Disabled) => Change::Nothing,
             (Want::On, State::Held) if self.restore_failed => {
-                let _hold = self.registry.hold();
+                let _hold = match self.registry.hold() {
+                    Ok(hold) => hold,
+                    Err(error) => return self.fail(error),
+                };
                 match self.registry.set_on() {
                     Ok(()) => {
                         self.restore_failed = false;
@@ -435,7 +441,10 @@ impl<R: Registry> LockPolicy<R> {
     }
 
     fn turn_on(&mut self) -> Change {
-        let _hold = self.registry.hold();
+        let _hold = match self.registry.hold() {
+            Ok(hold) => hold,
+            Err(error) => return self.fail(error),
+        };
         let prior = match self.registry.read_value() {
             Ok(Some(1)) => return self.found_on(),
             Ok(Some(value)) => Prior::Value(value),
@@ -533,7 +542,9 @@ impl<R: Registry> LockPolicy<R> {
         if !self.stray_marker {
             return;
         }
-        let _hold = self.registry.hold();
+        let Ok(_hold) = self.registry.hold() else {
+            return;
+        };
         match self.registry.read_marker() {
             Ok(StoredMarker::Incomplete) => {
                 if self.registry.delete_marker().is_ok() {
