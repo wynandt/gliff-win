@@ -26,7 +26,8 @@ ssh or add a host key in order to manufacture a case.
 
 - Trigger one failure at a time; record the panel wording, the buttons, and
   the matching `ssh-stderr-<n>.log`.
-- Press Try again, Edit address, Details and Close; record what each does.
+- Press Try again, Check again, Edit address, Details and Close; record what
+  each does. Try again and Check again both start that tab's connection again.
 - For a key failure, follow the panel's link and check it points at the
   matching step in `docs/ssh-keys.md`.
 

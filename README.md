@@ -220,7 +220,8 @@ comparing values. Existing top-level diagnostic fields retain their behavior.
 The panel names the problem in plain words, for example "The machine did not
 accept a key from this computer.", and has the buttons that fit: **Try
 again**, **Check again**, **Edit address**, **Details** (ssh's own text) and
-**Close**. It reads ssh's own message, and the full text stays in
+**Close**. Try again and Check again both start that tab's connection again.
+It reads ssh's own message, and the full text stays in
 `ssh-stderr-<n>.log` in the log folder. For key problems it links to the
 matching step in [docs/ssh-keys.md](docs/ssh-keys.md), which also has a table of
 every message.

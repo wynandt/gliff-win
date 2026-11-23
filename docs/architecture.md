@@ -521,7 +521,7 @@ also offers reading order, Unicode control characters and IME items.
 draw list out, with a golden) and a thin Win32 shell (`panel_win`). The shell is a child window over the
 picture area, shown while the shown tab has given up with a failure and hidden otherwise. It paints the draw
 list on the same GDI surface as the strip, reports the pointer, and hands a click to `App::panel_click`,
-which runs the button: Try again and Check again start the tab again, Edit address opens the address bar
+which runs the button: Try again and Check again start the tab again (`Tabs::reconnect`), Edit address opens the address bar
 with the target filled in, Open Optional Features opens that Settings page, Details opens the folder with
 the logs, Close hides the panel for that tab. The guide link opens the heading of `docs/ssh-keys.md` in the
 browser. A child window over a picture presented by a flip-model swap chain on its parent is not yet
