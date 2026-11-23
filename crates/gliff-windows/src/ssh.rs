@@ -1,7 +1,8 @@
 //! The ssh child that carries the protocol on its stdin and stdout.
 //!
 //! Argument building is pure; `spawn` runs on any host (tokio) and adds
-//! `CREATE_NO_WINDOW` on Windows. Why a run failed is in [`crate::connect`].
+//! [`crate::win32::CREATE_NO_WINDOW`] on Windows. Why a run failed is in
+//! [`crate::connect`].
 
 use std::ffi::OsString;
 use std::path::Path;
@@ -157,11 +158,7 @@ pub fn spawn(spec: &SshSpec) -> std::io::Result<SshLink> {
         .stderr(Stdio::from(stderr))
         .kill_on_drop(true);
     #[cfg(windows)]
-    {
-        /// `CREATE_NO_WINDOW` from WinBase.h: no console flashes up.
-        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-        cmd.creation_flags(CREATE_NO_WINDOW);
-    }
+    cmd.creation_flags(crate::win32::CREATE_NO_WINDOW);
     let mut child = cmd.spawn()?;
     let stdin = child.stdin.take().expect("stdin was set to piped");
     let stdout = child.stdout.take().expect("stdout was set to piped");
@@ -250,11 +247,7 @@ pub async fn exec(
         .stderr(Stdio::piped())
         .kill_on_drop(true);
     #[cfg(windows)]
-    {
-        /// `CREATE_NO_WINDOW` from WinBase.h: no console flashes up.
-        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-        cmd.creation_flags(CREATE_NO_WINDOW);
-    }
+    cmd.creation_flags(crate::win32::CREATE_NO_WINDOW);
     let child = cmd.spawn().map_err(ExecError::Spawn)?;
     let output = match tokio::time::timeout(timeout, child.wait_with_output()).await {
         Ok(result) => result.map_err(ExecError::Spawn)?,

@@ -152,6 +152,7 @@ use crate::strip_gdi::Fonts;
 use crate::strip_gdi::Surface;
 use crate::tabs::TabId;
 use crate::tabs::Tabs;
+use crate::win32::WM_MOUSELEAVE;
 use crate::window::with_app;
 
 /// The window class of the strip (the main window's is another).
@@ -793,7 +794,6 @@ impl Drop for StripWin {
 
 /// The strip's window procedure.
 extern "system" fn proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
-    const WM_MOUSELEAVE: u32 = 0x02a3;
     crate::window::forward_menu_loop(hwnd, msg, wparam, lparam);
     let (x, y) = signed(lparam);
     let input = match msg {

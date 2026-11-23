@@ -69,11 +69,12 @@ use crate::lock_policy::Recovery;
 use crate::lock_policy::RegError;
 use crate::lock_policy::Registry;
 use crate::lock_policy::StoredMarker;
+use crate::win32::CREATE_NO_WINDOW;
 
 const POLICY_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Policies\System";
 
 /// `CREATE_NO_WINDOW` and `CREATE_BREAKAWAY_FROM_JOB`.
-const WATCHDOG_FLAGS: u32 = 0x0800_0000 | BREAKAWAY;
+const WATCHDOG_FLAGS: u32 = CREATE_NO_WINDOW | BREAKAWAY;
 /// `CREATE_BREAKAWAY_FROM_JOB`.
 const BREAKAWAY: u32 = 0x0100_0000;
 

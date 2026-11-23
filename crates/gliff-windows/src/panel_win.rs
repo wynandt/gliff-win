@@ -54,10 +54,10 @@ use crate::palette::Palette;
 use crate::strip_gdi::DcMeasure;
 use crate::strip_gdi::Fonts;
 use crate::strip_gdi::Surface;
+use crate::win32::WM_MOUSELEAVE;
 use crate::window::with_app;
 
 const CLASS: PCWSTR = w!("GwinFailurePanel");
-const WM_MOUSELEAVE: u32 = 0x02a3;
 
 /// The panel's window and what it draws from.
 pub struct PanelWin {
