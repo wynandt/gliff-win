@@ -408,3 +408,20 @@ fn a_locked_row_never_counts_as_pending() {
     let (c, _) = connection(&["--headless"], "", sharing(false));
     assert!(c.pending(&started(Screen::Own, true)));
 }
+
+#[test]
+fn invalid_scale_values_are_ignored_noted_and_kept() {
+    for raw in [
+        "1.5", "1.0", "0", "-2", "3", "125", "200", "\"Auto\"", "\"1.25\"", "\"2\"", "true",
+    ] {
+        let text = format!("[\"me@one\"]\nscale = {raw}\n");
+        let table: toml::Table = text.parse().expect("TOML");
+        let mut notes = Vec::new();
+        let choices = Choices::from_table(&table, &mut notes);
+        assert!(
+            notes.iter().any(|n| n.contains("scale")),
+            "expected a note for invalid scale = {raw}: {notes:?}"
+        );
+        assert_eq!(choices.to_table(), table, "kept invalid scale = {raw}");
+    }
+}
