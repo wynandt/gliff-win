@@ -143,9 +143,11 @@ scripts/gwv run ssh-headless -- ssh user@host --ssh "$PWD/scripts/fake-ssh" \
 What the stand-ins do not prove: real ssh behaviour (host keys, key auth,
 `BatchMode`, `IPQoS`), the real server's handling of `--headless` and
 `--output` (every gate passes `--headless`; `ssh --output auto` checks the default
-command line against the fake), `CREATE_NO_WINDOW` (compiled only on Windows), decode timings on
-the target CPU, the real Windows clipboard, and the Vulkan High 5.2 stream of
-the real server (the fake encodes with OpenH264, so never above 3840x2160).
+command line against the fake), applying `win32::CREATE_NO_WINDOW` (the shared
+value is locked by a host test; the flag itself is compiled only on Windows),
+decode timings on the target CPU, the real Windows clipboard, and the Vulkan
+High 5.2 stream of the real server (the fake encodes with OpenH264, so never
+above 3840x2160).
 
 ### The helper
 

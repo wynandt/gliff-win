@@ -41,8 +41,8 @@ server.
    starts a session (`session::driver::start`).
 2. `ssh::spawn` starts the child: `ssh -T -o Compression=no -o IPQoS=lowdelay
    -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=10 -- <target> <server_path>
-   --stdio (--output auto | --headless | --output NAME)`. It uses `CREATE_NO_WINDOW` on
-   Windows, writes ssh's stderr to `<log_dir>/ssh-stderr.log` (or
+   --stdio (--output auto | --headless | --output NAME)`. It uses `win32::CREATE_NO_WINDOW`
+   on Windows, writes ssh's stderr to `<log_dir>/ssh-stderr.log` (or
    `ssh-stderr-<n>.log` when the spec carries a session tag, so tabs do not
    overwrite each other's), and sets
    `kill_on_drop`. `validate` refuses a target that starts with `-`, a server
@@ -95,6 +95,16 @@ arguments and exits 2.
 | Tabs | `tabs`, `reconnect`, `route`, `clip_hub`, `session_set`, `single_instance`, `strip`, `palette` | Described under [Tabs and sessions](#tabs-and-sessions). |
 | Pointer | `pointer`, `window_input` **W** | Mapping to the remote pixel, buttons, wheel. |
 | Clipboard | `clip_win` **W**, `clip_link`, `clip_engine`, `clip_core`, `clip_formats`, `clip_files` | Described under [Clipboard](#clipboard). |
+
+`win32` builds on the build machine and holds the two Win32 numbers the client
+and the checks share. `CREATE_NO_WINDOW` (`0x08000000`) is the process-creation
+flag for a child with no console window. `ssh::spawn`, `ssh::exec`, the version
+check (`connect::runner::RealTools`), the lock watchdog
+(`lockreg::spawn_watchdog`) and the clipboard check's ssh all pass that one
+value. `WM_MOUSELEAVE` (`0x02A3`) is the message a window receives after it
+asks to be told when the pointer leaves. `window_input`, the tab strip
+(`strip_win`) and the failure panel (`panel_win`) all match that one value.
+A host test locks both.
 
 `gwin-verify` has one module per check; see [gwin-verify](#gwin-verify) below.
 
