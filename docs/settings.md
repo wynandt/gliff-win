@@ -63,6 +63,8 @@ The class says what a change needs. **Live** takes effect without a restart, **R
 | `log_dir` | not set (`%LOCALAPPDATA%\gliff-windows\logs`) | Restart | `--log-dir` |
 | `adapter` | `monitor` (or `high-performance`, `minimum-power`) | Restart | `--adapter` |
 
+`adapter` `monitor` uses the GPU attached to the window's monitor. The client lists that GPU's outputs and stops the list only when Windows says there are no more. Any other failure stops Direct3D setup instead of choosing a different GPU. `high-performance` and `minimum-power` still report that failure instead of claiming the chosen GPU does not drive the monitor.
+
 `switch_next`, `switch_previous` and `switch_jump` (the modifiers of the position chords) are used: they are the chords the hook watches for switching tabs, and the overlap check keeps them apart from the release chord and the local chords. `remember_recent_hosts` is used: a machine that connects is added to `recent-hosts.toml` when it is on. `keep_in_tray` is read, checked and shown, but nothing uses it until the tray exists.
 
 An example:
