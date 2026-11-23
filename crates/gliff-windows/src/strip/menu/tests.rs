@@ -565,3 +565,69 @@ fn a_tab_with_no_live_session_keeps_the_static_line() {
         Some("# Applies the next time this tab connects")
     );
 }
+
+#[test]
+fn scale_radios_are_enabled_in_own_screen_mode_and_greyed_out_in_mirror_mode() {
+    let mirror_rows = connection_rows(&plain());
+    assert!(
+        mirror_rows.windows(5).any(|w| {
+            w == [
+                "# Scale",
+                "~(o) Auto",
+                "~( ) 125%",
+                "~( ) 160%",
+                "~( ) 200%",
+            ]
+        }),
+        "expected four greyed-out Scale radios in Mirror mode: {mirror_rows:?}"
+    );
+
+    let mirror_saved = Connection {
+        scale: Scale::Percent160,
+        scale_origin: Origin::Machine,
+        ..plain()
+    };
+    let mirror_saved_rows = connection_rows(&mirror_saved);
+    assert!(
+        mirror_saved_rows.windows(5).any(|w| {
+            w == [
+                "# Scale",
+                "~( ) Auto",
+                "~( ) 125%",
+                "~(o) 160%",
+                "~( ) 200%",
+            ]
+        }),
+        "expected saved Scale to stay marked but greyed out in Mirror mode: {mirror_saved_rows:?}"
+    );
+
+    for (scale, expected) in [
+        (
+            Scale::Auto,
+            ["# Scale", "(o) Auto", "( ) 125%", "( ) 160%", "( ) 200%"],
+        ),
+        (
+            Scale::Percent125,
+            ["# Scale", "( ) Auto", "(o) 125%", "( ) 160%", "( ) 200%"],
+        ),
+        (
+            Scale::Percent160,
+            ["# Scale", "( ) Auto", "( ) 125%", "(o) 160%", "( ) 200%"],
+        ),
+        (
+            Scale::Percent200,
+            ["# Scale", "( ) Auto", "( ) 125%", "( ) 160%", "(o) 200%"],
+        ),
+    ] {
+        let own = Connection {
+            scale,
+            scale_origin: Origin::Machine,
+            ..own_screen()
+        };
+        let rows = connection_rows(&own);
+        assert!(
+            rows.windows(5).any(|w| w == expected),
+            "scale {scale:?}: {rows:?}"
+        );
+    }
+}
