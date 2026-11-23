@@ -831,9 +831,12 @@ Implicit. `Instance.mutex: HANDLE`, marked window property, caller's handover de
 Receiver<()> }` encode startup races and child/pipe lifetimes.
 
 `Acquire -> first owner`, or `existing owner -> wait for marked window -> synchronous
-bounded WM_COPYDATA handover -> exit`. Window lookup waits up to five seconds. Helper
-execution drains both pipes concurrently and waits until the command deadline. A
-`try_wait` error is reported as a wait error. When the deadline passes while the child
+bounded WM_COPYDATA handover -> exit`. A check that cannot create or read the
+lock stops the launch: a message box and the client exit line, then the process
+exits. The already-running case remains the handover above. Window lookup waits
+up to five seconds. Helper execution drains both pipes concurrently and waits
+until the command deadline. A `try_wait` error is reported as a wait error. When
+the deadline passes while the child
 is still running, the runner kills and reaps it and reports a timeout. After the child
 has exited, the runner waits only a bounded grace for pipes a helper still holds. Each
 reader retains at most 64 KiB while continuing to drain.

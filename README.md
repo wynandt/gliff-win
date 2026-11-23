@@ -151,7 +151,10 @@ others connect in the background. With no target, the client reopens the
 machines the last run left open.
 
 Starting the client again with a target adds it to the window that is already
-open.
+open. With no target, that window is brought forward. If the single-instance
+lock cannot be created or checked, the client shows a message box that names
+the error, writes that error on the exit line, and stops before it opens a
+window.
 
 ### The tab strip
 
@@ -254,6 +257,11 @@ The exit line names why the client ended: the window was closed (and whether a
 session did not say Bye within 3 seconds), Windows is signing out or shutting
 down, another client was already running, or an error stopped it. It also has
 the exit code and, after a normal close, how many sessions ended cleanly.
+When the single-instance lock cannot be created or checked, the exit line
+names that error, a message box shows the same text, and the process stops
+before a window exists. A second start while a client is already running
+still adds a target to the open window, or brings that window forward when
+there is no target.
 
 A session that ends on its own for a reason that can pass (the server exits,
 ssh drops) is tried again by itself, up to five times with a growing wait. A
