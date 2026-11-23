@@ -183,3 +183,13 @@ fn request_for_makes_sides_even_at_the_protocol_scale() {
     assert_eq!(request_for((3841, 2399), 192), req(3840, 2398, 2.0));
     assert_eq!(request_for((1366, 768), 120), req(1366, 768, 1.25));
 }
+
+#[test]
+fn fixed_scale_is_preserved_across_resizes_on_the_same_screen() {
+    let mut g = ResizeGate::new(req(2880, 1800, 1.6));
+    assert_eq!(
+        g.on_exit_size_move((2400, 1500), 192),
+        Some(req(2400, 1500, 1.6)),
+        "fixed scale 1.6 must not revert to dpi/96 (2.0)"
+    );
+}
