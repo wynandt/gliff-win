@@ -7,6 +7,7 @@ use crate::cli::Screen;
 use crate::history::HostTarget;
 use crate::machine_choices::Connection;
 use crate::machine_choices::Running;
+use crate::machine_choices::Scale;
 use crate::tabs::Status;
 use crate::tabs::TabId;
 use crate::tabs::Tabs;
@@ -29,6 +30,9 @@ pub enum Command {
     /// Choose how the machine is shown. The window saves the choice; the
     /// model of the tabs has nothing to change.
     ShowAs(Screen),
+    /// Choose the Own screen display scale. Saved at once; applies at the next
+    /// session start or when the window moves to another screen.
+    Scale(Scale),
     /// Choose whether the machine's clipboard is shared. The value is the
     /// new choice.
     ShareClipboard(bool),
@@ -136,12 +140,13 @@ pub fn tab_menu(
 }
 
 /// The rows of a tab's Connection settings submenu: how the machine is
-/// shown, whether its clipboard is shared, whether it asks for sharp
-/// colour and the GPU decoder, and whether Win+L goes to it. A choice a flag has made for
-/// every machine is greyed, with the reason under it; a Win+L route this
-/// window cannot use (`win_l_unusable`) is said under its row. The last row is the
-/// Reconnect command when a change `pending` waits for the next connect, and
-/// a line that says when it applies otherwise.
+/// shown, its Own screen scale, whether its clipboard is shared, whether it
+/// asks for sharp colour and the GPU decoder, and whether Win+L goes to it. A
+/// choice a flag has made for every machine is greyed, with the reason under
+/// it; Scale is greyed out in Mirror mode; a Win+L route this window cannot
+/// use (`win_l_unusable`) is said under its row. The last row is the Reconnect
+/// command when a change `pending` waits for the next connect, and a line that
+/// says when it applies otherwise.
 fn connection_rows(
     connection: &Connection,
     pending: bool,
@@ -162,6 +167,17 @@ fn connection_rows(
     }
     if let Some(reason) = &connection.screen_lock {
         rows.push(Entry::Note(reason.clone()));
+    }
+    rows.push(Entry::Separator);
+    rows.push(Entry::Note("Scale".to_owned()));
+    for scale in Scale::ALL {
+        rows.push(Entry::Choice {
+            command: Command::Scale(scale),
+            label: scale.label(),
+            mark: Mark::Radio,
+            selected: connection.scale == scale,
+            enabled: connection.screen == Screen::Own,
+        });
     }
     rows.push(Entry::Separator);
     rows.push(Entry::Choice {
@@ -227,8 +243,8 @@ pub fn dot_command(status: &Status) -> Command {
 }
 
 /// Runs a command on the tabs; the effects are for the caller to carry out.
-/// `CopyAddress`, `ShowAs`, `ShareClipboard`, `SharpColour`, `GpuDecode`
-/// and `SendWinL` have none:
+/// `CopyAddress`, `ShowAs`, `Scale`, `ShareClipboard`, `SharpColour`,
+/// `GpuDecode` and `SendWinL` have none:
 /// the caller reads the address or saves the choice.
 pub fn run(command: Command, id: TabId, tabs: &mut Tabs) -> Vec<crate::tabs::Effect> {
     match command {
@@ -237,11 +253,48 @@ pub fn run(command: Command, id: TabId, tabs: &mut Tabs) -> Vec<crate::tabs::Eff
         Command::Forget => tabs.forget(id),
         Command::CopyAddress
         | Command::ShowAs(_)
+        | Command::Scale(_)
         | Command::ShareClipboard(_)
         | Command::SharpColour(_)
         | Command::GpuDecode(_)
         | Command::SendWinL(_) => Vec::new(),
     }
+}
+
+/// Each contiguous run of [`Mark::Radio`] entries in `entries` that has a
+/// selected row, as `(first, last, picked)` zero-based menu positions for
+/// Win32 `CheckMenuRadioItem`.
+pub fn radio_groups(entries: &[Entry]) -> Vec<(u32, u32, u32)> {
+    let mut groups = Vec::new();
+    let mut group: Option<(u32, u32, Option<u32>)> = None;
+    for (place, entry) in (0u32..).zip(entries) {
+        match entry {
+            Entry::Choice {
+                mark: Mark::Radio,
+                selected,
+                ..
+            } => match &mut group {
+                Some((_, last, picked)) => {
+                    *last = place;
+                    if *selected {
+                        *picked = Some(place);
+                    }
+                }
+                None => {
+                    group = Some((place, place, selected.then_some(place)));
+                }
+            },
+            _ => {
+                if let Some((first, last, Some(picked))) = group.take() {
+                    groups.push((first, last, picked));
+                }
+            }
+        }
+    }
+    if let Some((first, last, Some(picked))) = group {
+        groups.push((first, last, picked));
+    }
+    groups
 }
 
 /// A row of the chevron's list: every tab, so one scrolled out of view can

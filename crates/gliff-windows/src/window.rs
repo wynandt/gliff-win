@@ -1262,6 +1262,7 @@ impl App {
             return;
         }
         if let MenuCommand::ShowAs(_)
+        | MenuCommand::Scale(_)
         | MenuCommand::ShareClipboard(_)
         | MenuCommand::SharpColour(_)
         | MenuCommand::GpuDecode(_)
@@ -1276,18 +1277,26 @@ impl App {
 
     /// A choice from the Connection settings submenu: kept for the tab's
     /// machine and saved at once. The screen, the colour and the decoder
-    /// apply at the next connect; the clipboard applies to the tab's session
-    /// at once, and so does Send Win+L when the tab is shown. A row a flag has
-    /// locked is greyed in the menu and cannot get here; if it did, the
-    /// rules would still ignore it.
+    /// apply at the next connect; Scale applies at the next session start or
+    /// when the window moves to another screen (no live rescale on pick); the
+    /// clipboard applies to the tab's session at once, and so does Send Win+L
+    /// when the tab is shown. A row a flag has locked (or Scale in Mirror
+    /// mode) is greyed in the menu and cannot get here; if it did, the rules
+    /// would still ignore it.
     fn choose(&mut self, command: MenuCommand, id: crate::tabs::TabId) {
         let Some(machine) = self.tabs.tab(id).map(|tab| tab.target().clone()) else {
             return;
         };
+        if matches!(command, MenuCommand::Scale(_))
+            && self.rules.connection(&machine).screen == crate::cli::Screen::Mirror
+        {
+            return;
+        }
         {
             let mut book = self.files.config.choices().borrow_mut();
             match command {
                 MenuCommand::ShowAs(screen) => book.set_screen(&machine, screen),
+                MenuCommand::Scale(scale) => book.set_scale(&machine, scale),
                 MenuCommand::ShareClipboard(share) => book.set_share_clipboard(&machine, share),
                 MenuCommand::SharpColour(sharp) => book.set_sharp_colour(&machine, sharp),
                 MenuCommand::GpuDecode(gpu) => book.set_gpu_decode(&machine, gpu),
