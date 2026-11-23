@@ -250,21 +250,21 @@ impl Drop for RegistryHold {
 }
 
 impl Registry for WinRegistry {
-    fn hold(&self) -> Box<dyn std::any::Any> {
+    fn hold(&self) -> Result<Box<dyn std::any::Any>, RegError> {
         let name = HSTRING::from(REGISTRY_MUTEX);
         // SAFETY: `name` is a NUL-terminated wide string that outlives the
         // call; no security attributes and no initial owner.
         let Ok(handle) = (unsafe { CreateMutexW(None, false, PCWSTR(name.as_ptr())) }) else {
-            return Box::new(RegistryHold(None));
+            return Ok(Box::new(RegistryHold(None)));
         };
         // SAFETY: the handle was just created and is valid.
         let waited = unsafe { WaitForSingleObject(handle, REGISTRY_WAIT_MS) };
         if waited == WAIT_OBJECT_0 || waited == WAIT_ABANDONED {
-            return Box::new(RegistryHold(Some(handle)));
+            return Ok(Box::new(RegistryHold(Some(handle))));
         }
         // SAFETY: `handle` was returned by CreateMutexW and is closed once.
         let _ = unsafe { CloseHandle(handle) };
-        Box::new(RegistryHold(None))
+        Ok(Box::new(RegistryHold(None)))
     }
 
     fn set_on(&mut self) -> Result<(), RegError> {

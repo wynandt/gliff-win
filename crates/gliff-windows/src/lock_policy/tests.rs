@@ -7,6 +7,8 @@ use super::Change;
 use super::LockGate;
 use super::LockPolicy;
 use super::Marker;
+use super::MutexHold;
+use super::MutexWait;
 use super::Owner;
 use super::OwnerExit;
 use super::Prior;
@@ -16,6 +18,7 @@ use super::RegError;
 use super::Registry;
 use super::StoredMarker;
 use super::Want;
+use super::after_mutex_wait;
 use super::recover;
 use super::restore_if_owned;
 use super::run_watchdog;
@@ -51,6 +54,7 @@ struct Fake {
     partial_marker: bool,
     fail_delete_marker: bool,
     fail_reads: bool,
+    fail_hold: bool,
     holds: Rc<Cell<u32>>,
     unheld: Vec<Op>,
     refuse_set_on: bool,
@@ -94,9 +98,12 @@ fn err(what: &str) -> RegError {
 }
 
 impl Registry for Fake {
-    fn hold(&self) -> Box<dyn std::any::Any> {
+    fn hold(&self) -> Result<Box<dyn std::any::Any>, RegError> {
+        if self.fail_hold {
+            return Err(err("mutex wait failed"));
+        }
         self.holds.set(self.holds.get() + 1);
-        Box::new(FakeHold(Rc::clone(&self.holds)))
+        Ok(Box::new(FakeHold(Rc::clone(&self.holds))))
     }
 
     fn set_on(&mut self) -> Result<(), RegError> {
@@ -864,5 +871,91 @@ fn the_setting_is_on_only_while_the_window_has_the_keyboard_and_the_switch_is_on
         gate.policy().registry().writes(),
         vec![],
         "a pointer alone never turns Windows locking off"
+    );
+}
+
+#[test]
+fn a_failed_mutex_wait_is_reported() {
+    assert_eq!(after_mutex_wait(MutexWait::Failed), MutexHold::Report);
+    assert_eq!(
+        after_mutex_wait(MutexWait::TimedOut),
+        MutexHold::Proceed { held: false },
+        "a stuck holder still does not block the work"
+    );
+    assert_eq!(
+        after_mutex_wait(MutexWait::Held),
+        MutexHold::Proceed { held: true }
+    );
+
+    let mut turned_on = Fake::with_value(Some(0));
+    turned_on.fail_hold = true;
+    let mut locking = LockPolicy::new(turned_on, ME);
+    assert_eq!(
+        locking.want(Want::On, 0),
+        Change::Failed(err("mutex wait failed")),
+        "a failed wait is still dropped and the turn-on goes ahead"
+    );
+    assert_eq!(locking.registry().writes(), vec![]);
+    assert_eq!(locking.registry().value, Some(0));
+    assert_eq!(locking.registry().ops, vec![]);
+
+    let mut restoring = policy(None);
+    assert_eq!(restoring.want(Want::On, 0), Change::Set);
+    restoring.registry.fail_hold = true;
+    assert_eq!(
+        restoring.exit(),
+        Change::Failed(err("mutex wait failed")),
+        "a failed wait is still dropped and the restore goes ahead"
+    );
+    assert_eq!(restoring.registry().value, Some(1));
+    assert!(restoring.registry().marker.is_some());
+
+    let mut owned = Fake::with_value(Some(1));
+    owned.marker = Some(marker(Prior::Absent));
+    owned.fail_hold = true;
+    assert_eq!(
+        restore_if_owned(&mut owned, Some(ME)),
+        Err(err("mutex wait failed"))
+    );
+    assert_eq!((owned.value, owned.marker.is_some()), (Some(1), true));
+    assert_eq!(owned.ops, vec![]);
+
+    let mut dead = Fake::with_value(Some(1));
+    dead.marker = Some(marker(Prior::Absent));
+    dead.fail_hold = true;
+    assert_eq!(
+        recover(&mut dead, &Running(BTreeSet::new())),
+        Recovery::Failed(err("mutex wait failed"))
+    );
+    assert_eq!(dead.value, Some(1));
+    assert_eq!(dead.ops, vec![]);
+
+    let mut watched = Fake::with_value(Some(1));
+    watched.marker = Some(marker(Prior::Absent));
+    watched.fail_hold = true;
+    let mut exit = FakeExit { waited: false };
+    assert_eq!(
+        run_watchdog(&mut exit, &mut watched, ME),
+        Err(err("mutex wait failed"))
+    );
+    assert!(exit.waited);
+    assert_eq!(watched.value, Some(1));
+    assert_eq!(watched.ops, vec![]);
+}
+
+#[test]
+fn the_windows_hold_asks_after_mutex_wait() {
+    let win = include_str!("../lockreg.rs");
+    assert!(
+        win.contains("after_mutex_wait"),
+        "a failed wait is still treated as the 2 s timeout"
+    );
+    assert!(
+        win.contains("MutexWait::TimedOut"),
+        "a wait that reaches its limit is not named"
+    );
+    assert!(
+        win.contains("MutexWait::Failed"),
+        "a failed create is still treated as the 2 s timeout"
     );
 }
