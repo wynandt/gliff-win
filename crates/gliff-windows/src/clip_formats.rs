@@ -210,12 +210,20 @@ pub const TEXT_RAW_LIMIT: usize = 2 * ITEM_BYTES + RAW_SLACK;
 pub const NON_TEXT_RAW_LIMIT: usize = ITEM_BYTES + RAW_SLACK;
 
 /// The most raw bytes worth copying off the clipboard for `format`, so that a
-/// huge item is refused before it is copied. A bitmap is bounded by its pixel limit,
-/// since its PNG is far smaller than the bitmap.
+/// huge item is refused before it is copied. Text uses [`TEXT_RAW_LIMIT`].
+/// PNG, JPEG, GIF, HTML, RTF, a file list and any other registered format use
+/// [`NON_TEXT_RAW_LIMIT`]. A bitmap uses its pixel limit.
 pub fn raw_limit(format: &WinFormat) -> usize {
     match format {
         WinFormat::Dib | WinFormat::DibV5 => image::MAX_DIB_BYTES,
-        _ => 2 * usize::try_from(proto::MAX_ITEM).unwrap_or(usize::MAX / 4) + 4096,
+        WinFormat::UnicodeText => TEXT_RAW_LIMIT,
+        WinFormat::Html
+        | WinFormat::Rtf
+        | WinFormat::Png
+        | WinFormat::Jfif
+        | WinFormat::Gif
+        | WinFormat::Hdrop
+        | WinFormat::Registered(_) => NON_TEXT_RAW_LIMIT,
     }
 }
 
