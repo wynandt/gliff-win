@@ -421,10 +421,12 @@ on Windows and pasted on Linux). See
   default `--side-buttons upstream` and with `linux-mouse` alike.
 - Tested at 200% and 150% only. A scale change while the client runs has not been
   tried.
-- **With Own screen, the remote scale is the Windows scale.** Change it on
-  Windows and reconnect. Changing the scale of the private screen in the remote
-  desktop's own display settings is not supported; see
-  [The remote compositor reloads](#the-remote-compositor-reloads).
+- **With Own screen, the remote scale defaults to the Windows scale (`Auto`)
+  and can be set per machine to `125%`, `160%`, or `200%`.** A change takes
+  effect at the next session start or when the window moves to another screen;
+  see [docs/settings.md](settings.md#scale). Changing the scale of the private
+  screen in the remote desktop's own display settings is still not supported;
+  see [The remote compositor reloads](#the-remote-compositor-reloads).
 
 ## Clipboard
 

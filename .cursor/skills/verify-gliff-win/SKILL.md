@@ -161,7 +161,13 @@ On the loopback, the run folder is the evidence and survives cleanup:
 received; the `bye` line lists keys and buttons still held), `stats.json`,
 `logs\` (client and ssh logs) and `evidence\` (PNGs and each verb's JSON).
 Most input bugs show only on the remote side, so a keyboard, pointer or
-resize claim needs the `input.jsonl` lines, not only a screenshot.
+resize claim needs the `input.jsonl` lines, not only a screenshot. For the
+per-machine Own screen `Scale` setting (`RESIZE-4` / `SET-3`), confirm the
+four radios (`Auto`, `125%`, `160%`, `200%`) are greyed out in Mirror mode,
+that picking a radio in Own screen mode emits no live `resize` on the same
+screen, and that reconnecting or moving to another screen sends the physical
+client size with the expected scale in `input.jsonl` and matching `scale_milli`
+in the client log.
 
 Keep command transcripts and exit codes. For a native window, keep
 before/action/after captures cropped to the owned window, and any

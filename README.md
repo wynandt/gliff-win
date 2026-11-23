@@ -178,8 +178,10 @@ Each tab shows the machine's full name and a dot:
 - **Right-click a tab** for Connect, Reconnect, Disconnect, Copy address,
   Connection settings and Forget. Forget removes the tab. Copy address puts
   `user@host` on the Windows clipboard. Connection settings is a submenu for
-  that machine only: how it is shown (mirror or own screen), whether it shares
-  the clipboard, Sharp colour, GPU decode, and whether Win+L goes to it. A row that a flag or `config.toml` has decided for every machine
+  that machine only: how it is shown (mirror or own screen), its Own screen
+  scale (Auto, 125%, 160% or 200%, greyed out while mirroring), whether it
+  shares the clipboard, Sharp colour, GPU decode, and whether Win+L goes to
+  it. A row that a flag or `config.toml` has decided for every machine
   is greyed, with a line under it that says which, such as "Locked: this window was
   started with --output, which applies to every machine." See [Options](#options).
 - **Middle-click a tab** to stop it if it has a session or is starting one,
@@ -346,22 +348,27 @@ The keys, the defaults and the chord rules are in
 
 **Connection choices for one machine.** Right-click a tab and open
 *Connection settings* to choose, for that machine only, *Show as* (mirror the
-remote screen, or its own screen), *Share clipboard*, *Sharp colour*
+remote screen, or its own screen), *Scale* (`Auto`, `125%`, `160%` or `200%`
+for Own screen; greyed out in Mirror mode), *Share clipboard*, *Sharp colour*
 (full-resolution colour, off by default), *GPU decode* (on by default) and *Send Win+L to
 this machine* (off by default; it applies at once). The choice is saved in
 `config.toml` at once; the screen, the colour and the decoder apply the next
-time the tab connects. When a tab
+time the tab connects, and *Scale* applies at the next session start or when
+the window moves to another screen (picking a radio never rescales a live
+session on the same screen). When a tab
 has a session that started with something else, the menu shows *Reconnect now
 to apply*, which reconnects that tab in one click. A flag (`--headless`,
 `--output`, `--no-clipboard`, `--super-l`) applies to every machine and beats the menu: the
 menu then shows the choice greyed, with the reason. There is no settings window
 yet. See [docs/settings.md](docs/settings.md#connection-choices-for-one-machine).
 
-With *Own screen*, the remote screen is sized to the window and takes the Windows
-display scale. To change that scale, change the Windows display scale and
-reconnect; changing it in the remote desktop's own display settings is not
-supported and blanks the picture for 10 seconds or more
-([details](docs/settings.md#which-remote-screen-the-window-shows)).
+With *Own screen*, the remote screen is sized to the window in physical pixels
+and uses the machine's *Scale* choice (`Auto` follows the Windows display
+scale, or a fixed `125%`, `160%` or `200%`). A scale change takes effect at
+the next session start or when the window moves to another screen. Changing
+the scale in the remote desktop's own display settings is not supported and
+blanks the picture for 10 seconds or more
+([details](docs/settings.md#scale)).
 
 ## Not in 0.4
 
@@ -403,11 +410,13 @@ means no document in this repository plans it.
 4. **System tray and start with Windows.** Not in the Linux client 0.4.1
    either. Here the tray is designed, not built. Planned for a
    later release.
-5. **A settings window.** The five connection choices for one machine, "Show
-   as" (mirror or own screen), "Share clipboard", "Sharp colour", "GPU
-   decode" and "Send Win+L to this machine", are in a tab's right-click menu
-   under *Connection settings*. Share clipboard and Send Win+L apply at once;
-   the others apply the next time the tab connects.
+5. **A settings window.** The six connection choices for one machine, "Show
+   as" (mirror or own screen), "Scale" (Auto, 125%, 160% or 200% for Own
+   screen), "Share clipboard", "Sharp colour", "GPU decode" and "Send Win+L
+   to this machine", are in a tab's right-click menu under *Connection
+   settings*. Share clipboard and Send Win+L apply at once; Scale applies at
+   the next connect or when the window moves to another screen; the others
+   apply the next time the tab connects.
    Everything else is flags and `config.toml`; there is no window that edits
    them. The Linux client 0.4.1 has no settings window either, but its open
    pull request [omacom/gliff#98](https://github.com/omacom/gliff/pull/98) adds

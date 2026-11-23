@@ -8,8 +8,16 @@ issue with a way to reproduce it.
 ## Choices per machine
 
 These are built and can be switched per machine in the tab's *Connection
-settings*. All are off by default except *GPU decode*, which is on.
+settings*. All are off by default except *GPU decode*, which is on, and
+*Scale*, which defaults to *Auto*.
 
+- **Scale** (for *Own screen*). Defaults to *Auto* (the Windows display scale);
+  can be set per machine to `125%`, `160%`, or `200%` (`scale` in
+  `[overrides."user@host"]`). Greyed out and ignored in *Mirror* mode. A
+  change takes effect at the next session start or when the window moves to
+  another screen; see [docs/settings.md](docs/settings.md#scale). Part of
+  [#3](https://github.com/wynandt/gliff-win/issues/3) (native Windows check
+  pending).
 - **Sharp colour.** Without it the client asks for a 4:2:0 stream, so coloured
   text is a little soft. A server that encodes on the CPU still sends 4:2:0
   unless it runs with `--full-chroma`; see
@@ -27,8 +35,8 @@ settings*. All are off by default except *GPU decode*, which is on.
 
 - **Sound.** No audio and no microphone. Gliff's protocol has none either.
 - **System tray and start with Windows.**
-- **A settings window.** The five choices for one machine (Show as, Share
-  clipboard, Sharp colour, GPU decode and Send Win+L) are in a tab's
+- **A settings window.** The six choices for one machine (Show as, Scale,
+  Share clipboard, Sharp colour, GPU decode and Send Win+L) are in a tab's
   right-click menu. Everything else is a flag or a key in `config.toml`; see
   [docs/settings.md](docs/settings.md).
 - **A light theme.** The tab strip and the failure panel are always dark.
@@ -38,11 +46,6 @@ settings*. All are off by default except *GPU decode*, which is on.
   text are built but not proven on real machines. See
   [docs/clipboard.md](docs/clipboard.md#known-gaps).
 - **Touch and pen input.**
-- **Choosing the remote scale**
-  ([#3](https://github.com/wynandt/gliff-win/issues/3)). With *Own screen*,
-  the remote screen follows the Windows display scale. To change it, change
-  the Windows scale and reconnect. *Mirror* keeps the remote screen's own
-  scale.
 - **The reason a session or the client ended, in one log line**
   ([#2](https://github.com/wynandt/gliff-win/issues/2)). Connect failures and
   session ends are logged, but the client's exit and the end of ssh's error

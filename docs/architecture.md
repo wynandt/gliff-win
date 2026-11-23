@@ -414,10 +414,14 @@ Timers: settle, modal (16 ms), close (3 s), and stats (1 s).
 - **Resize.** `ResizeGate` waits until the client size has held for 200 ms,
   sends at once when a drag ends (`WM_EXITSIZEMOVE`), and sends after
   `WM_DPICHANGED` once the window takes the suggested rectangle. Sizes are
-  client pixels rounded down to even, never under 64, at the protocol scale
-  `dpi / 96` when Windows has accepted per-monitor awareness (v2). The
-  client asks for that before any window. There is no manifest that would
-  already have set it. `dpi::report` turns a failed
+  client pixels rounded down to even, never under 64, at the session's active
+  `Scale` (`dpi / 96` for `Auto` when Windows has accepted per-monitor
+  awareness (v2), or a fixed per-machine `1.25`, `1.6`, or `2` in Own screen
+  mode; Mirror mode always uses `Auto`). A per-machine `scale` change takes
+  effect at the next session start or when the window moves to another screen;
+  picking a menu radio does not rescale a live session on the same screen. The
+  client asks for per-monitor awareness before any window. There is no manifest
+  that would already have set it. `dpi::report` turns a failed
   `SetProcessDpiAwarenessContext` into one log line, written once the log
   is open, both when start is refused and on a normal start. The window is
   still created. A successful call writes nothing. Sizes are physical
