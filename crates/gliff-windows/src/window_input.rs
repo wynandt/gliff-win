@@ -60,12 +60,9 @@ use crate::session::Geometry;
 use crate::session::UiCmd;
 use crate::stats_out::GeometryInfo;
 use crate::stats_out::InputInfo;
+use crate::win32::WM_MOUSELEAVE;
 use crate::xkb::KeymapTracker;
 use crate::xkb::Reason;
-
-/// Sent when the pointer leaves the window (`TrackMouseEvent` asked for
-/// it).
-const WM_MOUSELEAVE: u32 = 0x02a3;
 
 /// `WTS_SESSION_LOCK` and `WTS_SESSION_UNLOCK`, the `wparam` of
 /// `WM_WTSSESSION_CHANGE`.

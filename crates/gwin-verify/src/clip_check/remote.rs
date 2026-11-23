@@ -150,9 +150,7 @@ impl Remote {
         #[cfg(windows)]
         {
             use std::os::windows::process::CommandExt;
-            /// `CREATE_NO_WINDOW` from WinBase.h: no console flashes up.
-            const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-            cmd.creation_flags(CREATE_NO_WINDOW);
+            cmd.creation_flags(gliff_windows::win32::CREATE_NO_WINDOW);
         }
         let mut child = cmd
             .spawn()
