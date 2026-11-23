@@ -75,6 +75,7 @@ use crate::lock_policy::RegError;
 use crate::lock_policy::Registry;
 use crate::lock_policy::StoredMarker;
 use crate::lock_policy::after_mutex_wait;
+use crate::lock_policy::job_refused_breakaway;
 use crate::win32::CREATE_NO_WINDOW;
 
 const POLICY_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Policies\System";
@@ -589,8 +590,10 @@ fn restore_after_owner(owner: Owner) -> String {
 }
 
 /// Starts the helper: the same exe, no window, outside the client's job when
-/// that is allowed. Before the setting is first
-/// turned on, and again whenever the helper has gone.
+/// that is allowed. When the job refuses `CREATE_BREAKAWAY_FROM_JOB`, the
+/// helper is started again without that flag. Any other error is returned.
+/// Before the setting is first turned on, and again whenever the helper has
+/// gone.
 pub fn spawn_watchdog(owner: Owner) -> std::io::Result<Child> {
     let exe = std::env::current_exe()?;
     let start = |flags: u32| {
@@ -601,7 +604,10 @@ pub fn spawn_watchdog(owner: Owner) -> std::io::Result<Child> {
             .creation_flags(flags)
             .spawn()
     };
-    start(WATCHDOG_FLAGS).or_else(|_| start(WATCHDOG_FLAGS & !BREAKAWAY))
+    match start(WATCHDOG_FLAGS) {
+        Err(error) if job_refused_breakaway(&error) => start(WATCHDOG_FLAGS & !BREAKAWAY),
+        started => started,
+    }
 }
 
 #[cfg(test)]
