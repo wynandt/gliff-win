@@ -7,6 +7,7 @@ use super::Locks;
 use super::Origin;
 use super::Rules;
 use super::Running;
+use super::Scale;
 use crate::cli::Args;
 use crate::cli::DesktopMode;
 use crate::cli::Screen;
@@ -353,6 +354,7 @@ fn the_rules_read_the_book_at_each_call() {
 fn started(screen: Screen, share_clipboard: bool) -> Running {
     Running {
         screen,
+        scale: Scale::Auto,
         share_clipboard,
         sharp_colour: false,
         gpu_decode: true,
@@ -423,5 +425,105 @@ fn invalid_scale_values_are_ignored_noted_and_kept() {
             "expected a note for invalid scale = {raw}: {notes:?}"
         );
         assert_eq!(choices.to_table(), table, "kept invalid scale = {raw}");
+    }
+}
+
+#[test]
+fn valid_scale_values_parse_round_trip_and_canonicalize_two() {
+    let text = r#"
+["me@auto"]
+scale = "auto"
+["me@s125"]
+scale = 1.25
+["me@s160"]
+scale = 1.6
+["me@s200i"]
+scale = 2
+["me@s200f"]
+scale = 2.0
+"#;
+    let table: toml::Table = text.parse().expect("TOML");
+    let mut notes = Vec::new();
+    let choices = Choices::from_table(&table, &mut notes);
+    assert!(notes.is_empty(), "{notes:?}");
+    assert_eq!(choices.of(&host("me@auto")).scale, Some(Scale::Auto));
+    assert_eq!(choices.of(&host("me@s125")).scale, Some(Scale::Percent125));
+    assert_eq!(choices.of(&host("me@s160")).scale, Some(Scale::Percent160));
+    assert_eq!(choices.of(&host("me@s200i")).scale, Some(Scale::Percent200));
+    assert_eq!(choices.of(&host("me@s200f")).scale, Some(Scale::Percent200));
+    assert_eq!(choices.of(&host("me@absent")).scale, None);
+
+    let written = choices.to_table();
+    assert_eq!(
+        written["me@auto"]["scale"],
+        toml::Value::String("auto".to_owned())
+    );
+    assert_eq!(written["me@s125"]["scale"], toml::Value::Float(1.25));
+    assert_eq!(written["me@s160"]["scale"], toml::Value::Float(1.6));
+    assert_eq!(written["me@s200i"]["scale"], toml::Value::Integer(2));
+    assert_eq!(written["me@s200f"]["scale"], toml::Value::Integer(2));
+
+    let mut back_notes = Vec::new();
+    let back = Choices::from_table(&written, &mut back_notes);
+    assert!(back_notes.is_empty(), "{back_notes:?}");
+    for name in ["me@auto", "me@s125", "me@s160", "me@s200i", "me@s200f"] {
+        assert_eq!(back.of(&host(name)), choices.of(&host(name)), "{name}");
+    }
+}
+
+#[test]
+fn setting_scale_overwrites_an_earlier_invalid_value() {
+    let table: toml::Table = "[\"me@one\"]\nscale = 1.5\n".parse().expect("TOML");
+    let mut notes = Vec::new();
+    let mut choices = Choices::from_table(&table, &mut notes);
+    assert_eq!(notes.len(), 1);
+    assert_eq!(choices.of(&host("me@one")).scale, None);
+
+    choices.set_scale(&host("me@one"), Scale::Percent160);
+    let written = choices.to_table();
+    assert_eq!(written["me@one"]["scale"], toml::Value::Float(1.6));
+}
+
+#[test]
+fn scale_defaults_to_auto_applies_to_own_screen_and_is_ignored_in_mirror() {
+    let (c, _) = connection(&[], "", Choice::default());
+    assert_eq!((c.scale, c.scale_origin), (Scale::Auto, Origin::Default));
+    assert_eq!(c.effective_scale(), Scale::Auto);
+
+    let mirror_with_scale = Choice {
+        screen: Some(Screen::Mirror),
+        scale: Some(Scale::Percent200),
+        ..Choice::default()
+    };
+    let (c, _) = connection(&[], "", mirror_with_scale);
+    assert_eq!(
+        (c.scale, c.scale_origin),
+        (Scale::Percent200, Origin::Machine)
+    );
+    assert_eq!(c.effective_scale(), Scale::Auto);
+    assert_eq!(c.running().scale, Scale::Auto);
+    assert!(!c.pending(&started(Screen::Mirror, true)));
+
+    let own_with_scale = Choice {
+        screen: Some(Screen::Own),
+        scale: Some(Scale::Percent160),
+        ..Choice::default()
+    };
+    let (c, _) = connection(&[], "", own_with_scale);
+    assert_eq!(c.effective_scale(), Scale::Percent160);
+    assert_eq!(c.running().scale, Scale::Percent160);
+    assert!(c.pending(&started(Screen::Own, true)));
+    assert!(!c.pending(&c.running()));
+}
+
+#[test]
+fn scale_factors_match_auto_and_fixed_percentages() {
+    assert_eq!(Scale::Auto.factor(96), 1.0);
+    assert_eq!(Scale::Auto.factor(144), 1.5);
+    assert_eq!(Scale::Auto.factor(192), 2.0);
+    for dpi in [96, 120, 144, 192] {
+        assert_eq!(Scale::Percent125.factor(dpi), 1.25, "dpi {dpi}");
+        assert_eq!(Scale::Percent160.factor(dpi), 1.6, "dpi {dpi}");
+        assert_eq!(Scale::Percent200.factor(dpi), 2.0, "dpi {dpi}");
     }
 }

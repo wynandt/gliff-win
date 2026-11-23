@@ -1301,6 +1301,41 @@ mod config_file {
     }
 
     #[test]
+    fn scale_choices_round_trip_through_config_file() {
+        let dir = TestDir::new();
+        let path = dir.path().join("config.toml");
+        let (mut file, _) = ConfigFile::load(&path);
+        for (name, scale) in [
+            ("me@auto", crate::machine_choices::Scale::Auto),
+            ("me@s125", crate::machine_choices::Scale::Percent125),
+            ("me@s160", crate::machine_choices::Scale::Percent160),
+            ("me@s200", crate::machine_choices::Scale::Percent200),
+        ] {
+            file.choices().borrow_mut().set_scale(&host(name), scale);
+        }
+        file.save().expect("save");
+
+        let (again, notes) = ConfigFile::load(&path);
+        assert!(notes.is_empty(), "{notes:?}");
+        assert_eq!(
+            chosen(&again, "me@auto").scale,
+            Some(crate::machine_choices::Scale::Auto)
+        );
+        assert_eq!(
+            chosen(&again, "me@s125").scale,
+            Some(crate::machine_choices::Scale::Percent125)
+        );
+        assert_eq!(
+            chosen(&again, "me@s160").scale,
+            Some(crate::machine_choices::Scale::Percent160)
+        );
+        assert_eq!(
+            chosen(&again, "me@s200").scale,
+            Some(crate::machine_choices::Scale::Percent200)
+        );
+    }
+
+    #[test]
     fn an_old_config_file_loads_and_keeps_what_it_does_not_know() {
         let old = "machines = [\"me@a\"]\nopen = [\"me@a\"]\nshown = \"me@a\"\nfuture = 7\n\n[settings]\nscreen = \"own\"\nmood = \"x\"\n";
         let dir = TestDir::new();

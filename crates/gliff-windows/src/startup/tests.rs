@@ -185,6 +185,7 @@ fn the_report_shows_each_machines_saved_choice_and_where_it_came_from() {
         connection["me@a"],
         serde_json::json!({
             "screen": {"value": "own", "source": "machine", "locked": false},
+            "scale": {"value": "auto", "source": "default", "locked": false},
             "share_clipboard": {"value": false, "source": "machine", "locked": false},
             "sharp_colour": {"value": true, "source": "machine", "locked": false},
             "gpu_decode": {"value": true, "source": "machine", "locked": false},
@@ -195,6 +196,7 @@ fn the_report_shows_each_machines_saved_choice_and_where_it_came_from() {
         connection["me@b"],
         serde_json::json!({
             "screen": {"value": "mirror", "source": "default", "locked": false},
+            "scale": {"value": "auto", "source": "default", "locked": false},
             "share_clipboard": {"value": true, "source": "default", "locked": false},
             "sharp_colour": {"value": false, "source": "default", "locked": false},
             "gpu_decode": {"value": true, "source": "default", "locked": false},

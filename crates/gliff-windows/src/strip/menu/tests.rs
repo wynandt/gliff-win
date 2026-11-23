@@ -13,6 +13,7 @@ use crate::history::HostTarget;
 use crate::machine_choices::Connection;
 use crate::machine_choices::Origin;
 use crate::machine_choices::Running;
+use crate::machine_choices::Scale;
 use crate::strip::DotState;
 use crate::tabs::Effect;
 use crate::tabs::Status;
@@ -32,6 +33,8 @@ fn plain() -> Connection {
         screen: Screen::Mirror,
         screen_origin: Origin::Default,
         screen_lock: None,
+        scale: Scale::Auto,
+        scale_origin: Origin::Default,
         share_clipboard: true,
         share_origin: Origin::Default,
         share_lock: None,
@@ -404,6 +407,8 @@ fn a_locked_row_is_greyed_and_gives_its_reason() {
         screen: Screen::Own,
         screen_origin: Origin::Flag,
         screen_lock: Some("Locked: this window was started with --headless, which applies to every machine.".to_owned()),
+        scale: Scale::Auto,
+        scale_origin: Origin::Default,
         share_clipboard: false,
         share_origin: Origin::Flag,
         share_lock: Some("Locked: this window was started with --no-clipboard, which turns the clipboard off for every machine.".to_owned()),
