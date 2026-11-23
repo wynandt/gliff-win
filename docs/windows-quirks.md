@@ -474,6 +474,13 @@ behaviour:
   every access unit fail, and `gwin-verify` reads the SPS to say so.
 - **The swap chain is flip-model,** two buffers, with `Present(1, 0)`; a lost device
   makes a new presenter on the same window.
+- **An adapter's outputs end on `DXGI_ERROR_NOT_FOUND`.** `EnumOutputs`
+  returns that code (`0x887A0002`) when the index is past the last output.
+  Any other failure is not the end of the list. The client returns it, so
+  Direct3D setup fails, instead of treating the adapter as if it had no
+  further outputs. With `--adapter monitor` the client then does not move
+  on to another GPU. `drives_monitor` in the stats file is false only when
+  the list ended with no output on the window's monitor.
 - **GPU decode is a choice per machine, on by default.** It uses the Windows H.264 decoder
   (Media Foundation) with D3D11 video and falls back to OpenH264 on its own. Untick it for a machine to decode on the
   CPU; see [settings.md](settings.md#gpu-decode).

@@ -370,8 +370,15 @@ probe keeps its own timeout.
   latency 1 with a waitable object. `present_math` is a CPU model of `ps_yuv`
   used to test the shader's arithmetic against upstream's conversion.
 - **Adapter.** `--adapter` is `monitor` (the GPU that drives the window's
-  monitor, the default), `high-performance` or `minimum-power` (DXGI GPU preferences). A lost device is
-  reported to the app, which builds a new `Presenter` on the same window.
+  monitor, the default), `high-performance` or `minimum-power` (DXGI GPU
+  preferences). `monitor` lists each adapter's outputs and keeps the one
+  whose output is the window's monitor. That list ends only on
+  `DXGI_ERROR_NOT_FOUND`. Any other `EnumOutputs` error is returned, so
+  Direct3D setup fails and that adapter is not skipped. The same error
+  fails setup instead of recording `drives_monitor` as false. A lost device
+  is reported to the app, which builds a new `Presenter` on the same window.
+  A recreate that hits this error leaves the presenter absent, and the
+  heartbeat tries again.
 
 ## Window
 

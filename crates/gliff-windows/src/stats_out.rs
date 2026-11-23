@@ -243,6 +243,10 @@ pub struct AdapterInfo {
     /// "minimum-power".
     pub choice: String,
     /// Whether one of its outputs is the window's monitor.
+    ///
+    /// False only when that output list ended on `DXGI_ERROR_NOT_FOUND`
+    /// with no match. Any other `EnumOutputs` error fails presenter setup
+    /// and does not produce this value.
     pub drives_monitor: bool,
 }
 

@@ -617,7 +617,9 @@ the frame stays in the slot. Only Shown updates input geometry; Occluded and Dev
 do not. Resize unbinds/releases the old back buffer before ResizeBuffers and reacquires
 a view. New plane dimensions/sampling invalidate converted content. DeviceLost discards
 the presenter and recreates it; failure leaves it absent for the heartbeat retry, while
-decode continues.
+decode continues. An `EnumOutputs` error other than the end of the list fails
+presenter creation the same way: at start the process stops, and after a lost
+device the presenter stays absent until the heartbeat tries again.
 
 Invariant: pointer mapping follows a successfully displayed picture, not simply received
 configuration. Repeat/redraw is not a newly decoded latency sample. `gwin-verify

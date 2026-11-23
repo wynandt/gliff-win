@@ -320,7 +320,7 @@ rules are in [docs/clipboard.md](docs/clipboard.md).
 | `--headless` | A private remote screen sized to the window, instead of mirroring the focused one. Every machine; it beats the tab menu's *Show as*. |
 | `--output <NAME>` | Mirror this remote output (for example `DP-1`) instead of the focused one. Cannot be combined with `--headless`. |
 | `--ssh <SSH>` | The ssh client to run. Default `%SystemRoot%\System32\OpenSSH\ssh.exe`, or `ssh.exe` when that file does not exist. |
-| `--adapter <monitor\|high-performance\|minimum-power>` | Which GPU presents. Default `monitor`, the one that drives the window's monitor. |
+| `--adapter <monitor\|high-performance\|minimum-power>` | Which GPU presents. Default `monitor`, the GPU that drives the window's monitor. Listing a GPU's outputs ends only when there are no more; any other failure stops Direct3D setup instead of choosing another GPU. |
 | `--stats-out <FILE>` | Write session and present statistics as JSON about once a second and at exit. |
 | `--log-dir <DIR>` | Where the client log and ssh's stderr go. Default `%LOCALAPPDATA%\gliff-windows\logs`. |
 | `--release-chord <CHORD>` | The chord that gives the keyboard back. Default `ctrl+alt+home`; `shift+esc` is the upstream one. It cannot be turned off: `none` is refused. |

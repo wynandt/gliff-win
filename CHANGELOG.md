@@ -7,6 +7,10 @@ release, see [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
 ## [Unreleased]
 
+- Listing a GPU's outputs ends only when Windows reports there are no more.
+  Any other failure stops Direct3D setup instead of skipping that GPU or
+  reporting that it does not drive the window's monitor.
+  ([#65](https://github.com/wynandt/gliff-win/issues/65))
 - The lock watchdog is started again, inside the client's job, only when
   that job refuses to let it leave. Any other failure to start is reported
   as that error, and the lock setting stays off.
