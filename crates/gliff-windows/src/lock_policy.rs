@@ -20,6 +20,9 @@ pub const MARKER_KEY: &str = r"Software\gliff-windows\LockPolicy";
 pub const CLEAR_DELAY_MS: u32 = 300;
 /// How long to wait before trying a failed restore again.
 const RETRY_MS: u32 = 1_000;
+/// Win32 `ERROR_ACCESS_DENIED`. CreateProcess returns this when the caller's
+/// job refuses `CREATE_BREAKAWAY_FROM_JOB`.
+pub const JOB_REFUSED_BREAKAWAY: i32 = 5;
 
 /// The setting's state before the client touched it: absent, or the exact
 /// value it had (the user's own 0, or another number, comes back as it was).
@@ -111,6 +114,13 @@ pub fn after_mutex_wait(wait: MutexWait) -> MutexHold {
         MutexWait::TimedOut => MutexHold::Proceed { held: false },
         MutexWait::Failed => MutexHold::Report,
     }
+}
+
+/// Whether `error` is the caller's job refusing `CREATE_BREAKAWAY_FROM_JOB`.
+/// The watchdog spawn tries again without that flag only then. Any other
+/// error is returned as it is.
+pub fn job_refused_breakaway(error: &std::io::Error) -> bool {
+    error.raw_os_error() == Some(JOB_REFUSED_BREAKAWAY)
 }
 
 /// The three registry operations on the setting and on the marker.

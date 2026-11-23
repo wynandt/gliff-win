@@ -4,6 +4,7 @@ use std::rc::Rc;
 
 use super::CLEAR_DELAY_MS;
 use super::Change;
+use super::JOB_REFUSED_BREAKAWAY;
 use super::LockGate;
 use super::LockPolicy;
 use super::Marker;
@@ -19,6 +20,7 @@ use super::Registry;
 use super::StoredMarker;
 use super::Want;
 use super::after_mutex_wait;
+use super::job_refused_breakaway;
 use super::recover;
 use super::restore_if_owned;
 use super::run_watchdog;
@@ -941,6 +943,42 @@ fn a_failed_mutex_wait_is_reported() {
     assert!(exit.waited);
     assert_eq!(watched.value, Some(1));
     assert_eq!(watched.ops, vec![]);
+}
+
+#[test]
+fn the_watchdog_retries_only_when_the_job_refuses_breakaway() {
+    assert_eq!(JOB_REFUSED_BREAKAWAY, 5);
+    let refused = std::io::Error::from_raw_os_error(JOB_REFUSED_BREAKAWAY);
+    assert!(
+        job_refused_breakaway(&refused),
+        "the job refused CREATE_BREAKAWAY_FROM_JOB"
+    );
+    for code in [0, 2, 13, 87] {
+        let error = std::io::Error::from_raw_os_error(code);
+        assert!(
+            !job_refused_breakaway(&error),
+            "error {code} is still treated as the job refusing the flag"
+        );
+    }
+    let plain = std::io::Error::other("spawn failed");
+    assert!(
+        !job_refused_breakaway(&plain),
+        "an error with no raw code is still treated as the refusal"
+    );
+
+    let win = include_str!("../lockreg.rs");
+    assert!(
+        win.contains("job_refused_breakaway"),
+        "the watchdog is still started again after every first error"
+    );
+    assert!(
+        win.contains("WATCHDOG_FLAGS & !BREAKAWAY"),
+        "a job that refuses the flag is no longer started inside the job"
+    );
+    assert!(
+        !win.contains("or_else(|_|"),
+        "the first spawn error is still discarded"
+    );
 }
 
 #[test]
