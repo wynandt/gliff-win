@@ -190,13 +190,40 @@ pub fn is_private(formats: &[WinFormat], dword: &mut dyn FnMut(&str) -> Option<u
             .any(|name| named(name) && dword(name) == Some(0))
 }
 
+/// Extra raw bytes read above a legal body, for a trailing NUL and for an
+/// allocation larger than the stored bytes.
+const RAW_SLACK: usize = 4096;
+
+/// [`proto::MAX_ITEM`] in bytes.
+const ITEM_BYTES: usize = {
+    assert!(proto::MAX_ITEM == 32 * 1024 * 1024);
+    32 * 1024 * 1024
+};
+
+/// Raw bytes read for `CF_UNICODETEXT`. UTF-16 uses two bytes per code unit,
+/// and [`proto::MAX_ITEM`] caps the UTF-8 body.
+pub const TEXT_RAW_LIMIT: usize = 2 * ITEM_BYTES + RAW_SLACK;
+
+/// Raw bytes read for PNG, JPEG, GIF, HTML, RTF, a file list, and any other
+/// registered format. The UTF-16 factor does not apply. The converted body
+/// is still refused above [`proto::MAX_ITEM`].
+pub const NON_TEXT_RAW_LIMIT: usize = ITEM_BYTES + RAW_SLACK;
+
 /// The most raw bytes worth copying off the clipboard for `format`, so that a
-/// huge item is refused before it is copied. A bitmap is bounded by its pixel limit,
-/// since its PNG is far smaller than the bitmap.
+/// huge item is refused before it is copied. Text uses [`TEXT_RAW_LIMIT`].
+/// PNG, JPEG, GIF, HTML, RTF, a file list and any other registered format use
+/// [`NON_TEXT_RAW_LIMIT`]. A bitmap uses its pixel limit.
 pub fn raw_limit(format: &WinFormat) -> usize {
     match format {
         WinFormat::Dib | WinFormat::DibV5 => image::MAX_DIB_BYTES,
-        _ => 2 * usize::try_from(proto::MAX_ITEM).unwrap_or(usize::MAX / 4) + 4096,
+        WinFormat::UnicodeText => TEXT_RAW_LIMIT,
+        WinFormat::Html
+        | WinFormat::Rtf
+        | WinFormat::Png
+        | WinFormat::Jfif
+        | WinFormat::Gif
+        | WinFormat::Hdrop
+        | WinFormat::Registered(_) => NON_TEXT_RAW_LIMIT,
     }
 }
 

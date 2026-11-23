@@ -90,6 +90,16 @@ The same constants as upstream, from `gliff-proto`:
 | Chunk | 256 KiB, 4 in flight |
 | Idle transfer | 30 s |
 
+Reading the Windows clipboard stops before the body is converted. Text stops
+at twice the 32 MiB item limit plus 4096 bytes, because UTF-16 uses two bytes
+per code unit. PNG, JPEG, GIF, HTML and rich text stop at the 32 MiB item
+limit plus 4096 bytes. A file list and any other registered format stop there
+too; a legal file list is still the path cap above, 512 KiB. A bitmap stops
+at 64 megapixels of 32-bit pixels, plus a megabyte for its header. A converted
+body that is still over 32 MiB is refused. An HTML Format payload larger than
+32 MiB plus 4096 bytes is not read, so a paste of that payload does not send
+its fragment, even when the fragment would have fit in 32 MiB.
+
 ## Formats
 
 ### Windows to Linux
