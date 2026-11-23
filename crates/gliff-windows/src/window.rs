@@ -31,6 +31,7 @@ use windows::Win32::Graphics::Gdi::ENUM_CURRENT_SETTINGS;
 use windows::Win32::Graphics::Gdi::EndPaint;
 use windows::Win32::Graphics::Gdi::EnumDisplaySettingsW;
 use windows::Win32::Graphics::Gdi::GetMonitorInfoW;
+use windows::Win32::Graphics::Gdi::HMONITOR;
 use windows::Win32::Graphics::Gdi::MONITOR_DEFAULTTONEAREST;
 use windows::Win32::Graphics::Gdi::MONITORINFO;
 use windows::Win32::Graphics::Gdi::MONITORINFOEXW;
@@ -114,6 +115,7 @@ use crate::layout::Filter;
 use crate::layout::Viewport;
 use crate::layout::layout;
 use crate::machine_choices::Rules;
+use crate::machine_choices::Scale;
 use crate::panel_win::PanelWin;
 use crate::present::Presenter;
 use crate::present_log::PresentLog;
@@ -121,7 +123,7 @@ use crate::present_log::PresentOutcome;
 use crate::resize_gate::Moving;
 use crate::resize_gate::ResizeGate;
 use crate::resize_gate::Settled;
-use crate::resize_gate::request_for;
+use crate::resize_gate::request_for_scale;
 use crate::session::Geometry;
 use crate::session::Picture;
 use crate::session::ResizeReq;
@@ -270,7 +272,7 @@ impl SessionView {
         Self {
             stream: crate::stream_stats::StreamSampler::new(Instant::now()),
             waker: launched.waker,
-            gate: ResizeGate::new(launched.initial),
+            gate: ResizeGate::new(launched.initial, launched.running.effective_scale()),
             cursor: RemoteCursor::new(),
             initial: launched.initial,
             fps_cap: 0,
@@ -341,6 +343,7 @@ pub struct App {
     /// The client size last seen, to tell a change from a repeat.
     client: (u32, u32),
     dpi: u32,
+    monitor: HMONITOR,
     input: WindowInput,
     chords: ChordsInfo,
     /// The waitable was signalled and not yet used by a `Present`.
@@ -409,6 +412,7 @@ impl App {
             started: parts.started,
             client: picture_size(hwnd),
             dpi: window_dpi(hwnd),
+            monitor: window_monitor(hwnd),
             input: parts.input,
             chords: parts.chords,
             ready: false,
@@ -811,6 +815,12 @@ impl App {
     }
 
     /// The shown session's view of the window, if a session is shown.
+    fn view(&self) -> Option<&SessionView> {
+        let id = self.shown?;
+        self.views.get(&id)
+    }
+
+    /// The shown session's view of the window, if a session is shown.
     fn view_mut(&mut self) -> Option<&mut SessionView> {
         let id = self.shown?;
         self.views.get_mut(&id)
@@ -866,7 +876,9 @@ impl App {
         self.sync_overlay();
         self.redraw();
         if changed {
-            self.stages.on_resize(request_for(client, self.dpi), now);
+            let scale = self.view().map_or(Scale::Auto, |view| view.gate.scale());
+            self.stages
+                .on_resize(request_for_scale(client, self.dpi, scale), now);
             self.update_stage(now);
         }
         let (dpi, moving) = (self.dpi, self.moving());
@@ -901,10 +913,13 @@ impl App {
     fn on_exit_size_move(&mut self) {
         self.on_exit_modal(ModalKind::SizeMove);
         let (client, dpi) = (self.client, self.dpi);
-        if let Some(req) = self
-            .view_mut()
-            .and_then(|view| view.gate.on_exit_size_move(client, dpi))
-        {
+        let req = if window_monitor(self.hwnd) != self.monitor {
+            self.on_screen_moved(client, dpi)
+        } else {
+            self.view_mut()
+                .and_then(|view| view.gate.on_exit_size_move(client, dpi))
+        };
+        if let Some(req) = req {
             self.send_resize(req);
         }
     }
@@ -978,12 +993,48 @@ impl App {
         crate::app_icon::apply(self.hwnd, crate::app_icon::load(dpi));
         self.sync_strip();
         let client = picture_size(self.hwnd);
-        if let Some(req) = self
-            .view_mut()
-            .and_then(|view| view.gate.on_dpi_changed(client, dpi))
-        {
+        if let Some(req) = self.on_screen_moved(client, dpi) {
             self.send_resize(req);
         }
+    }
+
+    /// The window moved to another screen: adopt each live Own screen
+    /// session's saved scale, sending an immediate resize for the shown
+    /// session and updating hidden sessions for when they are shown again.
+    fn on_screen_moved(&mut self, client: (u32, u32), dpi: u32) -> Option<ResizeReq> {
+        self.monitor = window_monitor(self.hwnd);
+        let scales: Vec<(SessionId, Scale)> = self
+            .views
+            .iter()
+            .map(|(&session, view)| {
+                let scale = match view.running.screen {
+                    crate::cli::Screen::Own => self
+                        .tabs
+                        .iter()
+                        .find(|tab| tab.session() == Some(session))
+                        .map_or(view.running.scale, |tab| {
+                            self.rules.connection(tab.target()).scale
+                        }),
+                    crate::cli::Screen::Mirror => Scale::Auto,
+                };
+                (session, scale)
+            })
+            .collect();
+        let mut req = None;
+        for (session, scale) in scales {
+            let Some(view) = self.views.get_mut(&session) else {
+                continue;
+            };
+            if view.running.screen == crate::cli::Screen::Own {
+                view.running.scale = scale;
+            }
+            if self.shown == Some(session) {
+                req = view.gate.on_dpi_changed(client, dpi, scale);
+            } else {
+                view.gate.set_scale(scale);
+            }
+        }
+        req
     }
 
     fn toggle_fullscreen(&mut self) {
@@ -1909,6 +1960,11 @@ pub fn window_dpi(hwnd: HWND) -> u32 {
         0 => 96,
         dpi => dpi,
     }
+}
+
+fn window_monitor(hwnd: HWND) -> HMONITOR {
+    // SAFETY: our own live window; MONITOR_DEFAULTTONEAREST always yields a handle.
+    unsafe { MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST) }
 }
 
 fn window_rect(hwnd: HWND) -> (i32, i32, u32, u32) {

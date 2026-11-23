@@ -5,6 +5,8 @@ use super::Moving;
 use super::ResizeGate;
 use super::Settled;
 use super::request_for;
+use super::request_for_scale;
+use crate::machine_choices::Scale;
 use crate::session::ResizeReq;
 
 const DPI: u32 = 192;
@@ -18,7 +20,7 @@ fn req(width: u32, height: u32, scale: f32) -> ResizeReq {
 }
 
 fn gate() -> (ResizeGate, Instant) {
-    let g = ResizeGate::new(req(1920, 1200, 2.0));
+    let g = ResizeGate::new(req(1920, 1200, 2.0), Scale::Auto);
     (g, Instant::now())
 }
 
@@ -147,7 +149,7 @@ fn the_last_request_is_not_repeated() {
 fn a_scale_change_at_the_same_size_is_sent() {
     let (mut g, _) = gate();
     assert_eq!(
-        g.on_dpi_changed((1920, 1200), 96),
+        g.on_dpi_changed((1920, 1200), 96, Scale::Auto),
         Some(req(1920, 1200, 1.0)),
         "same px, new scale"
     );
@@ -168,7 +170,7 @@ fn the_dpi_change_sends_at_once_and_cancels_the_settle() {
     let (mut g, t0) = gate();
     let _ = g.on_size((1000, 700), 120, Moving::Free, t0);
     assert_eq!(
-        g.on_dpi_changed((1200, 750), 120),
+        g.on_dpi_changed((1200, 750), 120, Scale::Auto),
         Some(req(1200, 750, 1.25))
     );
     assert_eq!(
@@ -185,11 +187,101 @@ fn request_for_makes_sides_even_at_the_protocol_scale() {
 }
 
 #[test]
+fn request_for_scale_sends_physical_pixels_with_auto_or_fixed_scale() {
+    assert_eq!(
+        request_for_scale((2881, 1801), 192, Scale::Auto),
+        req(2880, 1800, 2.0)
+    );
+    assert_eq!(
+        request_for_scale((2881, 1801), 192, Scale::Percent125),
+        req(2880, 1800, 1.25)
+    );
+    assert_eq!(
+        request_for_scale((2881, 1801), 192, Scale::Percent160),
+        req(2880, 1800, 1.6)
+    );
+    assert_eq!(
+        request_for_scale((2881, 1801), 144, Scale::Percent200),
+        req(2880, 1800, 2.0)
+    );
+}
+
+#[test]
 fn fixed_scale_is_preserved_across_resizes_on_the_same_screen() {
-    let mut g = ResizeGate::new(req(2880, 1800, 1.6));
+    let t0 = Instant::now();
+    let initial = request_for_scale((2880, 1800), 192, Scale::Percent160);
+    assert_eq!(initial, req(2880, 1800, 1.6));
+    let mut g = ResizeGate::new(initial, Scale::Percent160);
     assert_eq!(
         g.on_exit_size_move((2400, 1500), 192),
         Some(req(2400, 1500, 1.6)),
         "fixed scale 1.6 must not revert to dpi/96 (2.0)"
+    );
+    assert_eq!(
+        g.on_size((2000, 1250), 192, Moving::Free, t0),
+        Some(ResizeGate::SETTLE)
+    );
+    assert_eq!(
+        g.on_settle(t0 + ResizeGate::SETTLE),
+        Settled::Send(req(2000, 1250, 1.6))
+    );
+}
+
+#[test]
+fn fixed_scale_stays_fixed_when_moving_to_a_screen_with_another_dpi() {
+    let initial = request_for_scale((2880, 1800), 192, Scale::Percent160);
+    let mut g = ResizeGate::new(initial, Scale::Percent160);
+    assert_eq!(
+        g.on_dpi_changed((1920, 1080), 96, Scale::Percent160),
+        Some(req(1920, 1080, 1.6))
+    );
+    assert_eq!(
+        g.on_dpi_changed((1920, 1080), 144, Scale::Percent160),
+        None,
+        "same physical size and same fixed scale"
+    );
+}
+
+#[test]
+fn a_saved_scale_change_takes_effect_on_screen_move_not_on_same_screen_resize() {
+    let t0 = Instant::now();
+    let initial = request_for_scale((2880, 1800), 192, Scale::Auto);
+    let mut g = ResizeGate::new(initial, Scale::Auto);
+
+    assert_eq!(
+        g.on_exit_size_move((2560, 1600), 192),
+        Some(req(2560, 1600, 2.0)),
+        "same screen keeps the session's active Auto scale"
+    );
+    assert_eq!(
+        g.on_dpi_changed((2560, 1600), 192, Scale::Percent160),
+        Some(req(2560, 1600, 1.6)),
+        "screen move adopts the new saved scale even at the same size and dpi"
+    );
+    assert_eq!(g.scale(), Scale::Percent160);
+    assert_eq!(
+        g.on_size((2000, 1200), 144, Moving::Free, t0),
+        Some(ResizeGate::SETTLE)
+    );
+    assert_eq!(
+        g.on_settle(t0 + ResizeGate::SETTLE),
+        Settled::Send(req(2000, 1200, 1.6))
+    );
+}
+
+#[test]
+fn hidden_tab_scale_update_takes_effect_when_size_catches_up() {
+    let t0 = Instant::now();
+    let initial = request_for_scale((1920, 1200), 192, Scale::Auto);
+    let mut g = ResizeGate::new(initial, Scale::Auto);
+    g.set_scale(Scale::Percent125);
+    assert_eq!(g.requested(), req(1920, 1200, 2.0), "no immediate send");
+    assert_eq!(
+        g.on_size((1920, 1200), 192, Moving::Free, t0),
+        Some(ResizeGate::SETTLE)
+    );
+    assert_eq!(
+        g.on_settle(t0 + ResizeGate::SETTLE),
+        Settled::Send(req(1920, 1200, 1.25))
     );
 }

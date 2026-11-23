@@ -7,13 +7,14 @@
 //! Windows the window tells us instead of being polled: a drag ends with
 //! `WM_EXITSIZEMOVE` (send once, at once), other size changes (maximise,
 //! snap, F11) settle for the same 200 ms, and `WM_DPICHANGED` sends after
-//! the window takes the suggested rect. Sizes are client pixels `& !1` at
-//! [`protocol_scale`](crate::layout::protocol_scale).
+//! the window takes the suggested rect. Sizes are client pixels `& !1` at the
+//! session's [`Scale`](crate::machine_choices::Scale)
+//! ([`protocol_scale`](crate::layout::protocol_scale) for [`Scale::Auto`]).
 
 use std::time::Duration;
 use std::time::Instant;
 
-use crate::layout::protocol_scale;
+use crate::machine_choices::Scale;
 use crate::session::ResizeReq;
 
 /// Whether `WM_SIZE` arrived inside the modal size-move loop.
@@ -45,6 +46,8 @@ pub struct ResizeGate {
     seen: Option<ResizeReq>,
     /// The last request sent (the Hello-time one to begin with).
     requested: ResizeReq,
+    /// The scale choice active for this session until a screen move or reconnect.
+    scale: Scale,
 }
 
 impl ResizeGate {
@@ -54,13 +57,25 @@ impl ResizeGate {
     pub const MIN_SIDE: u32 = 64;
 
     /// A gate whose last request is `initial`, the size the session
-    /// started with.
-    pub fn new(initial: ResizeReq) -> Self {
+    /// started with, and whose active scale choice is `scale`.
+    pub fn new(initial: ResizeReq, scale: Scale) -> Self {
         Self {
             pending: None,
             seen: None,
             requested: initial,
+            scale,
         }
+    }
+
+    /// The scale choice active for this session.
+    pub fn scale(&self) -> Scale {
+        self.scale
+    }
+
+    /// Updates the active scale choice for a hidden session after a screen
+    /// move without sending a resize yet.
+    pub fn set_scale(&mut self, scale: Scale) {
+        self.scale = scale;
     }
 
     /// `WM_SIZE`. Never sends: inside a drag it waits for
@@ -74,7 +89,7 @@ impl ResizeGate {
         moving: Moving,
         now: Instant,
     ) -> Option<Duration> {
-        let req = request_for(client, dpi);
+        let req = request_for_scale(client, dpi, self.scale);
         let repeat = self.seen == Some(req);
         self.seen = Some(req);
         match moving {
@@ -95,8 +110,15 @@ impl ResizeGate {
         self.now(client, dpi)
     }
 
-    /// `WM_DPICHANGED`, after `SetWindowPos` to the suggested rect.
-    pub fn on_dpi_changed(&mut self, client: (u32, u32), dpi: u32) -> Option<ResizeReq> {
+    /// `WM_DPICHANGED` (after `SetWindowPos` to the suggested rect) or a drag
+    /// that ended on another monitor: adopts `scale` and sends at once.
+    pub fn on_dpi_changed(
+        &mut self,
+        client: (u32, u32),
+        dpi: u32,
+        scale: Scale,
+    ) -> Option<ResizeReq> {
+        self.scale = scale;
         self.now(client, dpi)
     }
 
@@ -117,7 +139,7 @@ impl ResizeGate {
 
     /// Sends `client` at once, superseding any pending settle.
     fn now(&mut self, client: (u32, u32), dpi: u32) -> Option<ResizeReq> {
-        let req = request_for(client, dpi);
+        let req = request_for_scale(client, dpi, self.scale);
         self.seen = Some(req);
         self.pending = None;
         self.gate(req)
@@ -141,13 +163,18 @@ impl ResizeGate {
     }
 }
 
-/// Client pixels to a request: even sides, the protocol scale.
-pub fn request_for(client: (u32, u32), dpi: u32) -> ResizeReq {
+/// Client pixels to a request: even physical sides at `scale`.
+pub fn request_for_scale(client: (u32, u32), dpi: u32, scale: Scale) -> ResizeReq {
     ResizeReq {
         width: client.0 & !1,
         height: client.1 & !1,
-        scale: protocol_scale(dpi),
+        scale: scale.factor(dpi),
     }
+}
+
+/// Client pixels to a request: even sides, the protocol scale (`Scale::Auto`).
+pub fn request_for(client: (u32, u32), dpi: u32) -> ResizeReq {
+    request_for_scale(client, dpi, Scale::Auto)
 }
 
 #[cfg(test)]
