@@ -153,7 +153,11 @@ command line the client now sends by default.
   switch the picture on screen is the new session's. A second test gives one
   machine the `reload` fault and checks that a re-sync starts only in the
   session that went quiet, and only once input reaches it (it is hidden at
-  first, so it gets none). It also measures client
+  first, so it gets none). The stream-sample test waits until each session
+  reports the 1280 by 800 the client asked for, then checks that the sample
+  stays with its session across a tab switch. The fake server's first config
+  is the clamped headless mode, 1920 by 1080, and that config can arrive
+  before the resize. The file also measures client
   CPU with one and with three busy sessions (see below).
 
 Linux example:
