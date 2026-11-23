@@ -297,6 +297,17 @@ Every way the value could be left on has a way back:
   cleared;
 - `gliff-windows.exe --restore-lock-policy` does the same by hand.
 
+The client and its helper take one mutex, `Local\gliff-windows-lock-policy`,
+around each look at the setting and the writes that follow it, so the two
+cannot interleave. The wait is 2 seconds. When that wait runs out, the look
+goes ahead without the mutex, so a holder that never lets go cannot block a
+restore. When the mutex cannot be created, or the wait fails, that look is
+not done: the error is returned, nothing is read or written, and the caller
+does not treat the look as a success. A turn-on that fails this way leaves
+the registry route off for this window (the menu says the registry refused
+it, and the log has the error). A restore that fails this way keeps the
+marker and tries again.
+
 By default no machine's switch is on and `--super-l` is `chord`, so the client
 does not change the setting (it only repairs a dead client's leftover,
 above): Win+L locks

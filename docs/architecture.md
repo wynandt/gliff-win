@@ -186,7 +186,9 @@ Each choice names the alternative that was rejected.
   computer is awake, a wish that goes off is cleared 300 ms later (a focus
   flicker), and a gate that closes (an untick, a tab change to a machine
   without it, no tab, sleep) clears it at once. Every registry write stays in
-  `lockreg`.
+  `lockreg`, behind one mutex per user. A failed wait or a failed create is
+  returned and that write does not run. A wait that reaches its limit still
+  runs, so a stuck holder cannot block a restore.
   Rejected: a client-wide switch (the choice belongs to the remote machine:
   only some bind Super+L to something), making `--super-l` itself a
   per-machine choice (the stand-in chord and its conflict check are
@@ -811,7 +813,7 @@ thread, which stalls in the modal size-move loop.
 | `hook` (Windows) | `WH_KEYBOARD_LL` on its own thread. While grabbed it swallows every key. A watchdog reinstalls it if Windows drops it. |
 | `grab` (Windows) | The input-desktop poll (releases everything at a UAC or secure desktop), the foreground check (releases the grab when another program's window has been in front for two looks), session lock notifications, IME off, hover tracking. |
 | `window_input` (Windows) | Pointer, button and wheel messages from the window procedure. |
-| `lockreg` (Windows) | The registry value, a write-ahead marker, the `--lock-watchdog` helper process and every restore path (`--restore-lock-policy` by hand). |
+| `lockreg` (Windows) | The registry value, a write-ahead marker, the mutex around those writes, the `--lock-watchdog` helper process and every restore path (`--restore-lock-policy` by hand). A failed mutex wait is returned and the write does not run; a wait that reaches its limit still runs. |
 
 Held keys and buttons are released on focus loss, on the release chord, when a
 UAC prompt or the secure desktop takes the input, and when the session ends.

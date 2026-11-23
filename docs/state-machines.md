@@ -362,9 +362,13 @@ enabling the setting. Normal exit, panic, console exit, end-session, and watchdo
 converge on owned restoration.
 
 Invariant: do not restore another process's setting or erase the user's pre-existing
-value. This is a real explicit machine with implicit transactional substates, not wholly
-implicit. Extensive fake-registry tests cover ordering, partial failure, retry,
-ownership, PID reuse, and exit. Native process-table testing also exists.
+value. A mutex wait that fails, or a mutex that cannot be created, is returned and
+that step does not read or write. A wait that reaches its limit still proceeds, so a
+stuck holder cannot block a restore. A failed turn-on disables the route. A failed
+restore keeps the marker and retries. This is a real explicit machine with implicit
+transactional substates, not wholly implicit. Extensive fake-registry tests cover
+ordering, partial failure, retry, ownership, PID reuse, and exit. Native
+process-table testing also exists.
 [Policy][lock-gate]; [gate][lock-gate]; [process exit and watchdog][lock-runtime].
 
 ## Pointer and cursor
