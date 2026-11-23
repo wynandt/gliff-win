@@ -7,6 +7,10 @@ release, see [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
 ## [Unreleased]
 
+- The placement probe and `gwin-keys` pick one Hyprland instance: the newest
+  `.socket.sock` under the runtime directory. They had been able to attach
+  to different instances, because `gwin-keys` followed the newest directory.
+  ([#66](https://github.com/wynandt/gliff-win/issues/66))
 - PNG, JPEG, GIF, HTML and rich text read from the Windows clipboard stop
   at 32 MiB plus 4096 bytes. A file list and any other registered format
   stop there too. Text still stops at twice 32 MiB plus 4096 bytes, and a
