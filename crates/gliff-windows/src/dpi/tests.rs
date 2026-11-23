@@ -7,8 +7,7 @@ fn a_failed_dpi_awareness_call_is_logged() {
         panic!("a failed call is not success, got {failed:?}");
     };
     assert_eq!(
-        line,
-        "dpi awareness: SetProcessDpiAwarenessContext failed: awareness refused",
+        line, "dpi awareness: SetProcessDpiAwarenessContext failed: awareness refused",
         "a failed call is logged"
     );
 
