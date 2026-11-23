@@ -362,8 +362,14 @@ on Windows and pasted on Linux). See
 
 ## Pointer and DPI
 
-- **The window is per-monitor DPI aware (v2),** so every size is in physical
-  pixels, and the protocol scale is `dpi / 96`. Mouse positions are client
+- **The window asks to be per-monitor DPI aware (v2)** before any window
+  exists, so sizes are in physical pixels and the protocol scale is
+  `dpi / 96` when Windows accepts the request. The executable has no
+  manifest that would already have set that. A failed
+  `SetProcessDpiAwarenessContext` is one client-log line after the log
+  opens: `dpi awareness: SetProcessDpiAwarenessContext failed:` and the
+  error text. The client still starts, and that failure is not treated as
+  success. A successful call writes nothing. Mouse positions are client
   pixels and become remote pixels through the layout.
 - **A resize waits for the size to hold.** `ResizeGate` sends 200 ms after the size
   stops changing, at once when a drag ends, and after `WM_DPICHANGED` once the

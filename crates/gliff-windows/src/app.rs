@@ -103,11 +103,13 @@ const IDLE_WAIT_MS: u32 = 1000;
 pub fn run(args: Args) -> ExitCode {
     let started = Instant::now();
     // SAFETY: called before any window exists.
-    let _ = unsafe { SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
+    let dpi = unsafe { SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) }
+        .map_err(|error| error.to_string());
     let startup = match Startup::load(&args) {
         Ok(startup) => startup,
         Err(e) => {
             let _ = crate::logging::init(&early_log_dir(&args));
+            log_dpi(&dpi);
             return fail(&format!("refusing to start: {e}"));
         }
     };
@@ -124,6 +126,7 @@ pub fn run(args: Args) -> ExitCode {
         )),
         Err(e) => eprintln!("gliff-windows: no log in {}: {e}", log_dir.display()),
     }
+    log_dpi(&dpi);
     crate::logging::line(&format!("config folder {}", startup.dir.path().display()));
     for note in &startup.notes {
         crate::logging::line(&format!("config: {note}"));
@@ -489,6 +492,15 @@ fn panel_size(hwnd: HWND) -> (u32, u32) {
         u32::try_from(r.right - r.left).unwrap_or(0),
         u32::try_from(r.bottom - r.top).unwrap_or(0),
     )
+}
+
+/// Writes a failed per-monitor v2 request to the client log.
+///
+/// A success writes nothing. The process still starts.
+fn log_dpi(dpi: &Result<(), String>) {
+    if let Err(line) = crate::dpi::report(dpi.as_ref().map(|_| ()).map_err(String::as_str)) {
+        crate::logging::line(&line);
+    }
 }
 
 /// The log folder for a start that failed before settings were loaded:
