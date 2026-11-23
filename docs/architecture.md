@@ -85,7 +85,7 @@ arguments and exits 2.
 
 | Area | Modules | Role |
 |---|---|---|
-| Startup | `app` **W**, `cli`, `startup`, `logging`, `main` | Arguments, the config folder and settings at start, the log (one file per UTC day), the window and session, the two helper modes of the exe. |
+| Startup | `app` **W**, `cli`, `dpi`, `startup`, `logging`, `main` | Arguments, the config folder and settings at start, the log (one file per UTC day), a failed per-monitor DPI request (`dpi`), the window and session, the two helper modes of the exe. |
 | Settings | `settings`, `config`, `history` | Described under [Settings](#settings). |
 | Session | `session` (`machine`, `driver`, `input_side`), `link`, `ssh` | The protocol state machine with no I/O, the task that owns the I/O, and the ssh child. |
 | Video | `decode`, `gpu_decode` **W**, `h264`, `yuv`, `frame_slot`, `present` **W**, `present.hlsl`, `present_math`, `layout` | CPU or GPU decode to I420, the latest-wins hand-off, the D3D11 conversion and present, and where the picture goes in the window. |
@@ -400,8 +400,13 @@ Timers: settle, modal (16 ms), close (3 s), and stats (1 s).
   sends at once when a drag ends (`WM_EXITSIZEMOVE`), and sends after
   `WM_DPICHANGED` once the window takes the suggested rectangle. Sizes are
   client pixels rounded down to even, never under 64, at the protocol scale
-  `dpi / 96`. The window is per-monitor DPI aware (v2), so every size is in
-  physical pixels.
+  `dpi / 96` when Windows has accepted per-monitor awareness (v2). The
+  client asks for that before any window. There is no manifest that would
+  already have set it. `dpi::report` turns a failed
+  `SetProcessDpiAwarenessContext` into one log line, written once the log
+  is open, both when start is refused and on a normal start. The window is
+  still created. A successful call writes nothing. Sizes are physical
+  pixels.
 - **Fullscreen.** F11 or the window menu toggles borderless fullscreen on the
   window's monitor (no exclusive mode, so DWM can use independent flip).
 - **Cursor.** `RemoteCursor` turns the server's `CursorShape` into a Win32 cursor
@@ -753,7 +758,9 @@ exit code and a count of clean and unclean sessions. `WM_ENDSESSION` writes
 its exit line at once, because Windows may end the process when the message
 returns. `app::run` writes the exit line for a refused start, a handover to
 a running client and a startup error. The log opens before the single-instance
-check, so those exits are logged too. `logging::line` writes its line when a
+check, so those exits are logged too. A failed per-monitor DPI awareness
+request is logged at that same point (`dpi::report`), including when start
+is refused before the window exists. `logging::line` writes its line when a
 panic has poisoned the log lock. When the log was never opened, or the write
 fails, the call adds no line and the client continues.
 

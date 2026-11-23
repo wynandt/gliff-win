@@ -407,9 +407,11 @@ means no document in this repository plans it.
 6. **Light and dark theme.** The strip and panel use a fixed dark palette. The
    Linux client follows its desktop theme. The plan is to follow the Windows app
    theme, in a later release.
-7. **Several monitors and mixed scales.** The window is per-monitor DPI aware,
-   but moving it between monitors of different scale, or a scale change while
-   it runs, is untested. Planned, not started.
+7. **Several monitors and mixed scales.** The window asks to be per-monitor
+   DPI aware before it creates a window. If Windows refuses that request, the
+   client log records the failure and the window still opens. Moving the
+   window between monitors of different scale, or a scale change while it
+   runs, is untested. Planned, not started.
 8. **A progress bar and Cancel for big pastes.** The Linux client shows one
    after the first second. Here progress is a log line and a slow paste shows
    nothing. Planned if real use shows a need.

@@ -7,6 +7,13 @@ release, see [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
 ## [Unreleased]
 
+- A failed request for per-monitor DPI awareness is written to the client
+  log once the log is open, including when start is refused before the
+  window exists. The request is still per-monitor v2, made before any
+  window, and the client still starts. A successful request writes
+  nothing. The program has no manifest that would already have set that
+  awareness.
+  ([#65](https://github.com/wynandt/gliff-win/issues/65))
 - The placement probe and `gwin-keys` pick one Hyprland instance: the newest
   `.socket.sock` under the runtime directory. They had been able to attach
   to different instances, because `gwin-keys` followed the newest directory.
