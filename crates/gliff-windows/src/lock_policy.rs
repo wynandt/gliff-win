@@ -81,16 +81,53 @@ pub enum StoredMarker {
 #[error("registry: {0}")]
 pub struct RegError(pub String);
 
+/// What waiting for the registry mutex came to, with no Windows handle.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MutexWait {
+    /// This thread owns the mutex, including one a previous owner abandoned.
+    Held,
+    /// The wait reached its limit. A stuck holder must not block the work.
+    TimedOut,
+    /// The mutex could not be created, or the wait failed.
+    Failed,
+}
+
+/// What the caller does after [`MutexWait`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MutexHold {
+    /// Read and write. `held` is false only after a timeout: the guard holds
+    /// nothing, and the work goes ahead.
+    Proceed { held: bool },
+    /// Return the error. Do not read or write.
+    Report,
+}
+
+/// A held mutex proceeds under it. A timeout proceeds without it, so a stuck
+/// holder cannot block a restore. A failed create or a failed wait is
+/// reported, and the registry is left untouched.
+pub fn after_mutex_wait(wait: MutexWait) -> MutexHold {
+    match wait {
+        MutexWait::Held => MutexHold::Proceed { held: true },
+        MutexWait::TimedOut => MutexHold::Proceed { held: false },
+        MutexWait::Failed => MutexHold::Report,
+    }
+}
+
 /// The three registry operations on the setting and on the marker.
 pub trait Registry {
     /// Keeps every other client, the watchdog helper and this process's own
-    /// exit path out of the registry until the returned value is dropped. A
+    /// exit path out of the registry until the returned guard is dropped. A
     /// restore or a turn-on is a read followed by writes: without this, the
     /// helper finishing for a dead client can clear what a new client has
-    /// just set, or delete the new client's marker. Re-entrant on one
-    /// thread. The default holds nothing.
-    fn hold(&self) -> Box<dyn Any> {
-        Box::new(())
+    /// just set, or delete the new client's marker. Re-entrant on one thread.
+    ///
+    /// `Err` means the mutex could not be created or the wait failed. The
+    /// caller returns that error and does not read or write. `Ok` of a guard
+    /// that holds nothing is a wait that reached its limit: a stuck holder
+    /// must not block the work, so it goes ahead. The default holds nothing
+    /// and returns `Ok`.
+    fn hold(&self) -> Result<Box<dyn Any>, RegError> {
+        Ok(Box::new(()))
     }
     /// Turns the setting on. Refused (an error) once this process is on its
     /// way out, so an exit path that has restored the setting is not undone.
@@ -190,7 +227,7 @@ pub fn restore_if_owned(
     registry: &mut dyn Registry,
     only: Option<Owner>,
 ) -> Result<Option<Marker>, RegError> {
-    let _hold = registry.hold();
+    let _hold = registry.hold()?;
     let StoredMarker::Complete(marker) = registry.read_marker()? else {
         return Ok(None);
     };
@@ -209,7 +246,10 @@ pub fn restore_if_owned(
 /// incomplete marker is removed: left alone it would make every later start
 /// fail to read it.
 pub fn recover(registry: &mut dyn Registry, processes: &dyn Processes) -> Recovery {
-    let _hold = registry.hold();
+    let _hold = match registry.hold() {
+        Ok(hold) => hold,
+        Err(error) => return Recovery::Failed(error),
+    };
     let marker = match registry.read_marker() {
         Ok(StoredMarker::Complete(marker)) => marker,
         Ok(StoredMarker::Absent) => return Recovery::Nothing,
@@ -342,7 +382,10 @@ impl<R: Registry> LockPolicy<R> {
         match (want, self.state) {
             (_, State::Disabled) => Change::Nothing,
             (Want::On, State::Held) if self.restore_failed => {
-                let _hold = self.registry.hold();
+                let _hold = match self.registry.hold() {
+                    Ok(hold) => hold,
+                    Err(error) => return self.fail(error),
+                };
                 match self.registry.set_on() {
                     Ok(()) => {
                         self.restore_failed = false;
@@ -398,7 +441,10 @@ impl<R: Registry> LockPolicy<R> {
     }
 
     fn turn_on(&mut self) -> Change {
-        let _hold = self.registry.hold();
+        let _hold = match self.registry.hold() {
+            Ok(hold) => hold,
+            Err(error) => return self.fail(error),
+        };
         let prior = match self.registry.read_value() {
             Ok(Some(1)) => return self.found_on(),
             Ok(Some(value)) => Prior::Value(value),
@@ -496,7 +542,9 @@ impl<R: Registry> LockPolicy<R> {
         if !self.stray_marker {
             return;
         }
-        let _hold = self.registry.hold();
+        let Ok(_hold) = self.registry.hold() else {
+            return;
+        };
         match self.registry.read_marker() {
             Ok(StoredMarker::Incomplete) => {
                 if self.registry.delete_marker().is_ok() {

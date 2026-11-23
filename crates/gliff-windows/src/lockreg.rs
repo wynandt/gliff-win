@@ -17,9 +17,12 @@ use windows::Win32::Foundation::CloseHandle;
 use windows::Win32::Foundation::ERROR_FILE_NOT_FOUND;
 use windows::Win32::Foundation::ERROR_SUCCESS;
 use windows::Win32::Foundation::FILETIME;
+use windows::Win32::Foundation::GetLastError;
 use windows::Win32::Foundation::HANDLE;
 use windows::Win32::Foundation::WAIT_ABANDONED;
+use windows::Win32::Foundation::WAIT_EVENT;
 use windows::Win32::Foundation::WAIT_OBJECT_0;
+use windows::Win32::Foundation::WAIT_TIMEOUT;
 use windows::Win32::Foundation::WIN32_ERROR;
 use windows::Win32::System::Console::CTRL_BREAK_EVENT;
 use windows::Win32::System::Console::CTRL_C_EVENT;
@@ -60,6 +63,8 @@ use windows::core::w;
 use crate::lock_policy;
 use crate::lock_policy::MARKER_KEY;
 use crate::lock_policy::Marker;
+use crate::lock_policy::MutexHold;
+use crate::lock_policy::MutexWait;
 use crate::lock_policy::Owner;
 use crate::lock_policy::OwnerExit;
 use crate::lock_policy::POLICY_VALUE;
@@ -69,6 +74,7 @@ use crate::lock_policy::Recovery;
 use crate::lock_policy::RegError;
 use crate::lock_policy::Registry;
 use crate::lock_policy::StoredMarker;
+use crate::lock_policy::after_mutex_wait;
 use crate::win32::CREATE_NO_WINDOW;
 
 const POLICY_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Policies\System";
@@ -81,7 +87,9 @@ const BREAKAWAY: u32 = 0x0100_0000;
 /// The mutex every client and every watchdog helper of this user takes
 /// around a look at the setting and the writes that follow it.
 const REGISTRY_MUTEX: &str = "Local\\gliff-windows-lock-policy";
-/// How long to wait for it; past that the work goes ahead without it.
+/// How long to wait for it. Past that, the work goes ahead without it, so a
+/// stuck holder cannot block a restore. A failed wait does not: it is
+/// returned and the look does not read or write.
 const REGISTRY_WAIT_MS: u32 = 2_000;
 
 /// Set once this process is on its way out (or its window thread has
@@ -249,22 +257,72 @@ impl Drop for RegistryHold {
     }
 }
 
+fn mutex_wait(waited: WAIT_EVENT) -> MutexWait {
+    if waited == WAIT_OBJECT_0 || waited == WAIT_ABANDONED {
+        MutexWait::Held
+    } else if waited == WAIT_TIMEOUT {
+        MutexWait::TimedOut
+    } else {
+        MutexWait::Failed
+    }
+}
+
+fn close_mutex(handle: Option<HANDLE>) {
+    if let Some(handle) = handle {
+        // SAFETY: `handle` was returned by CreateMutexW and is closed once.
+        // This thread does not own the mutex, so it is not released.
+        let _ = unsafe { CloseHandle(handle) };
+    }
+}
+
+fn mutex_failure(failure: Option<RegError>) -> RegError {
+    match failure {
+        Some(error) => error,
+        None => RegError("mutex wait failed".to_owned()),
+    }
+}
+
 impl Registry for WinRegistry {
-    fn hold(&self) -> Box<dyn std::any::Any> {
+    fn hold(&self) -> Result<Box<dyn std::any::Any>, RegError> {
         let name = HSTRING::from(REGISTRY_MUTEX);
         // SAFETY: `name` is a NUL-terminated wide string that outlives the
         // call; no security attributes and no initial owner.
-        let Ok(handle) = (unsafe { CreateMutexW(None, false, PCWSTR(name.as_ptr())) }) else {
-            return Box::new(RegistryHold(None));
+        let created = unsafe { CreateMutexW(None, false, PCWSTR(name.as_ptr())) };
+        let (wait, handle, failure) = match created {
+            Ok(handle) => {
+                // SAFETY: the handle was just created and is valid for the wait.
+                let waited = unsafe { WaitForSingleObject(handle, REGISTRY_WAIT_MS) };
+                let wait = mutex_wait(waited);
+                let failure = match wait {
+                    MutexWait::Failed => {
+                        // SAFETY: reads the calling thread's last error, set by
+                        // the wait above. No other call sits between them.
+                        Some(reg_error("WaitForSingleObject", unsafe { GetLastError() }))
+                    }
+                    MutexWait::Held | MutexWait::TimedOut => None,
+                };
+                (wait, Some(handle), failure)
+            }
+            Err(error) => (
+                MutexWait::Failed,
+                None,
+                Some(RegError(format!("CreateMutexW: error {}", error.code().0))),
+            ),
         };
-        // SAFETY: the handle was just created and is valid.
-        let waited = unsafe { WaitForSingleObject(handle, REGISTRY_WAIT_MS) };
-        if waited == WAIT_OBJECT_0 || waited == WAIT_ABANDONED {
-            return Box::new(RegistryHold(Some(handle)));
+        match (after_mutex_wait(wait), handle) {
+            (MutexHold::Proceed { held: true }, Some(handle)) => {
+                Ok(Box::new(RegistryHold(Some(handle))))
+            }
+            (MutexHold::Proceed { held: false }, handle) => {
+                close_mutex(handle);
+                Ok(Box::new(RegistryHold(None)))
+            }
+            (MutexHold::Report, handle) => {
+                close_mutex(handle);
+                Err(mutex_failure(failure))
+            }
+            (MutexHold::Proceed { held: true }, None) => Err(mutex_failure(failure)),
         }
-        // SAFETY: `handle` was returned by CreateMutexW and is closed once.
-        let _ = unsafe { CloseHandle(handle) };
-        Box::new(RegistryHold(None))
     }
 
     fn set_on(&mut self) -> Result<(), RegError> {

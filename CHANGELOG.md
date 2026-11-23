@@ -7,6 +7,12 @@ release, see [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
 ## [Unreleased]
 
+- A lock-policy change whose mutex cannot be created, or whose wait fails,
+  is reported and does not read or write the setting. A turn-on that fails
+  this way leaves the registry route off for that window. A restore that
+  fails this way keeps the marker and tries again. A wait that reaches 2
+  seconds still goes ahead, so a stuck holder cannot block a restore.
+  ([#65](https://github.com/wynandt/gliff-win/issues/65))
 - If the single-instance lock cannot be created or checked, the client
   shows a message box that names the error, writes that error on the exit
   line, and stops before it opens a window. A second start while a client
