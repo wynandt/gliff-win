@@ -5,7 +5,8 @@
 //! Two clients would fight over the keyboard hook and the clipboard, so a
 //! second launch must not start a second client. It forwards what it was asked
 //! for to the first one and exits: a target opens a tab there, and a launch
-//! with no target brings the window back.
+//! with no target brings the window back. If the lock cannot be created or
+//! checked, the launch stops. That is not the already-running case.
 //!
 //! The instance name comes from the configuration folder, so a test with its
 //! own folder runs beside a real client. The mutex is taken by the client
@@ -54,6 +55,43 @@ pub fn decide(already_running: bool, targets: &[HostTarget], autostart: bool) ->
         Launch::HandOver(Forward::Show)
     } else {
         Launch::HandOver(Forward::Open(targets.to_vec()))
+    }
+}
+
+/// What checking the instance lock returned, without a Windows handle.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum LockCheck {
+    /// This process holds the lock.
+    Held,
+    /// Another client already holds the lock.
+    AlreadyRunning,
+    /// The lock could not be created or checked. The string is the error text.
+    Failed(String),
+}
+
+/// What this launch does after [`LockCheck`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Start {
+    /// This process holds the lock and becomes the client.
+    Run,
+    /// Another client holds the lock. The value is what [`decide`] returns
+    /// for that case.
+    Second(Launch),
+    /// The lock could not be created or checked. The launch stops. The string
+    /// is the error the message box shows and the exit line records.
+    Stop(String),
+}
+
+/// A held lock runs. An already-running lock is [`decide`]. Any other error
+/// stops the launch.
+///
+/// A failed check stops the launch for every target list and both values of
+/// `autostart`. The already-running case is not that error.
+pub fn after_check(check: LockCheck, targets: &[HostTarget], autostart: bool) -> Start {
+    match check {
+        LockCheck::Held => Start::Run,
+        LockCheck::AlreadyRunning => Start::Second(decide(true, targets, autostart)),
+        LockCheck::Failed(error) => Start::Stop(format!("single-instance check failed: {error}")),
     }
 }
 

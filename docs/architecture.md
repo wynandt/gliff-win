@@ -683,12 +683,20 @@ line does (a target such as `-oProxyCommand=...` is refused). A hand-over that
 fails is logged and the second launch exits with an error; it never starts a
 second client.
 
+`after_check` sits beside `decide`. A held lock runs. An already-running
+lock is `decide`, so a second launch is unchanged. Any other result means
+the lock could not be created or checked, and the launch stops. `app::run`
+shows that error in a message box titled `gliff` and writes it on the client
+exit line, then returns exit code 1. The log is already open, so the exit
+line is written before the box. The process stops before it opens a window.
+
 ### The window with several sessions
 
 `App` (in `window.rs`) holds the `Tabs` model, the `SessionSet`, and one
 `SessionView` per live session; `app::run` builds them in this order: load the
 settings, open the log, take the single-instance name (hand over and exit
-when a client already runs), `Tabs::start_up`, the window, the presenter, the
+when a client already runs, or stop when the lock cannot be checked),
+`Tabs::start_up`, the window, the presenter, the
 `InputRoute`, the clipboard side, the `SessionSet` with a starter, the keyboard
 grab and pointer input (both on the route), and then runs the start effects.
 
@@ -757,7 +765,9 @@ records why it is closing (`WM_CLOSE`, the 3 s close timer, or a
 exit code and a count of clean and unclean sessions. `WM_ENDSESSION` writes
 its exit line at once, because Windows may end the process when the message
 returns. `app::run` writes the exit line for a refused start, a handover to
-a running client and a startup error. The log opens before the single-instance
+a running client, a startup error, and a single-instance lock that cannot
+be created or checked. That lock error is also a message box, and the
+process stops before a window exists. The log opens before the single-instance
 check, so those exits are logged too. A failed per-monitor DPI awareness
 request is logged at that same point (`dpi::report`), including when start
 is refused before the window exists. `logging::line` writes its line when a

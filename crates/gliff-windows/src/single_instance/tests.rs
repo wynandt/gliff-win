@@ -3,8 +3,11 @@ use std::path::Path;
 use super::DecodeError;
 use super::Forward;
 use super::Launch;
+use super::LockCheck;
 use super::MAX_MESSAGE;
 use super::MAX_TARGETS;
+use super::Start;
+use super::after_check;
 use super::decide;
 use super::decode;
 use super::encode;
@@ -40,6 +43,91 @@ fn a_second_launch_with_targets_hands_them_over_in_order() {
 fn a_second_logon_start_exits_quietly_even_with_targets() {
     assert_eq!(decide(true, &[], true), Launch::Quit);
     assert_eq!(decide(true, &[host("a@one")], true), Launch::Quit);
+}
+
+#[test]
+fn a_failed_lock_check_stops_the_launch() {
+    for (targets, autostart) in [
+        (Vec::new(), false),
+        (vec![host("a@one")], false),
+        (vec![host("a@one"), host("b@two")], true),
+    ] {
+        assert_eq!(
+            after_check(
+                LockCheck::Failed("access denied".to_owned()),
+                &targets,
+                autostart
+            ),
+            Start::Stop("single-instance check failed: access denied".to_owned()),
+            "a failed check stops for every target list"
+        );
+    }
+    assert_eq!(
+        after_check(LockCheck::Failed(String::new()), &[], false),
+        Start::Stop("single-instance check failed: ".to_owned()),
+        "an empty error still stops the launch"
+    );
+
+    let source = include_str!("../app.rs");
+    assert!(
+        !source.contains("eprintln!(\"gliff-windows: single-instance check failed:"),
+        "an acquire error is still printed to stderr and the launch continues"
+    );
+    assert!(
+        source.contains("single_instance::after_check"),
+        "the launch does not ask after_check"
+    );
+    assert!(
+        source.contains("MessageBoxW"),
+        "a failed check does not show a message box"
+    );
+    let stopped = source
+        .find("fn lock_stopped")
+        .expect("a failed check does not stop with the exit line");
+    let body = &source[stopped..];
+    let end = body.find("\nfn ").unwrap_or(body.len());
+    let body = &body[..end];
+    assert!(
+        body.contains("client_exit_line"),
+        "the stop is not a client-log line"
+    );
+    assert!(
+        body.contains("show_lock_error"),
+        "the stop does not show the message box"
+    );
+    assert!(
+        !body.contains("eprintln!"),
+        "the lock stop prints to stderr"
+    );
+    let stop = source
+        .find("Start::Stop")
+        .expect("a failed check does not stop the launch");
+    let startup = source.find("Tabs::start_up").expect("startup");
+    assert!(
+        stop < startup,
+        "the launch reaches window startup after a failed check"
+    );
+}
+
+#[test]
+fn an_existing_client_is_still_the_second_launch() {
+    let targets = [host("a@one"), host("b@two")];
+    for autostart in [false, true] {
+        assert_eq!(
+            after_check(LockCheck::Held, &targets, autostart),
+            Start::Run,
+            "a held lock runs"
+        );
+        assert_eq!(
+            after_check(LockCheck::AlreadyRunning, &targets, autostart),
+            Start::Second(decide(true, &targets, autostart)),
+            "an existing client is decide"
+        );
+        assert_eq!(
+            after_check(LockCheck::AlreadyRunning, &[], autostart),
+            Start::Second(decide(true, &[], autostart))
+        );
+    }
 }
 
 #[test]

@@ -7,6 +7,12 @@ release, see [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
 ## [Unreleased]
 
+- If the single-instance lock cannot be created or checked, the client
+  shows a message box that names the error, writes that error on the exit
+  line, and stops before it opens a window. A second start while a client
+  is already running still adds a target to the open window, or brings that
+  window forward when there is no target.
+  ([#65](https://github.com/wynandt/gliff-win/issues/65))
 - A failed request for per-monitor DPI awareness is written to the client
   log once the log is open, including when start is refused before the
   window exists. The request is still per-monitor v2, made before any
