@@ -188,7 +188,10 @@ Each choice names the alternative that was rejected.
   without it, no tab, sleep) clears it at once. Every registry write stays in
   `lockreg`, behind one mutex per user. A failed wait or a failed create is
   returned and that write does not run. A wait that reaches its limit still
-  runs, so a stuck holder cannot block a restore.
+  runs, so a stuck holder cannot block a restore. The watchdog starts outside
+  the client's job when the job allows `CREATE_BREAKAWAY_FROM_JOB`. A refusal,
+  CreateProcess error 5, starts it again inside the job. Any other failure to
+  start is returned and the setting stays off.
   Rejected: a client-wide switch (the choice belongs to the remote machine:
   only some bind Super+L to something), making `--super-l` itself a
   per-machine choice (the stand-in chord and its conflict check are
@@ -813,7 +816,7 @@ thread, which stalls in the modal size-move loop.
 | `hook` (Windows) | `WH_KEYBOARD_LL` on its own thread. While grabbed it swallows every key. A watchdog reinstalls it if Windows drops it. |
 | `grab` (Windows) | The input-desktop poll (releases everything at a UAC or secure desktop), the foreground check (releases the grab when another program's window has been in front for two looks), session lock notifications, IME off, hover tracking. |
 | `window_input` (Windows) | Pointer, button and wheel messages from the window procedure. |
-| `lockreg` (Windows) | The registry value, a write-ahead marker, the mutex around those writes, the `--lock-watchdog` helper process and every restore path (`--restore-lock-policy` by hand). A failed mutex wait is returned and the write does not run; a wait that reaches its limit still runs. |
+| `lockreg` (Windows) | The registry value, a write-ahead marker, the mutex around those writes, the `--lock-watchdog` helper process and every restore path (`--restore-lock-policy` by hand). A failed mutex wait is returned and the write does not run; a wait that reaches its limit still runs. The helper is started again without `CREATE_BREAKAWAY_FROM_JOB` only when the job refuses that flag (CreateProcess error 5). Any other spawn error is returned and the helper is not started again. |
 
 Held keys and buttons are released on focus loss, on the release chord, when a
 UAC prompt or the secure desktop takes the input, and when the session ends.

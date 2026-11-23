@@ -7,6 +7,10 @@ release, see [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
 ## [Unreleased]
 
+- The lock watchdog is started again, inside the client's job, only when
+  that job refuses to let it leave. Any other failure to start is reported
+  as that error, and the lock setting stays off.
+  ([#65](https://github.com/wynandt/gliff-win/issues/65))
 - A lock-policy change whose mutex cannot be created, or whose wait fails,
   is reported and does not read or write the setting. A turn-on that fails
   this way leaves the registry route off for that window. A restore that

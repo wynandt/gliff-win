@@ -365,7 +365,9 @@ Invariant: do not restore another process's setting or erase the user's pre-exis
 value. A mutex wait that fails, or a mutex that cannot be created, is returned and
 that step does not read or write. A wait that reaches its limit still proceeds, so a
 stuck holder cannot block a restore. A failed turn-on disables the route. A failed
-restore keeps the marker and retries. This is a real explicit machine with implicit
+restore keeps the marker and retries. The watchdog is started again without leaving
+the job only when the job refuses that flag. Any other failure to start it is
+returned and the setting stays off. This is a real explicit machine with implicit
 transactional substates, not wholly implicit. Extensive fake-registry tests cover
 ordering, partial failure, retry, ownership, PID reuse, and exit. Native
 process-table testing also exists.
