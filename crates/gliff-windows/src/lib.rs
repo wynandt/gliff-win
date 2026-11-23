@@ -56,6 +56,7 @@ pub mod lockreg;
 pub mod logging;
 pub mod machine_choices;
 pub mod modifiers;
+pub mod output_list;
 pub mod palette;
 #[cfg(windows)]
 pub mod panel_win;
