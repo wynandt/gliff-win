@@ -1007,4 +1007,16 @@ mod tests {
             "a quiet join is not a failure: {failures:?}"
         );
     }
+
+    #[test]
+    fn the_drain_and_the_exit_wait_are_the_session_pair() {
+        assert_eq!(
+            (super::IDLE_DRAIN, super::EXIT_WAIT),
+            (
+                gliff_windows::session::driver::IDLE_DRAIN,
+                gliff_windows::session::driver::EXIT_WAIT,
+            ),
+            "session::driver::IDLE_DRAIN and session::driver::EXIT_WAIT; the copy waits 10 s"
+        );
+    }
 }
