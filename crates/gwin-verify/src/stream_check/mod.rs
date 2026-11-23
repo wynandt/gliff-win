@@ -45,6 +45,8 @@ use gliff_windows::session::ResizeReq;
 use gliff_windows::session::UiCmd;
 use gliff_windows::session::UiEvent;
 use gliff_windows::session::client_caps;
+use gliff_windows::session::driver::EXIT_WAIT;
+use gliff_windows::session::driver::IDLE_DRAIN;
 use gliff_windows::session::hello;
 use gliff_windows::ssh::SshSpec;
 use gliff_windows::ssh::diagnose;
@@ -66,10 +68,6 @@ use crate::stream_check::measure::FpsProblem;
 use crate::stream_check::measure::IdGaps;
 use crate::stream_check::measure::ResizeVerdict;
 
-/// Upstream's idle drain (`IDLE_DRAIN`) fires after 150 ms without a frame.
-const IDLE_DRAIN: Duration = Duration::from_millis(150);
-/// How long the server gets to exit once stdin is closed after Bye.
-const EXIT_WAIT: Duration = Duration::from_secs(10);
 const PROBE_TIMEOUT: Duration = Duration::from_secs(15);
 /// How long the session stays up (still acking) for the end probe; past
 /// its own timeout, so `exec` always answers first.
