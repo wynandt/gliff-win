@@ -344,10 +344,13 @@ probe keeps its own timeout.
   Dual420 runs two decoders on the same device and the same recombine as the
   CPU path. Before a unit reaches the decoder, `h264::without_reorder_delay`
   gives every SPS that has no VUI a bitstream restriction with no reordering
-  and a picture buffer of the SPS's reference count. The gliff encoders write
-  no VUI, and without one a POC type 0 stream may reorder, so the Windows
-  decoder held a picture buffer's worth of pictures (eleven at 1440p, level
-  5.2) before showing any. An SPS that has a VUI is left alone. The GPU
+  and a picture buffer of the SPS's reference count. The pin's CPU encoder
+  (OpenH264 via `VuiConfig::bt709()`) writes a VUI that already carries
+  `bitstream_restriction_flag` = 1 and `max_num_reorder_frames` = 0, so
+  `without_reorder_delay` leaves that SPS alone on purpose. Without a VUI, a
+  POC type 0 stream may reorder, so the Windows decoder held a picture
+  buffer's worth of pictures (eleven at 1440p, level 5.2) before showing
+  any. An SPS that has a VUI is left alone. The GPU
   decoder is never drained: after a drain this decoder decodes nothing until
   the next IDR, which the endless GOP never sends unprompted, so the picture
   froze. A picture it still holds comes out with a later unit; when pictures
