@@ -46,10 +46,9 @@ umask 077
 
 SELF=$(readlink -f "${BASH_SOURCE[0]}")
 RUN_DIR=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}
-# Over ssh there is no desktop environment: pick the newest Hyprland instance.
-if [ -z "${HYPRLAND_INSTANCE_SIGNATURE:-}" ] && [ -d "$RUN_DIR/hypr" ]; then
-  HYPRLAND_INSTANCE_SIGNATURE=$(ls -1t "$RUN_DIR/hypr" 2>/dev/null | head -1)
-  export HYPRLAND_INSTANCE_SIGNATURE
+if [ -z "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]; then
+  # shellcheck source=hypr-instance.sh
+  . "$(dirname "$SELF")/hypr-instance.sh"
 fi
 LOG=${GWIN_KEYS_LOG:-$RUN_DIR/gwin-keys.log}
 STATE=${GWIN_KEYS_STATE:-$RUN_DIR/gwin-keys.state}

@@ -9,24 +9,17 @@ use serde_json::Value;
 ///
 /// A non-interactive ssh has no `HYPRLAND_INSTANCE_SIGNATURE`, and without
 /// it hyprctl exits 1 with "HYPRLAND_INSTANCE_SIGNATURE not set!" on
-/// stdout (hyprwm/Hyprland hyprctl/src/main.cpp, `main`). So when it is
-/// unset the command finds the instance itself, where hyprctl looks for
-/// its socket (`getRuntimeDir`: `$XDG_RUNTIME_DIR/hypr`, else
-/// `/run/user/<uid>/hypr`, then `<sig>/.socket.sock`), taking the newest
-/// socket: a crashed Hyprland can leave an older one behind. What it
-/// picked, or that it found none, goes to stderr. `sh -c` keeps it POSIX
-/// whatever the login shell is.
+/// stdout (hyprwm/Hyprland hyprctl/src/main.cpp, `main`). When it is unset
+/// the command includes `scripts/remote/hypr-instance.sh`, which
+/// `gwin-keys` sources: the newest `.socket.sock` under
+/// `$XDG_RUNTIME_DIR/hypr`, else `/run/user/<uid>/hypr`. A crashed Hyprland
+/// can leave an older socket in a directory that was touched later. What
+/// it picked, or that it found none, goes to stderr. `sh -c` keeps it
+/// POSIX whatever the login shell is. A signature that is already set is
+/// left as it is.
 pub const PLACEMENT_COMMAND: &str = concat!(
     "sh -c '",
-    "if [ -z \"${HYPRLAND_INSTANCE_SIGNATURE:-}\" ]; then ",
-    "d=\"${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/hypr\"; ",
-    "s=$(ls -td \"$d\"/*/.socket.sock 2>/dev/null | head -n 1); ",
-    "if [ -n \"$s\" ]; then ",
-    "HYPRLAND_INSTANCE_SIGNATURE=$(basename \"$(dirname \"$s\")\"); ",
-    "export HYPRLAND_INSTANCE_SIGNATURE; ",
-    "echo \"gwin: HYPRLAND_INSTANCE_SIGNATURE=$HYPRLAND_INSTANCE_SIGNATURE (newest socket under $d)\" >&2; ",
-    "else echo \"gwin: no Hyprland instance socket under $d\" >&2; fi; ",
-    "fi; ",
+    include_str!("../../../scripts/remote/hypr-instance.sh"),
     "hyprctl -j monitors all && hyprctl -j clients",
     "'"
 );
