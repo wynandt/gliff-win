@@ -93,6 +93,7 @@ mod test_dir;
 pub mod test_hooks;
 #[cfg(windows)]
 pub mod waker;
+pub mod win32;
 pub mod win_owed;
 #[cfg(windows)]
 pub mod window;
