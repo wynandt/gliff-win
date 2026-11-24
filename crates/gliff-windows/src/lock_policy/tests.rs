@@ -14,6 +14,7 @@ use super::Owner;
 use super::OwnerExit;
 use super::Prior;
 use super::Processes;
+use super::RECHECK_MS;
 use super::Recovery;
 use super::RegError;
 use super::Registry;
@@ -184,6 +185,15 @@ impl Processes for Running {
 
 fn policy(value: Option<u32>) -> LockPolicy<Fake> {
     LockPolicy::new(Fake::with_value(value), ME)
+}
+
+fn other_holds() -> LockPolicy<Fake> {
+    let mut fake = Fake::with_value(Some(1));
+    fake.marker = Some(Marker {
+        owner: OTHER,
+        prior: Prior::Absent,
+    });
+    LockPolicy::new(fake, ME)
 }
 
 fn marker(prior: Prior) -> Marker {
@@ -466,6 +476,150 @@ fn a_marker_with_a_live_owner_disables_the_registry_route() {
     p.exit();
     assert_eq!(p.registry().value, Some(1), "and exit does not clear it");
     assert!(p.registry().marker.is_some());
+}
+
+#[test]
+fn a_window_refused_at_start_takes_the_setting_once_the_holder_has_gone() {
+    let mut p = other_holds();
+    let running = Running(BTreeSet::from([OTHER.pid]));
+    assert_eq!(p.startup_check(&running), Recovery::OwnerAlive(OTHER));
+    assert!(p.is_disabled());
+    assert_eq!(p.want(Want::On, 0), Change::Nothing);
+    assert_eq!(
+        restore_if_owned(&mut p.registry, Some(OTHER)).expect("holder exit"),
+        Some(Marker {
+            owner: OTHER,
+            prior: Prior::Absent,
+        }),
+        "the holder's restore deletes the value and the marker"
+    );
+    let now = 4_000;
+    assert_eq!(
+        p.recheck(&Running(BTreeSet::new()), now),
+        Some(Recovery::Nothing)
+    );
+    assert!(!p.is_disabled());
+    assert_eq!(p.want(Want::On, now), Change::Set);
+    assert_eq!(p.registry().value, Some(1));
+    assert_eq!(
+        p.registry().marker,
+        Some(Marker {
+            owner: ME,
+            prior: Prior::Absent,
+        })
+    );
+    assert_eq!(p.registry().unheld, vec![], "a write outside the mutex");
+    assert_eq!(p.registry().holds.get(), 0, "every hold was let go");
+}
+
+#[test]
+fn a_turn_on_that_finds_another_window_holding_takes_it_once_that_window_has_gone() {
+    let mut p = other_holds();
+    assert!(matches!(p.want(Want::On, 0), Change::Failed(_)));
+    assert!(p.blocked_by_owner());
+    restore_if_owned(&mut p.registry, Some(OTHER)).expect("holder exit");
+    assert_eq!(
+        p.recheck(&Running(BTreeSet::new()), 0),
+        Some(Recovery::Nothing)
+    );
+    assert_eq!(p.want(Want::On, 0), Change::Set);
+    assert_eq!(p.registry().marker, Some(marker(Prior::Absent)));
+    assert_eq!(p.registry().unheld, vec![], "a write outside the mutex");
+}
+
+#[test]
+fn a_crashed_holder_is_recovered_on_the_next_look() {
+    let mut p = other_holds();
+    assert_eq!(
+        p.startup_check(&Running(BTreeSet::from([OTHER.pid]))),
+        Recovery::OwnerAlive(OTHER)
+    );
+    assert_eq!(
+        p.recheck(&Running(BTreeSet::new()), 0),
+        Some(Recovery::Recovered(Marker {
+            owner: OTHER,
+            prior: Prior::Absent,
+        }))
+    );
+    assert!(!p.is_disabled());
+    assert_eq!(p.want(Want::On, 0), Change::Set);
+    assert_eq!(p.registry().value, Some(1));
+    assert_eq!(
+        p.registry().marker,
+        Some(Marker {
+            owner: ME,
+            prior: Prior::Absent,
+        }),
+        "the dead owner's prior is what this window writes back"
+    );
+    assert_eq!(p.registry().unheld, vec![], "a write outside the mutex");
+    assert_eq!(p.registry().holds.get(), 0, "every hold was let go");
+}
+
+#[test]
+fn a_live_holder_is_looked_at_again_at_most_once_a_second() {
+    let mut p = other_holds();
+    let running = Running(BTreeSet::from([OTHER.pid]));
+    p.startup_check(&running);
+    assert_eq!(p.recheck(&running, 0), Some(Recovery::OwnerAlive(OTHER)));
+    assert!(p.is_disabled());
+    let ops = p.registry().ops.len();
+    assert_eq!(p.recheck(&running, RECHECK_MS - 1), None);
+    assert_eq!(
+        p.registry().ops.len(),
+        ops,
+        "no registry ops inside the interval"
+    );
+    assert_eq!(
+        p.recheck(&running, RECHECK_MS),
+        Some(Recovery::OwnerAlive(OTHER))
+    );
+    assert!(
+        p.registry().ops.len() > ops,
+        "the later look reads the marker"
+    );
+    assert!(p.is_disabled());
+    assert_eq!(p.registry().unheld, vec![], "a write outside the mutex");
+    assert_eq!(p.registry().holds.get(), 0, "every hold was let go");
+}
+
+#[test]
+fn a_registry_failure_is_not_looked_at_again() {
+    let fake = Fake {
+        fail_reads: true,
+        ..Fake::default()
+    };
+    let mut p = LockPolicy::new(fake, ME);
+    assert!(matches!(
+        p.startup_check(&Running(BTreeSet::new())),
+        Recovery::Failed(_)
+    ));
+    assert!(p.is_disabled());
+    let ops = p.registry().ops.len();
+    assert_eq!(p.recheck(&Running(BTreeSet::new()), 0), None);
+    assert_eq!(p.recheck(&Running(BTreeSet::new()), RECHECK_MS), None);
+    assert!(p.is_disabled());
+    assert_eq!(
+        p.registry().ops.len(),
+        ops,
+        "a registry failure is not retried"
+    );
+    assert_eq!(p.registry().unheld, vec![]);
+}
+
+#[test]
+fn a_closed_gate_or_a_wish_for_off_does_not_look() {
+    let mut policy = other_holds();
+    let running = Running(BTreeSet::from([OTHER.pid]));
+    assert_eq!(policy.startup_check(&running), Recovery::OwnerAlive(OTHER));
+    let mut gate = LockGate::new(policy);
+    let ops = gate.policy().registry().ops.len();
+    let gone = Running(BTreeSet::new());
+    assert_eq!(gate.recheck(false, Want::On, &gone, 0), None, "closed");
+    assert_eq!(gate.recheck(true, Want::Off, &gone, 0), None, "wish off");
+    assert_eq!(gate.policy().registry().ops.len(), ops, "no look");
+    assert!(gate.policy().is_disabled());
+    assert_eq!(gate.policy().registry().unheld, vec![]);
 }
 
 #[test]

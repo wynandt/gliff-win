@@ -18,6 +18,8 @@ pub const MARKER_KEY: &str = r"Software\gliff-windows\LockPolicy";
 /// a quick focus round trip) does not flap it. Closing the gate
 /// ([`LockGate`]) does not wait.
 pub const CLEAR_DELAY_MS: u32 = 300;
+/// How long to wait before looking again while another window holds the setting.
+pub const RECHECK_MS: u32 = 1_000;
 /// How long to wait before trying a failed restore again.
 const RETRY_MS: u32 = 1_000;
 /// Win32 `ERROR_ACCESS_DENIED`. CreateProcess returns this when the caller's
@@ -292,6 +294,15 @@ pub fn run_watchdog(
     restore_if_owned(registry, Some(owner))
 }
 
+/// Why the registry route is off.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Blocked {
+    /// Another client's marker is live.
+    Owner,
+    /// A registry call failed, or the marker was incomplete.
+    Failed,
+}
+
 /// Where the setting is.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum State {
@@ -300,9 +311,8 @@ enum State {
     Held,
     /// It was 1 before us; locking is off without us.
     AlreadyOff,
-    /// The registry route is not usable: a call failed, or another gliff
-    /// owns the setting.
-    Disabled,
+    /// The registry route is not usable, for the reason it carries.
+    Disabled(Blocked),
 }
 
 /// The repair at start. A marker a dead client left is put right whatever
@@ -339,6 +349,9 @@ pub struct LockPolicy<R: Registry> {
     state: State,
     /// When a pending Off takes effect.
     clear_at: Option<u32>,
+    /// The next time a setting held by another window may be looked at.
+    /// None allows the next look at once.
+    recheck_at: Option<u32>,
     /// A restore failed midway, so the setting may be back to its prior
     /// while the state is still `Held`: the next wish for On writes the
     /// setting again instead of trusting it.
@@ -355,6 +368,7 @@ impl<R: Registry> LockPolicy<R> {
             owner,
             state: State::Idle,
             clear_at: None,
+            recheck_at: None,
             restore_failed: false,
             stray_marker: false,
         }
@@ -372,25 +386,61 @@ impl<R: Registry> LockPolicy<R> {
 
     /// True once the registry route cannot be used (the chord is the route).
     pub fn is_disabled(&self) -> bool {
-        self.state == State::Disabled
+        matches!(self.state, State::Disabled(_))
+    }
+
+    /// True while another gliff window holds the setting, so a later
+    /// [`Self::recheck`] may take it.
+    pub fn blocked_by_owner(&self) -> bool {
+        matches!(self.state, State::Disabled(Blocked::Owner))
     }
 
     /// Run once at start: restore a dead owner's leftovers. A live owner
-    /// disables the registry route.
+    /// disables the registry route until [`Self::recheck`] sees it gone. A
+    /// registry error disables it until this process is started again.
     pub fn startup_check(&mut self, processes: &dyn Processes) -> Recovery {
         let recovery = recover(&mut self.registry, processes);
         match recovery {
-            Recovery::OwnerAlive(_) | Recovery::Failed(_) => self.state = State::Disabled,
+            Recovery::OwnerAlive(_) => {
+                self.state = State::Disabled(Blocked::Owner);
+                self.recheck_at = None;
+            }
+            Recovery::Failed(_) => self.state = State::Disabled(Blocked::Failed),
             Recovery::Nothing | Recovery::Recovered(_) | Recovery::Discarded => {}
         }
         recovery
+    }
+
+    /// While another window holds the setting, look again, at most once per
+    /// [`RECHECK_MS`]. The first look is allowed immediately. Nothing,
+    /// Recovered or Discarded makes the route usable; a live owner leaves it
+    /// blocked; a failure leaves it off until this process is started again.
+    /// None when this call does not look.
+    pub fn recheck(&mut self, processes: &dyn Processes, now_ms: u32) -> Option<Recovery> {
+        if !matches!(self.state, State::Disabled(Blocked::Owner)) {
+            return None;
+        }
+        if self
+            .recheck_at
+            .is_some_and(|at| now_ms.wrapping_sub(at) >= u32::MAX / 2)
+        {
+            return None;
+        }
+        self.recheck_at = Some(now_ms.wrapping_add(RECHECK_MS));
+        let recovery = recover(&mut self.registry, processes);
+        self.state = match &recovery {
+            Recovery::Nothing | Recovery::Recovered(_) | Recovery::Discarded => State::Idle,
+            Recovery::OwnerAlive(_) => State::Disabled(Blocked::Owner),
+            Recovery::Failed(_) => State::Disabled(Blocked::Failed),
+        };
+        Some(recovery)
     }
 
     /// The setting should be on (`Want::On`) or off. Off takes effect after
     /// [`CLEAR_DELAY_MS`], on a later [`Self::tick`].
     pub fn want(&mut self, want: Want, now_ms: u32) -> Change {
         match (want, self.state) {
-            (_, State::Disabled) => Change::Nothing,
+            (_, State::Disabled(_)) => Change::Nothing,
             (Want::On, State::Held) if self.restore_failed => {
                 let _hold = match self.registry.hold() {
                     Ok(hold) => hold,
@@ -441,7 +491,7 @@ impl<R: Registry> LockPolicy<R> {
     pub fn clear_now(&mut self, now_ms: u32) -> Change {
         match self.state {
             State::Held => self.restore(now_ms),
-            State::AlreadyOff | State::Idle | State::Disabled => self.want(Want::Off, now_ms),
+            State::AlreadyOff | State::Idle | State::Disabled(_) => self.want(Want::Off, now_ms),
         }
     }
 
@@ -480,7 +530,7 @@ impl<R: Registry> LockPolicy<R> {
     /// The setting is 1 already. With no marker it is the user's (or a group
     /// policy's): locking is off without us. With a marker it is another
     /// client's, which puts it back when it lets go, so this one must not
-    /// count on it (the chord is the route). A marker of our own is taken
+    /// count on it until that client is gone. A marker of our own is taken
     /// back up.
     fn found_on(&mut self) -> Change {
         match self.registry.read_marker() {
@@ -493,10 +543,14 @@ impl<R: Registry> LockPolicy<R> {
                 self.clear_at = None;
                 Change::Set
             }
-            Ok(StoredMarker::Complete(marker)) => self.fail(RegError(format!(
-                "the setting is held by another client (pid {})",
-                marker.owner.pid
-            ))),
+            Ok(StoredMarker::Complete(marker)) => {
+                self.state = State::Disabled(Blocked::Owner);
+                self.recheck_at = None;
+                Change::Failed(RegError(format!(
+                    "the setting is held by another client (pid {})",
+                    marker.owner.pid
+                )))
+            }
             Ok(StoredMarker::Incomplete) => self.fail(RegError(
                 "the setting is on and its marker is incomplete".to_owned(),
             )),
@@ -568,7 +622,7 @@ impl<R: Registry> LockPolicy<R> {
     }
 
     fn fail(&mut self, error: RegError) -> Change {
-        self.state = State::Disabled;
+        self.state = State::Disabled(Blocked::Failed);
         Change::Failed(error)
     }
 }
@@ -608,6 +662,26 @@ impl<R: Registry> LockGate<R> {
     /// caller starts the watchdog helper first.
     pub fn would_turn_on(&self, open: bool, wish: Want) -> bool {
         open && wish == Want::On && !self.policy.is_effective() && !self.policy.is_disabled()
+    }
+
+    /// Looks again while `open` and `wish` would turn the setting on and
+    /// another window may still hold it. None when this call does not look.
+    pub fn recheck(
+        &mut self,
+        open: bool,
+        wish: Want,
+        processes: &dyn Processes,
+        now_ms: u32,
+    ) -> Option<Recovery> {
+        if !(open && wish == Want::On) {
+            return None;
+        }
+        self.policy.recheck(processes, now_ms)
+    }
+
+    /// True while the shown tab's switch is on and the computer is awake.
+    pub fn is_open(&self) -> bool {
+        self.open
     }
 
     /// Moves to `open` and `wish`. `ready` is false when a turn-on must not
