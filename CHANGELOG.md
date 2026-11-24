@@ -7,6 +7,12 @@ release, see [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
 ## [Unreleased]
 
+- Choosing *Reconnect* or *Reconnect now to apply* on a tab that already had
+  a running or connecting session did nothing, and turning *Share clipboard*
+  on for a session that started without it did not reconnect the tab.
+  *Reconnect* now stops the active session while keeping the tab open and
+  starts a fresh session with the current saved choices once the old session
+  finishes closing.
 - Listing a GPU's outputs ends only when Windows reports there are no more.
   Any other failure stops Direct3D setup instead of skipping that GPU or
   reporting that it does not drive the window's monitor.

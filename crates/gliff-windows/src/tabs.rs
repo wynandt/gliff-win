@@ -197,15 +197,29 @@ pub enum Effect {
     Persist,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Closing {
+    Stop(SessionId),
+    Restart(SessionId),
+}
+
+impl Closing {
+    fn session(self) -> SessionId {
+        match self {
+            Self::Stop(session) | Self::Restart(session) => session,
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 struct Tab {
     id: TabId,
     target: HostTarget,
     session: Option<SessionId>,
-    /// The session stop told to leave, until the runner joined it, or stopped
-    /// waiting for it. While set, the tab starts no session. A closing tab
-    /// has no session.
-    closing: Option<SessionId>,
+    /// The session stop or reconnect told to leave, until the runner joined it,
+    /// or stopped waiting for it. While set, the tab starts no session. A
+    /// closing tab has no session.
+    closing: Option<Closing>,
     status: Status,
     /// Retries so far and uptime ([`crate::reconnect`]).
     backoff: Backoff,
@@ -413,16 +427,28 @@ impl Tabs {
         effects
     }
 
-    /// Starts a new session for a tab that has none, at once, and shows it:
-    /// "Try again" on the failure panel and "Reconnect" in the tab menu.
-    /// A tab whose previous session is still closing starts nothing. Once
-    /// the window is closing, this returns nothing.
+    /// Starts a new session for a tab: "Try again" on the failure panel,
+    /// "Reconnect" in the tab menu, and "Reconnect now to apply" in
+    /// Connection settings.
+    ///
+    /// A tab with an active session stops it and starts a replacement once the
+    /// old session finishes closing ([`Tabs::closed`]). A tab with no session
+    /// starts at once and becomes shown. A tab whose previous session is still
+    /// closing starts nothing. Once the window is closing, this returns
+    /// nothing.
     pub fn reconnect(&mut self, id: TabId) -> Vec<Effect> {
         if self.window_closing {
             return Vec::new();
         }
+        let Some(index) = self.find(id) else {
+            return Vec::new();
+        };
         let mut effects = Vec::new();
-        self.start_into(id, &mut effects);
+        if let Some(session) = self.tabs[index].session {
+            self.restart_running(index, session, &mut effects);
+        } else {
+            self.start_into(id, &mut effects);
+        }
         effects
     }
 
@@ -587,6 +613,20 @@ impl Tabs {
         };
         let mut effects = Vec::new();
         self.retire(index, &mut effects);
+        let restarting = matches!(self.tabs[index].closing, Some(Closing::Restart(_)));
+        if let Some(Closing::Restart(session)) = self.tabs[index].closing {
+            self.tabs[index].closing = Some(Closing::Stop(session));
+        }
+        if restarting && self.shown == Some(id) {
+            match self.neighbour(index) {
+                Some(next) => self.show(None, next, &mut effects),
+                None => {
+                    self.shown = None;
+                    effects.push(Effect::InputTo(None));
+                    effects.push(Effect::PresentNothing);
+                }
+            }
+        }
         let tab = &mut self.tabs[index];
         tab.open = false;
         tab.status = Status::Stopped;
@@ -596,14 +636,29 @@ impl Tabs {
     }
 
     /// Clears `closing` on the tab that holds `session`: the runner joined
-    /// it, or stopped waiting for it. Any other id, or a second call, does
-    /// nothing.
-    pub fn closed(&mut self, session: SessionId) {
-        for tab in &mut self.tabs {
-            if tab.closing == Some(session) {
-                tab.closing = None;
+    /// it, or stopped waiting for it. When `session` was closing for a
+    /// [`Tabs::reconnect`], starts the replacement session (and presents it if
+    /// the tab is still shown), unless the window is closing. Any other id, or
+    /// a second call, does nothing.
+    pub fn closed(&mut self, session: SessionId) -> Vec<Effect> {
+        let mut effects = Vec::new();
+        for index in 0..self.tabs.len() {
+            let Some(closing) = self.tabs[index].closing else {
+                continue;
+            };
+            if closing.session() != session {
+                continue;
+            }
+            self.tabs[index].closing = None;
+            if matches!(closing, Closing::Restart(_)) && !self.window_closing {
+                let id = self.tabs[index].id;
+                effects.push(self.begin(index, Cause::User));
+                if self.shown == Some(id) {
+                    self.show(None, id, &mut effects);
+                }
             }
         }
+        effects
     }
 
     /// The button on a stopped tab: remove the tab (stopping it first).
@@ -804,6 +859,28 @@ impl Tabs {
         }
     }
 
+    /// Stops an active session and marks the tab to start a replacement once
+    /// the old session finishes closing. Keeps the tab selected when shown.
+    fn restart_running(&mut self, index: usize, session: SessionId, effects: &mut Vec<Effect>) {
+        let id = self.tabs[index].id;
+        if self.shown == Some(id) {
+            effects.push(Effect::InputTo(None));
+            effects.push(Effect::ReleaseInput(session));
+            effects.push(Effect::ClipRevoke(session));
+            effects.push(Effect::ClipCancel(session));
+            effects.push(Effect::PresentNothing);
+        }
+        let tab = &mut self.tabs[index];
+        tab.session = None;
+        tab.closing = Some(Closing::Restart(session));
+        tab.status = Status::Connecting;
+        tab.backoff.reset();
+        tab.record_pending = false;
+        tab.failure = None;
+        effects.push(Effect::ClipGone(session));
+        effects.push(Effect::Stop(session));
+    }
+
     /// Ends the session of the tab at `index`, if it has one: when it is
     /// shown, first moves the show to the neighbour rule's tab.
     fn retire(&mut self, index: usize, effects: &mut Vec<Effect>) {
@@ -826,7 +903,7 @@ impl Tabs {
         }
         let tab = &mut self.tabs[index];
         tab.session = None;
-        tab.closing = Some(session);
+        tab.closing = Some(Closing::Stop(session));
         tab.record_pending = false;
         effects.push(Effect::ClipGone(session));
         effects.push(Effect::Stop(session));
