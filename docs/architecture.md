@@ -417,10 +417,14 @@ Timers: settle, modal (16 ms), close (3 s), and stats (1 s).
   client pixels rounded down to even, never under 64, at the session's active
   `Scale` (`dpi / 96` for `Auto` when Windows has accepted per-monitor
   awareness (v2), or a fixed per-machine `1.25`, `1.6`, or `2` in Own screen
-  mode; Mirror mode always uses `Auto`). A per-machine `scale` change takes
-  effect at the next session start or when the window moves to another screen;
-  picking a menu radio does not rescale a live session on the same screen. The
-  client asks for per-monitor awareness before any window. There is no manifest
+  mode; Mirror mode always uses `Auto`). A Scale pick on a live Own screen
+  tab applies at once with a Resize on the running session: no reconnect, so
+  the remote output and its windows stay. A hidden tab takes the new scale
+  when it is shown next. *Reconnect now to apply* is not offered for a
+  Scale-only change. Show as, Sharp colour and GPU decode still apply at the
+  next connect. Hyprland may round the scale, and the output size so the
+  scale divides it. The client asks for per-monitor awareness before any
+  window. There is no manifest
   that would already have set it. `dpi::report` turns a failed
   `SetProcessDpiAwarenessContext` into one log line, written once the log
   is open, both when start is refused and on a normal start. The window is

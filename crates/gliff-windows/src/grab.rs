@@ -461,6 +461,11 @@ impl Grab {
             let change = gate.policy_mut().tick(now);
             log_change(&change);
         }
+        if self.lock.as_ref().is_some_and(|gate| {
+            gate.is_open() && gate.wish() == Want::On && gate.policy().blocked_by_owner()
+        }) {
+            self.apply_lock(self.state_wish());
+        }
         if hook::release_overdue() {
             crate::logging::line("release chord: no session answered; the window took it in");
             self.release_chord();
@@ -649,6 +654,17 @@ impl Grab {
     fn apply_lock(&mut self, wish: Want) {
         let open = self.send_win_l && !self.suspended;
         let now = self.now_ms();
+        if let Some(gate) = &mut self.lock {
+            let recovery = gate.recheck(open, wish, &WinProcesses, now);
+            if let Some(recovery) = recovery
+                && !gate.policy().is_disabled()
+            {
+                crate::logging::line(&format!(
+                    "lock setting: the other gliff window has gone ({recovery}); this window takes \
+                     the setting"
+                ));
+            }
+        }
         let needs_helper = self
             .lock
             .as_ref()

@@ -4,10 +4,22 @@ use std::time::Instant;
 use super::Moving;
 use super::ResizeGate;
 use super::Settled;
+use super::apply_live_scale;
 use super::request_for;
 use super::request_for_scale;
+use crate::cli::Screen;
+use crate::machine_choices::Connection;
+use crate::machine_choices::Origin;
+use crate::machine_choices::Running;
 use crate::machine_choices::Scale;
 use crate::session::ResizeReq;
+use crate::strip::menu::Command;
+use crate::strip::menu::Entry;
+use crate::strip::menu::run;
+use crate::strip::menu::tab_menu;
+use crate::tabs::Effect;
+use crate::tabs::Status;
+use crate::tabs::Tabs;
 
 const DPI: u32 = 192;
 
@@ -283,5 +295,302 @@ fn hidden_tab_scale_update_takes_effect_when_size_catches_up() {
     assert_eq!(
         g.on_settle(t0 + ResizeGate::SETTLE),
         Settled::Send(req(1920, 1200, 1.25))
+    );
+}
+
+fn own(scale: Scale) -> Connection {
+    Connection {
+        screen: Screen::Own,
+        screen_origin: Origin::Machine,
+        screen_lock: None,
+        scale,
+        scale_origin: Origin::Machine,
+        share_clipboard: true,
+        share_origin: Origin::Default,
+        share_lock: None,
+        sharp_colour: false,
+        sharp_origin: Origin::Default,
+        gpu_decode: true,
+        gpu_origin: Origin::Default,
+        send_win_l: false,
+        send_win_l_origin: Origin::Default,
+        send_win_l_lock: None,
+    }
+}
+
+fn settings_last(connection: &Connection, live: &Running) -> String {
+    let entries = tab_menu(&Status::Streaming, connection, Some(live), None);
+    let rows = entries
+        .into_iter()
+        .find_map(|entry| match entry {
+            Entry::Submenu {
+                label: "Connection settings",
+                rows,
+            } => Some(rows),
+            _ => None,
+        })
+        .expect("Connection settings");
+    match rows.last().expect("a last row") {
+        Entry::Item { label, .. } => (*label).to_owned(),
+        Entry::Note(text) => text.clone(),
+        other => panic!("unexpected last row: {other:?}"),
+    }
+}
+
+fn snapshot(running: Running, gate: &ResizeGate) -> (Running, Scale, ResizeReq) {
+    (running, gate.scale(), gate.requested())
+}
+
+#[test]
+fn a_shown_own_screen_scale_pick_sends_a_resize_and_does_not_restart() {
+    let started = own(Scale::Auto);
+    let mut running = started.running();
+    let dpi = 192;
+    let client = (2881, 1801);
+    let initial = request_for_scale((1920, 1200), dpi, Scale::Auto);
+    let mut gate = ResizeGate::new(initial, running.effective_scale());
+    let t0 = Instant::now();
+    assert_eq!(
+        gate.on_size((2000, 1000), dpi, Moving::Free, t0),
+        Some(ResizeGate::SETTLE)
+    );
+
+    let req = apply_live_scale(
+        true,
+        &mut running,
+        &mut gate,
+        true,
+        client,
+        dpi,
+        Scale::Percent160,
+    )
+    .expect("a shown Own screen scale pick sends a resize");
+    assert_eq!(
+        req,
+        request_for_scale(client, dpi, Scale::Percent160),
+        "the resize is the window size at the new scale"
+    );
+    assert_eq!(gate.requested(), req);
+    assert_eq!(gate.scale(), Scale::Percent160);
+    assert_eq!(
+        gate.on_settle(t0 + ResizeGate::SETTLE),
+        Settled::Nothing,
+        "the scale pick supersedes a pending settle"
+    );
+    let mut expected = started.running();
+    expected.scale = Scale::Percent160;
+    assert_eq!(running, expected);
+
+    let saved = own(Scale::Percent160);
+    assert!(
+        !saved.pending(&running),
+        "a Scale-only change is not pending once the session runs it"
+    );
+    assert_eq!(
+        settings_last(&saved, &running),
+        "Applies the next time this tab connects"
+    );
+
+    let mut tabs = Tabs::new();
+    let _ = tabs.open(&"u@one".parse().expect("a host"));
+    let id = tabs.iter().next().expect("a tab").id();
+    let old = tabs.tab(id).expect("tab").session().expect("a session");
+    tabs.connected(old, Instant::now());
+    let effects = run(Command::Scale(Scale::Percent160), id, &mut tabs);
+    assert!(
+        effects.is_empty(),
+        "a Scale pick must not stop or start a session: {effects:?}"
+    );
+    assert!(
+        effects
+            .iter()
+            .all(|effect| !matches!(effect, Effect::Stop(_) | Effect::Start { .. }))
+    );
+    assert_eq!(tabs.tab(id).expect("tab").session(), Some(old));
+    assert_eq!(tabs.tab(id).expect("tab").status(), &Status::Streaming);
+}
+
+#[test]
+fn show_as_sharp_colour_and_gpu_decode_still_offer_reconnect_after_a_live_scale() {
+    let mut running = own(Scale::Auto).running();
+    let dpi = 192;
+    let client = (1920, 1200);
+    let mut gate = ResizeGate::new(
+        request_for_scale(client, dpi, Scale::Auto),
+        running.effective_scale(),
+    );
+    let req = apply_live_scale(
+        true,
+        &mut running,
+        &mut gate,
+        true,
+        client,
+        dpi,
+        Scale::Percent125,
+    );
+    assert!(req.is_some());
+    let saved = own(Scale::Percent125);
+    assert!(!saved.pending(&running));
+
+    let show_as = Connection {
+        screen: Screen::Mirror,
+        ..saved.clone()
+    };
+    let sharp = Connection {
+        sharp_colour: true,
+        ..saved.clone()
+    };
+    let gpu = Connection {
+        gpu_decode: false,
+        ..saved
+    };
+    for (label, changed) in [
+        ("show as", show_as),
+        ("sharp colour", sharp),
+        ("gpu decode", gpu),
+    ] {
+        assert!(changed.pending(&running), "{label}");
+        assert_eq!(
+            settings_last(&changed, &running),
+            "Reconnect now to apply",
+            "{label}"
+        );
+    }
+}
+
+#[test]
+fn a_hidden_own_screen_session_sends_nothing_until_its_next_resize() {
+    let mut running = own(Scale::Auto).running();
+    let client = (1920, 1200);
+    let dpi = 192;
+    let initial = request_for_scale(client, dpi, Scale::Auto);
+    let mut gate = ResizeGate::new(initial, Scale::Auto);
+    assert_eq!(
+        apply_live_scale(
+            true,
+            &mut running,
+            &mut gate,
+            false,
+            client,
+            dpi,
+            Scale::Percent125,
+        ),
+        None
+    );
+    assert_eq!(running.scale, Scale::Percent125);
+    assert_eq!(gate.scale(), Scale::Percent125);
+    assert_eq!(
+        gate.requested(),
+        initial,
+        "nothing is sent while the tab is hidden"
+    );
+    assert!(!own(Scale::Percent125).pending(&running));
+    let t0 = Instant::now();
+    assert_eq!(
+        gate.on_size(client, dpi, Moving::Free, t0),
+        Some(ResizeGate::SETTLE)
+    );
+    assert_eq!(
+        gate.on_settle(t0 + ResizeGate::SETTLE),
+        Settled::Send(request_for_scale(client, dpi, Scale::Percent125))
+    );
+}
+
+#[test]
+fn a_mirror_session_and_a_session_that_is_not_the_tabs_are_unchanged() {
+    let mut mirror = Running {
+        screen: Screen::Mirror,
+        scale: Scale::Auto,
+        share_clipboard: true,
+        sharp_colour: false,
+        gpu_decode: true,
+    };
+    let initial = request_for_scale((1920, 1200), 192, Scale::Auto);
+    let mut mirror_gate = ResizeGate::new(initial, Scale::Auto);
+    let before = snapshot(mirror, &mirror_gate);
+    assert_eq!(
+        apply_live_scale(
+            true,
+            &mut mirror,
+            &mut mirror_gate,
+            true,
+            (1920, 1200),
+            192,
+            Scale::Percent200,
+        ),
+        None
+    );
+    assert_eq!(snapshot(mirror, &mirror_gate), before);
+
+    let mut other = own(Scale::Auto).running();
+    let mut other_gate = ResizeGate::new(initial, Scale::Auto);
+    let other_before = snapshot(other, &other_gate);
+    assert_eq!(
+        apply_live_scale(
+            false,
+            &mut other,
+            &mut other_gate,
+            true,
+            (2880, 1800),
+            192,
+            Scale::Percent125,
+        ),
+        None,
+        "a session that is not this tab's sends nothing"
+    );
+    assert_eq!(snapshot(other, &other_gate), other_before);
+}
+
+#[test]
+fn picking_the_scale_the_session_already_runs_sends_nothing() {
+    let mut running = own(Scale::Percent160).running();
+    let client = (2560, 1600);
+    let dpi = 144;
+    let initial = request_for_scale(client, dpi, Scale::Percent160);
+    let mut gate = ResizeGate::new(initial, Scale::Percent160);
+    let before = snapshot(running, &gate);
+    assert_eq!(
+        apply_live_scale(
+            true,
+            &mut running,
+            &mut gate,
+            true,
+            client,
+            dpi,
+            Scale::Percent160,
+        ),
+        None
+    );
+    assert_eq!(snapshot(running, &gate), before);
+}
+
+#[test]
+fn a_two_hundred_percent_pick_at_a_matching_windows_scale_sends_nothing() {
+    let mut running = own(Scale::Auto).running();
+    let client = (2560, 1600);
+    let dpi = 192;
+    let initial = request_for_scale(client, dpi, Scale::Auto);
+    assert_eq!(initial.scale, Scale::Percent200.factor(dpi));
+    let mut gate = ResizeGate::new(initial, Scale::Auto);
+    assert_eq!(
+        apply_live_scale(
+            true,
+            &mut running,
+            &mut gate,
+            true,
+            client,
+            dpi,
+            Scale::Percent200,
+        ),
+        None,
+        "the wire scale already matches, so no Resize is sent"
+    );
+    assert_eq!(running.scale, Scale::Percent200);
+    assert_eq!(gate.scale(), Scale::Percent200);
+    assert_eq!(gate.requested(), initial);
+    assert!(!own(Scale::Percent200).pending(&running));
+    assert_eq!(
+        settings_last(&own(Scale::Percent200), &running),
+        "Applies the next time this tab connects"
     );
 }

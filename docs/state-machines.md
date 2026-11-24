@@ -358,24 +358,26 @@ SuperL, input, WinOwed, and ledger tests cover these paths. [Hover gesture][supe
 
 ### Win+L registry transaction and crash recovery
 
-Hybrid. The explicit `lock_policy::State` names Idle, Held, AlreadyOff, Disabled.
-Additional state is `clear_at: Option<u32>`, `restore_failed: bool`, `stray_marker:
-bool`, and `LockGate { open: bool, wish: Want }`. Persistent state includes `Marker {
-owner: Owner, prior: Prior }`, with owner PID plus process start time. Process-global
-`EXITING: AtomicBool` prevents later reactivation.
+Hybrid. The explicit `lock_policy::State` names Idle, Held, AlreadyOff, and Disabled
+(another window's live marker, or a registry failure). Additional state is
+`clear_at: Option<u32>`, `recheck_at: Option<u32>`, `restore_failed: bool`,
+`stray_marker: bool`, and `LockGate { open: bool, wish: Want }`. Persistent state
+includes `Marker { owner: Owner, prior: Prior }`, with owner PID plus process start
+time. Process-global `EXITING: AtomicBool` prevents later reactivation.
 
 `Idle --On / write marker before value--> Held`; `Held --Off--> clear pending --300
 ms--> restore prior`. On cancels the delay; closing the gate restores immediately.
 Failed restore retains the marker and schedules retry. Partial marker-write cleanup has
-its own obligation. Startup repairs dead owners, refuses a live foreign owner, and
-distinguishes an already-disabled-by-user lock setting. A watchdog must start before
-enabling the setting. Normal exit, panic, console exit, end-session, and watchdog
-converge on owned restoration.
+its own obligation. Startup repairs dead owners, refuses a live foreign owner and
+looks again later, and distinguishes an already-disabled-by-user lock setting. A
+watchdog must start before enabling the setting. Normal exit, panic, console exit,
+end-session, and watchdog converge on owned restoration.
 
 Invariant: do not restore another process's setting or erase the user's pre-existing
 value. A mutex wait that fails, or a mutex that cannot be created, is returned and
 that step does not read or write. A wait that reaches its limit still proceeds, so a
-stuck holder cannot block a restore. A failed turn-on disables the route. A failed
+stuck holder cannot block a restore. A failed turn-on disables the route until
+restart, except one that finds a live foreign owner. A live foreign owner is refused and looked at again later. A failed
 restore keeps the marker and retries. The watchdog is started again without leaving
 the job only when the job refuses that flag. Any other failure to start it is
 returned and the setting stays off. This is a real explicit machine with implicit
@@ -672,8 +674,11 @@ Free resize waits 200 ms at the new size; another distinct size restarts settlem
 same size does not. Dragging clears pending settlement and sends at drag end. Moving to
 another screen (`WM_DPICHANGED`, or a monitor change at drag end) adopts the machine's
 saved `Scale` for Own screen (Mirror stays `Auto`), sends immediately, and supersedes
-pending work. Minimum dimensions/even protocol dimensions and last-request comparisons
-guard sends. Minimized zero-size window messages keep existing view state.
+pending work. A Scale pick on the shown Own screen session sends the same way. A hidden
+Own screen session stores the scale and sends it on its next resize. Picking the scale
+the session already runs sends nothing. Minimum dimensions/even protocol dimensions
+and last-request comparisons guard sends. Minimized zero-size window messages keep
+existing view state.
 
 Invariant: repeated WM_SIZE does not flood requests, but changing only scale can still
 require one. Resize-gate tests cover all of those guards and drag/DPI ordering.
@@ -836,10 +841,13 @@ distinguish desired, active, pending-reconnect, and capability-not-created state
 Choice changes update memory and attempt save. Save failure logs without undoing the
 in-memory choice. Win+L applies live. Clipboard can toggle live only if its engine was
 created at session start; enabling when no engine exists reconnects. Screen/chroma/GPU
-changes affect the next connection. Scale affects the next session start or a move to
-another screen (Own screen only; greyed out and ignored in Mirror mode) and never rescales
-a live session on the same screen. The menu derives pending from desired choices versus
-the running snapshot, respecting locked settings.
+changes affect the next connection. Scale on a live Own screen session applies at once
+with a Resize on the running session: no reconnect, so the remote output and its windows
+stay. A hidden tab takes the new scale when it is shown next. A Mirror session and a tab
+with no session keep the saved scale for the next connect. *Reconnect now to apply* is
+not offered for a Scale-only change, because the running snapshot then matches. Hyprland
+may round the scale, and the output size so the scale divides it. The menu derives
+pending from desired choices versus the running snapshot, respecting locked settings.
 
 Invariant: a saved preference is not evidence that the live session has that capability.
 Static option enums are not separate machines. Machine-choice and tab tests cover
@@ -1047,8 +1055,9 @@ does not by itself make the lifecycle explicit.
    SessionSet retirement, clipboard Stop, pipe EOF, SSH exit, thread finish, join,
    window destroy, and process exit are separate transitions.
 8.  **Saved, desired, and running settings can differ.** Failed disk save does not
-   revert memory. Reconnect-only settings do not mutate the running snapshot; clipboard
-   additionally depends on whether its engine was created.
+   revert memory. Show as, Sharp colour and GPU decode do not mutate the running
+   snapshot. Scale on a live Own screen session does, so a Scale-only change is not
+   pending afterwards. Clipboard additionally depends on whether its engine was created.
 
 ```mermaid
 stateDiagram-v2

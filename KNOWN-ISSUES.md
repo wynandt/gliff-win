@@ -13,9 +13,11 @@ settings*. All are off by default except *GPU decode*, which is on, and
 
 - **Scale** (for *Own screen*). Defaults to *Auto* (the Windows display scale);
   can be set per machine to `125%`, `160%`, or `200%` (`scale` in
-  `[overrides."user@host"]`). Greyed out and ignored in *Mirror* mode. A
-  change takes effect at the next session start or when the window moves to
-  another screen; see [docs/settings.md](docs/settings.md#scale). Part of
+  `[overrides."user@host"]`). Greyed out and ignored in *Mirror* mode. On a
+  live Own screen tab a change applies at once with a Resize on the running
+  session; a hidden tab takes it when next shown. *Show as*, *Sharp colour*
+  and *GPU decode* still need a reconnect. See
+  [docs/settings.md](docs/settings.md#scale). Part of
   [#3](https://github.com/wynandt/gliff-win/issues/3) (native Windows check
   pending).
 - **Sharp colour.** Without it the client asks for a 4:2:0 stream, so coloured

@@ -355,22 +355,25 @@ remote screen, or its own screen), *Scale* (`Auto`, `125%`, `160%` or `200%`
 for Own screen; greyed out in Mirror mode), *Share clipboard*, *Sharp colour*
 (full-resolution colour, off by default), *GPU decode* (on by default) and *Send Win+L to
 this machine* (off by default; it applies at once). The choice is saved in
-`config.toml` at once; the screen, the colour and the decoder apply the next
-time the tab connects, and *Scale* applies at the next session start or when
-the window moves to another screen (picking a radio never rescales a live
-session on the same screen). When a tab
-has a session that started with something else, the menu shows *Reconnect now
-to apply*, which reconnects that tab in one click. A flag (`--headless`,
+`config.toml` at once. The screen, the colour and the decoder apply the next
+time the tab connects. *Scale* on a live Own screen tab applies at once: the
+client sends a Resize on the running session, so there is no reconnect and
+the remote output and its windows stay. A hidden tab takes the new scale when
+it is shown next. A tab with no session keeps the choice for the next connect.
+*Reconnect now to apply* is not offered for a Scale-only change. It is still
+offered when Show as, Sharp colour or GPU decode differs from the live
+session, and it reconnects that tab in one click. A flag (`--headless`,
 `--output`, `--no-clipboard`, `--super-l`) applies to every machine and beats the menu: the
 menu then shows the choice greyed, with the reason. There is no settings window
 yet. See [docs/settings.md](docs/settings.md#connection-choices-for-one-machine).
 
 With *Own screen*, the remote screen is sized to the window in physical pixels
 and uses the machine's *Scale* choice (`Auto` follows the Windows display
-scale, or a fixed `125%`, `160%` or `200%`). A scale change takes effect at
-the next session start or when the window moves to another screen. Changing
-the scale in the remote desktop's own display settings is not supported and
-blanks the picture for 10 seconds or more
+scale, or a fixed `125%`, `160%` or `200%`). A Scale pick on a live Own screen
+tab sends that scale on the running session at once. Hyprland may round the
+scale, and the output size so the scale divides it. Changing the scale in the
+remote desktop's own display settings is not supported and blanks the picture
+for 10 seconds or more
 ([details](docs/settings.md#scale)).
 
 ## Not in 0.5
@@ -417,8 +420,10 @@ means no document in this repository plans it.
    as" (mirror or own screen), "Scale" (Auto, 125%, 160% or 200% for Own
    screen), "Share clipboard", "Sharp colour", "GPU decode" and "Send Win+L
    to this machine", are in a tab's right-click menu under *Connection
-   settings*. Share clipboard and Send Win+L apply at once; Scale applies at
-   the next connect or when the window moves to another screen; the others
+   settings*. Share clipboard and Send Win+L apply at once. Scale on a live
+   Own screen tab applies at once with a Resize on the running session (a
+   hidden tab takes it when next shown; *Reconnect now to apply* is not
+   offered for a Scale-only change). Show as, Sharp colour and GPU decode
    apply the next time the tab connects.
    Everything else is flags and `config.toml`; there is no window that edits
    them. The Linux client 0.4.1 has no settings window either, but its open
