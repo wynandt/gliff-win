@@ -7,6 +7,12 @@ release, see [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
 ## [Unreleased]
 
+- Choosing *Reconnect* or *Reconnect now to apply* on a tab that already had
+  a running or connecting session did nothing, and turning *Share clipboard*
+  on for a session that started without it did not reconnect the tab.
+  *Reconnect* now stops the active session while keeping the tab open and
+  starts a fresh session with the current saved choices once the old session
+  finishes closing.
 - Added a per-machine *Scale* setting for *Own screen* (`scale` in
   `[overrides."user@host"]`, accepting `"auto"` as the default or fixed `1.25`,
   `1.6`, or `2`). A tab's *Connection settings* submenu offers four radio

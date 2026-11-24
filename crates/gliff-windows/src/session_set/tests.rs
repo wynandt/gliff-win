@@ -791,3 +791,333 @@ fn the_share_choice_is_asked_again_at_each_connect() {
         "{log:?}"
     );
 }
+
+#[test]
+fn reconnect_on_a_running_tab_picks_up_all_next_session_settings_after_close() {
+    use crate::cli::DesktopMode;
+    use crate::cli::Screen;
+    use crate::machine_choices::ChoiceBook;
+    use crate::machine_choices::Locks;
+    use crate::machine_choices::Rules;
+    use crate::session::Colour;
+    use crate::settings::Layer;
+    use crate::settings::resolve;
+    use crate::strip::menu;
+    use crate::strip::menu::Command;
+
+    #[derive(Debug, PartialEq, Eq)]
+    struct Seen {
+        target: String,
+        mode: DesktopMode,
+        colour: Colour,
+        gpu_decode: bool,
+        share_clipboard: bool,
+    }
+
+    let book = ChoiceBook::default();
+    book.borrow_mut().set_screen(&host("a@x"), Screen::Mirror);
+    book.borrow_mut().set_share_clipboard(&host("a@x"), false);
+    book.borrow_mut().set_sharp_colour(&host("a@x"), false);
+    book.borrow_mut().set_gpu_decode(&host("a@x"), true);
+
+    let file = Layer {
+        output: Some(Some("DP-1".to_owned())),
+        ..Layer::default()
+    };
+    let resolved = resolve(&Layer::default(), &file).expect("default settings");
+    let locks = Locks::new(&Layer::default(), &resolved);
+    let rules = Rc::new(Rules::new(resolved, locks, Rc::clone(&book)));
+
+    let world = Rc::new(World::default());
+    let route = Arc::new(InputRoute::new());
+    let seen: Rc<RefCell<Vec<Seen>>> = Rc::new(RefCell::new(Vec::new()));
+    let starter: super::Starter<FakeLink> = {
+        let world = Rc::clone(&world);
+        let rules = Rc::clone(&rules);
+        let seen = Rc::clone(&seen);
+        Box::new(move |launch| {
+            let connection = rules.connection(&launch.target);
+            seen.borrow_mut().push(Seen {
+                target: launch.target.to_string(),
+                mode: rules.desktop_mode(&launch.target),
+                colour: connection.colour(),
+                gpu_decode: connection.gpu_decode,
+                share_clipboard: connection.share_clipboard,
+            });
+            world.started.borrow_mut().push(launch.target.to_string());
+            let id = launch.session.get();
+            let (commands, rx) = tokio::sync::mpsc::unbounded_channel();
+            let (tx, events) = mpsc::channel();
+            world.commands.borrow_mut().insert(id, rx);
+            world.events.borrow_mut().insert(id, tx);
+            Ok(FakeLink {
+                id,
+                world: Rc::clone(&world),
+                commands,
+                events,
+            })
+        })
+    };
+    let clip: Box<dyn ClipSide> = Box::new(FakeClip(Rc::clone(&world)));
+    let clock = Rc::new(Cell::new(base()));
+    let mut set = SessionSet::new(Arc::clone(&route), Some(clip), starter)
+        .with_share_policy({
+            let rules = Rc::clone(&rules);
+            Box::new(move |machine| rules.shares_clipboard(machine))
+        })
+        .with_clock({
+            let clock = Rc::clone(&clock);
+            Box::new(move || clock.get())
+        });
+    let (mut tabs, effects) = Tabs::start_up(&TabSet::default(), &[host("a@x")]);
+    set.run(&mut tabs, effects);
+    let old = session_of(&tabs, "a@x");
+    world.event(old.get(), connected());
+    set.poll(&mut tabs);
+    let id = tabs.iter().next().expect("a tab").id();
+    assert_eq!(
+        *seen.borrow(),
+        [Seen {
+            target: "a@x".to_owned(),
+            mode: DesktopMode::Mirror {
+                output: "DP-1".to_owned(),
+            },
+            colour: Colour::Standard,
+            gpu_decode: true,
+            share_clipboard: false,
+        }]
+    );
+    assert!(
+        world
+            .clip()
+            .contains(&format!("add {} without a clipboard", old.get()))
+    );
+
+    {
+        let mut choices = book.borrow_mut();
+        choices.set_screen(&host("a@x"), Screen::Own);
+        choices.set_share_clipboard(&host("a@x"), true);
+        choices.set_sharp_colour(&host("a@x"), true);
+        choices.set_gpu_decode(&host("a@x"), false);
+    }
+
+    let first = menu::run(Command::Reconnect, id, &mut tabs);
+    set.run(&mut tabs, first);
+    let second = menu::run(Command::Reconnect, id, &mut tabs);
+    assert!(second.is_empty(), "second click before close is idempotent");
+    set.run(&mut tabs, second);
+    assert!(world.commands_of(old.get()).contains(&"bye".to_owned()));
+    assert_eq!(seen.borrow().len(), 1, "waits for old session to finish");
+
+    world.finish(old.get());
+    let applied = set.poll(&mut tabs);
+    let new = session_of(&tabs, "a@x");
+    assert_ne!(new, old);
+    assert_eq!(route.target(), Some(new));
+    assert_eq!(applied.presented, Some(Presented::Session(new)));
+    assert_eq!(applied.ended.len(), 1);
+    assert_eq!(applied.ended[0].0, old);
+    assert_eq!(
+        seen.borrow().as_slice(),
+        [
+            Seen {
+                target: "a@x".to_owned(),
+                mode: DesktopMode::Mirror {
+                    output: "DP-1".to_owned(),
+                },
+                colour: Colour::Standard,
+                gpu_decode: true,
+                share_clipboard: false,
+            },
+            Seen {
+                target: "a@x".to_owned(),
+                mode: DesktopMode::Headless,
+                colour: Colour::Sharp,
+                gpu_decode: false,
+                share_clipboard: true,
+            },
+        ]
+    );
+    assert!(world.clip().contains(&format!("add {}", new.get())));
+
+    {
+        let mut choices = book.borrow_mut();
+        choices.set_screen(&host("b@x"), Screen::Own);
+        choices.set_share_clipboard(&host("b@x"), false);
+        choices.set_sharp_colour(&host("b@x"), true);
+        choices.set_gpu_decode(&host("b@x"), false);
+    }
+    let open_b = tabs.open(&host("b@x"));
+    set.run(&mut tabs, open_b);
+    let b_session = session_of(&tabs, "b@x");
+    assert_eq!(
+        seen.borrow().last(),
+        Some(&Seen {
+            target: "b@x".to_owned(),
+            mode: DesktopMode::Headless,
+            colour: Colour::Sharp,
+            gpu_decode: false,
+            share_clipboard: false,
+        })
+    );
+    assert!(
+        world
+            .clip()
+            .contains(&format!("add {} without a clipboard", b_session.get()))
+    );
+}
+
+#[test]
+fn reconnect_restarts_once_after_close_wait_when_old_session_hangs() {
+    let (mut fx, _) = fixture(&["a@x"], &TabSet::default());
+    let tab = fx.tabs.iter().next().expect("a tab").id();
+    let old = session_of(&fx.tabs, "a@x");
+    fx.world.event(old.get(), connected());
+    fx.set.poll(&mut fx.tabs);
+
+    let effects = fx.tabs.reconnect(tab);
+    fx.set.run(&mut fx.tabs, effects);
+    assert_eq!(*fx.world.started.borrow(), ["a@x"]);
+
+    let under = super::CLOSE_WAIT.as_millis() - 1;
+    fx.advance(u64::try_from(under).expect("close wait fits"));
+    fx.set.poll(&mut fx.tabs);
+    assert_eq!(*fx.world.started.borrow(), ["a@x"]);
+
+    fx.advance(1);
+    let applied = fx.set.poll(&mut fx.tabs);
+    assert_eq!(*fx.world.started.borrow(), ["a@x", "a@x"]);
+    let new = session_of(&fx.tabs, "a@x");
+    assert_ne!(new, old);
+    assert_eq!(applied.presented, Some(Presented::Session(new)));
+
+    fx.advance(1_000);
+    fx.set.poll(&mut fx.tabs);
+    assert_eq!(
+        *fx.world.started.borrow(),
+        ["a@x", "a@x"],
+        "a later poll must not restart again"
+    );
+}
+
+#[test]
+fn immediate_settings_take_effect_without_reconnect() {
+    use crate::lock_policy::Change;
+    use crate::lock_policy::LockGate;
+    use crate::lock_policy::LockPolicy;
+    use crate::lock_policy::Marker;
+    use crate::lock_policy::Owner;
+    use crate::lock_policy::RegError;
+    use crate::lock_policy::Registry;
+    use crate::lock_policy::StoredMarker;
+    use crate::lock_policy::Want;
+    use crate::machine_choices::ChoiceBook;
+    use crate::machine_choices::Locks;
+    use crate::machine_choices::Rules;
+    use crate::settings::Layer;
+    use crate::settings::resolve;
+
+    struct FakeRegistry {
+        value: Option<u32>,
+        marker: Option<Marker>,
+    }
+
+    impl Registry for FakeRegistry {
+        fn set_on(&mut self) -> Result<(), RegError> {
+            self.value = Some(1);
+            Ok(())
+        }
+        fn read_value(&mut self) -> Result<Option<u32>, RegError> {
+            Ok(self.value)
+        }
+        fn write_value(&mut self, value: u32) -> Result<(), RegError> {
+            self.value = Some(value);
+            Ok(())
+        }
+        fn delete_value(&mut self) -> Result<(), RegError> {
+            self.value = None;
+            Ok(())
+        }
+        fn read_marker(&mut self) -> Result<StoredMarker, RegError> {
+            Ok(match self.marker {
+                Some(marker) => StoredMarker::Complete(marker),
+                None => StoredMarker::Absent,
+            })
+        }
+        fn write_marker(&mut self, marker: Marker) -> Result<(), RegError> {
+            self.marker = Some(marker);
+            Ok(())
+        }
+        fn delete_marker(&mut self) -> Result<(), RegError> {
+            self.marker = None;
+            Ok(())
+        }
+    }
+
+    let (mut fx, _) = fixture(&["a@x"], &TabSet::default());
+    let session = session_of(&fx.tabs, "a@x");
+    fx.world.event(session.get(), connected());
+    fx.set.poll(&mut fx.tabs);
+    fx.world.clip();
+
+    fx.set.set_sharing(session, false);
+    fx.set.set_sharing(session, true);
+    assert_eq!(
+        fx.world.clip(),
+        [
+            format!("sharing {} false", session.get()),
+            format!("sharing {} true", session.get()),
+        ]
+    );
+    assert_eq!(session_of(&fx.tabs, "a@x"), session);
+    assert_eq!(*fx.world.started.borrow(), ["a@x"]);
+
+    let book = ChoiceBook::default();
+    let resolved = resolve(&Layer::default(), &Layer::default()).expect("default settings");
+    let locks = Locks::new(&Layer::default(), &resolved);
+    let rules = Rules::new(resolved, locks, Rc::clone(&book));
+    let before = rules.connection(&host("a@x"));
+    let live = before.running();
+    assert!(!before.send_win_l);
+
+    let owner = Owner { pid: 1, start: 1 };
+    let policy = LockPolicy::new(
+        FakeRegistry {
+            value: None,
+            marker: None,
+        },
+        owner,
+    );
+    let mut gate = LockGate::new(policy);
+    assert_eq!(
+        gate.set(before.send_win_l, Want::On, true, 0),
+        Change::Nothing
+    );
+    assert!(
+        !gate.policy().is_effective(),
+        "closed gate keeps lock setting off"
+    );
+
+    book.borrow_mut().set_send_win_l(&host("a@x"), true);
+    let after = rules.connection(&host("a@x"));
+    assert!(after.send_win_l);
+    assert!(
+        !after.pending(&live),
+        "send_win_l applies live and never asks to reconnect"
+    );
+    assert_eq!(gate.set(after.send_win_l, Want::On, true, 10), Change::Set);
+    assert!(
+        gate.policy().is_effective(),
+        "open gate turns lock setting on at once"
+    );
+    book.borrow_mut().set_send_win_l(&host("a@x"), false);
+    let off = rules.connection(&host("a@x"));
+    assert_eq!(
+        gate.set(off.send_win_l, Want::On, true, 20),
+        Change::Cleared
+    );
+    assert!(
+        !gate.policy().is_effective(),
+        "closing the gate restores lock setting at once"
+    );
+}

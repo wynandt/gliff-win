@@ -422,16 +422,20 @@ impl<L: Link> SessionSet<L> {
             total.merge(self.run(tabs, due));
         }
         let joined = self.reap();
+        let mut closed = Vec::new();
         for (session, _) in &joined {
-            tabs.closed(*session);
+            closed.extend(tabs.closed(*session));
         }
         let now = (self.clock)();
         for (session, _, retired) in &self.retiring {
             if now.saturating_duration_since(*retired) >= CLOSE_WAIT {
-                tabs.closed(*session);
+                closed.extend(tabs.closed(*session));
             }
         }
         total.ended.extend(joined);
+        if !self.closing && !closed.is_empty() {
+            total.merge(self.run(tabs, closed));
+        }
         total
     }
 

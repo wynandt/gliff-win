@@ -497,7 +497,7 @@ code that has no Win32 in it, so it is tested on any machine.
 | `strip` | The metrics at a DPI, the layout (tab rectangles, the dot slot, the add button, the chevron, the full-screen button, scrolling), the hit test, the drag target, and the dot state of a tab. Text width is measured through a trait (name and font size), so tests use fixed widths and the window uses GDI. A tab is as wide as its whole name: the layout tries the font from 13 px down to 9 px (logical) and takes the largest at which every tab fits, then scrolls; a name is never cut. |
 | `strip::draw` | The strip as a list of draw commands (rounded rectangles, ellipses, arcs, lines, text with its font size, clip), from the layout and the state to draw. Tests compare the list as text at four scales. |
 | `strip::raster` | Turns every command except text into pixels: coverage from distance to the shape's edge, 8x8 samples for arcs and pies, so edges are smooth. It writes into a plain pixel array, with no Win32. |
-| `tabs` (changed) | A click on a tab whose failure needs the person to act (a key, a host key, a missing server) only selects it; `reconnect` starts a new session at once and resets the retry count. |
+| `tabs` (changed) | A click on a tab whose failure needs the person to act (a key, a host key, a missing server) only selects it; `reconnect` starts a new session at once for an idle tab, or stops a running/connecting session (keeping the tab open) and starts a fresh session once `closed` reports the old session finished closing, resetting the retry count. |
 
 **Drawing.** The window and the test tool draw the same way. `strip_gdi::Surface`
 is a 32-bit bitmap in memory with a device context. The paint code builds the
@@ -566,7 +566,9 @@ order; the model starts nothing itself.
 | The session is up | `connected(session, now)` | Idempotent. At the first one: `RecordHost` for a session the user started, `Persist` when the machine was not remembered, `ClipOffer` if the tab is shown. The tab's uptime clock starts (see Reconnect). |
 | The session ended on its own | `ended(session, why, now)` | A failure a retry can fix: the tab waits (`Reconnecting`) and the retry's time is set. One the person must fix, or too many retries: the tab gives up with the reason. A shown tab stays shown and the route points at nothing. An end from a session that is no longer the tab's is dropped. |
 | A retry is due | `due(now)` | Starts the tab's new session (cause `Retry`); a shown tab also takes the route and the picture back. Calling it early or twice does nothing. `next_due` says when to call it. |
-| The stop button | `stop` | Ends the session, keeps the tab, and keeps it closed at the next start. |
+| Reconnect (tab menu, *Reconnect now to apply*, failure panel) | `reconnect` | On a tab with no active session (stopped, waiting to retry, or gave up), starts a session immediately and shows the tab (unless a previous session is still closing). On a tab with a running or connecting session, stops that session while keeping the tab open (and shown if it was shown) and marks it to start a fresh session once `closed` reports the old session finished closing. Repeated calls while closing are idempotent; `stop`, `forget`, or window close cancel the pending restart. |
+| The old session finished closing | `closed(session)` | Clears the tab's closing marker for that session. If `reconnect` marked that session for restart and the window is not closing, starts a fresh session (`Cause::User`) and restores input/picture only if that tab is still shown. |
+| The stop button | `stop` | Ends the session, cancels any pending restart, keeps the tab, and keeps it closed at the next start. |
 | The forget button | `forget` | Stops, then removes the tab. |
 | A drag | `move_tab` | Reorders. |
 | Start | `start_up` | A tab per remembered machine; the open ones start (cause `Restore`); then each command-line target opens, the first one is shown. |
