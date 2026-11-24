@@ -639,9 +639,22 @@ fn reconnect_on_a_running_tab_stops_it_and_restarts_after_close() {
         "an unrelated session id must not trigger the restart"
     );
 
-    tabs.closed(old);
-    let new = session_of(&tabs, "a@x");
+    let restart = tabs.closed(old);
+    let new = started(&restart);
     assert_ne!(new, old);
+    assert_eq!(
+        restart,
+        vec![
+            Effect::Start {
+                tab: a,
+                session: new,
+                target: host("a@x"),
+                cause: Cause::User,
+            },
+            Effect::InputTo(Some(new)),
+            Effect::Present(new),
+        ]
+    );
     assert_eq!(status_of(&tabs, "a@x"), Status::Connecting);
     assert_eq!(tabs.shown(), Some(a));
 }
@@ -725,25 +738,26 @@ fn reconnect_on_a_stopped_tab_starts_immediately() {
 fn closing_a_tab_while_restart_is_pending_cancels_the_restart() {
     let mut tabs = three();
     let a = tab_of(&tabs, "a@x");
+    let b = tab_of(&tabs, "b@x");
     let old_a = session_of(&tabs, "a@x");
     tabs.reconnect(a);
     tabs.stop(a);
-    tabs.closed(old_a);
+    assert_eq!(tabs.shown(), Some(b));
+    assert_eq!(tabs.closed(old_a), Vec::new());
     assert_eq!(tabs.tab(a).and_then(|t| t.session()), None);
     assert_eq!(status_of(&tabs, "a@x"), Status::Stopped);
 
-    let b = tab_of(&tabs, "b@x");
     let old_b = session_of(&tabs, "b@x");
     tabs.reconnect(b);
     tabs.forget(b);
-    tabs.closed(old_b);
+    assert_eq!(tabs.closed(old_b), Vec::new());
     assert!(tabs.tab(b).is_none());
 
     let c = tab_of(&tabs, "c@x");
     let old_c = session_of(&tabs, "c@x");
     tabs.reconnect(c);
     tabs.on_window_close();
-    tabs.closed(old_c);
+    assert_eq!(tabs.closed(old_c), Vec::new());
     assert_eq!(tabs.tab(c).and_then(|t| t.session()), None);
 }
 
@@ -760,9 +774,18 @@ fn switching_tabs_while_restart_is_pending_keeps_the_active_tab() {
     assert_eq!(tabs.shown(), Some(b));
     assert_eq!(tabs.shown_session(), Some(b_session));
 
-    tabs.closed(old_a);
-    let new_a = session_of(&tabs, "a@x");
+    let restart = tabs.closed(old_a);
+    let new_a = started(&restart);
     assert_ne!(new_a, old_a);
+    assert_eq!(
+        restart,
+        vec![Effect::Start {
+            tab: a,
+            session: new_a,
+            target: host("a@x"),
+            cause: Cause::User,
+        }]
+    );
     assert_eq!(tabs.shown(), Some(b), "must not steal focus from b");
     assert_eq!(tabs.shown_session(), Some(b_session));
 }
@@ -780,9 +803,18 @@ fn reconnect_on_a_background_running_tab_keeps_the_shown_tab() {
     assert_eq!(tabs.shown(), Some(a));
     assert_eq!(tabs.shown_session(), Some(a_session));
 
-    tabs.closed(old_b);
-    let new_b = session_of(&tabs, "b@x");
+    let restart = tabs.closed(old_b);
+    let new_b = started(&restart);
     assert_ne!(new_b, old_b);
+    assert_eq!(
+        restart,
+        vec![Effect::Start {
+            tab: b,
+            session: new_b,
+            target: host("b@x"),
+            cause: Cause::User,
+        }]
+    );
     assert_eq!(tabs.shown(), Some(a));
     assert_eq!(tabs.shown_session(), Some(a_session));
 }

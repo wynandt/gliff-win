@@ -820,7 +820,11 @@ fn reconnect_on_a_running_tab_picks_up_all_next_session_settings_after_close() {
     book.borrow_mut().set_sharp_colour(&host("a@x"), false);
     book.borrow_mut().set_gpu_decode(&host("a@x"), true);
 
-    let resolved = resolve(&Layer::default(), &Layer::default()).expect("default settings");
+    let file = Layer {
+        output: Some(Some("DP-1".to_owned())),
+        ..Layer::default()
+    };
+    let resolved = resolve(&Layer::default(), &file).expect("default settings");
     let locks = Locks::new(&Layer::default(), &resolved);
     let rules = Rc::new(Rules::new(resolved, locks, Rc::clone(&book)));
 
@@ -875,7 +879,9 @@ fn reconnect_on_a_running_tab_picks_up_all_next_session_settings_after_close() {
         *seen.borrow(),
         [Seen {
             target: "a@x".to_owned(),
-            mode: DesktopMode::mirror_focused(),
+            mode: DesktopMode::Mirror {
+                output: "DP-1".to_owned(),
+            },
             colour: Colour::Standard,
             gpu_decode: true,
             share_clipboard: false,
@@ -916,7 +922,9 @@ fn reconnect_on_a_running_tab_picks_up_all_next_session_settings_after_close() {
         [
             Seen {
                 target: "a@x".to_owned(),
-                mode: DesktopMode::mirror_focused(),
+                mode: DesktopMode::Mirror {
+                    output: "DP-1".to_owned(),
+                },
                 colour: Colour::Standard,
                 gpu_decode: true,
                 share_clipboard: false,

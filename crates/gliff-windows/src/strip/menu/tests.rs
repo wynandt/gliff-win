@@ -576,13 +576,26 @@ fn reconnect_now_to_apply_restarts_the_running_session() {
     assert_eq!(tabs.shown(), Some(id));
     assert_eq!(tabs.tab(id).expect("tab").session(), None);
 
-    tabs.closed(old);
+    let restart = tabs.closed(old);
     let new = tabs
         .tab(id)
         .expect("tab")
         .session()
         .expect("a fresh session after close");
     assert_ne!(new, old);
+    assert_eq!(
+        restart,
+        vec![
+            Effect::Start {
+                tab: id,
+                session: new,
+                target: "u@one".parse().expect("a host"),
+                cause: crate::tabs::Cause::User,
+            },
+            Effect::InputTo(Some(new)),
+            Effect::Present(new),
+        ]
+    );
     assert_eq!(tabs.tab(id).expect("tab").status(), &Status::Connecting);
     assert_eq!(tabs.shown(), Some(id));
 }
