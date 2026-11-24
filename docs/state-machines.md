@@ -84,8 +84,10 @@ handling][driver-finish].
 ### Tab lifecycle and session identity
 
 Hybrid. `Tab.status: Status` is explicit, but `session: Option<SessionId>`,
-`closing: Option<SessionId>`, `Backoff`, `known`, `open`, `record_pending`, and
-`failure` carry additional state. `Tabs.shown: Option<TabId>` and monotonic
+`closing: Option<Closing>`, `Backoff`, `known`, `open`, `record_pending`, and
+`failure` carry additional state. `Closing` distinguishes a manual stop
+(`Closing::Stop(SessionId)`) from a reconnect restart
+(`Closing::Restart(SessionId)`). `Tabs.shown: Option<TabId>` and monotonic
 tab/session IDs add ownership.
 
 Conceptually: stopped, connecting, connected, retry-waiting, retry-running, gave-up, and
@@ -93,16 +95,23 @@ forgotten. `Reconnecting.at = Some(deadline)` means waiting without a session; `
 means an attempt is running. Connected/HelloAck sets the tab's `Streaming` status, **not
 the first decoded or displayed picture**. Ended events with obsolete session IDs are
 ignored. Manual connection resets retry history; successful user connection records
-history once. Stop retires the session and clears reopen intent; a stopped tab stays
-closing until the runner has joined that session or stopped waiting for it after
-`EXIT_WAIT` plus a second, and starts nothing meanwhile. Once the window is
-closing, a click, connect, reconnect or retry starts nothing and does not
-change which tab is shown.
-Forgetting also removes the tab.
+history once. Stop retires the session, cancels any pending restart, and clears reopen
+intent; a stopped tab stays closing until the runner has joined that session or stopped
+waiting for it after `EXIT_WAIT` plus a second, and starts nothing meanwhile. Reconnect
+on a tab with no active session starts immediately (unless a previous session is still
+closing); on a tab with a running or connecting session it retires that session while
+keeping the tab open (and shown if it was shown), sets `Closing::Restart`, and starts a
+fresh session once `Tabs::closed` reports that matching session finished closing.
+Repeated reconnects before `Tabs::closed` are idempotent so the replacement starts once.
+If the user switches tabs while waiting, the restarted session starts in the background
+without stealing the active tab. Once the window is closing, a click, connect,
+reconnect, retry, or pending restart starts nothing and does not change which tab is
+shown. Forgetting also removes the tab and cancels any pending restart.
 
-Invariant: stale events cannot mutate a replacement session. Selection can remain on a
-disconnected tab while input and picture routing become empty. Existing tab tests
-exercise effect ordering and lifecycle cases. [Representation][tabs-life]; [connection,
+Invariant: stale events cannot mutate a replacement session, and a closing or closed tab
+cannot spawn a duplicate session. Selection can remain on a disconnected or restarting
+tab while input and picture routing become empty. Existing tab tests exercise effect
+ordering and lifecycle cases. [Representation][tabs-life]; [connection,
 ending, retry, stop][tabs-life]; [selection and retirement][tabs-life].
 
 ### Retry history and cooldown
@@ -130,10 +139,12 @@ Vec<(SessionId, L, Instant)>`, and `closing: bool` are separate from tab status.
 failure back to tabs. `Live --retire / detach route, remove entry, send Bye--> Retiring
 --finished / join--> Reaped`. Polling reconciles Ended events with actual thread
 completion and synthesizes a failure if a thread finishes without an Ended event.
-Poll tells the tabs which sessions it joined or stopped waiting for.
-`close_all` latches closing, tells the tabs the window is closing, removes input
-routing, retires all, and suppresses due retries. A click, connect or retry then
-starts nothing. Final shutdown joins remaining sessions.
+Poll tells the tabs which sessions it joined or stopped waiting for, and runs
+any effects `Tabs::closed` returns (such as starting a pending reconnect
+restart). `close_all` latches closing, tells the tabs the window is closing,
+removes input routing, retires all, and suppresses due retries and pending
+restarts. A click, connect, reconnect or retry then starts nothing. Final
+shutdown joins remaining sessions.
 
 Invariant: retiring sessions no longer receive user input, even if their threads still
 exist. Tests use fake links and clipboard sides to exercise effects and reaping.

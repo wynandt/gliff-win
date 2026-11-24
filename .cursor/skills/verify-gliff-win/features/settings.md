@@ -32,9 +32,13 @@ point a check at the person's real config folder.
   that overrides it, then a colliding chord (exit 2).
 - Connection settings: change Show as, Share clipboard, Sharp colour, GPU
   decode and Send Win+L; record what is saved and, for Reconnect-class
-  rows, that *Reconnect now to apply* appears when a session is live.
-  Start with `--headless` or `--no-clipboard` and check the matching row is
-  greyed.
+  rows, that *Reconnect now to apply* appears when a session is live and
+  restarts that tab with the newly saved choice (and turning *Share
+  clipboard* on for a session started without it restarts the tab with
+  clipboard sharing). Start with `--headless` or `--no-clipboard` and check
+  the matching row is greyed. Host tests cover picking up every Reconnect-class
+  choice on restart and immediate application for live choices; the native
+  Windows run for this fix has not yet been executed.
 
 Host companions (not native proof):
 

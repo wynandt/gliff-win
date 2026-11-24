@@ -14,7 +14,10 @@ session state. Several sessions can run in one window.
   middle-click (or a click on the dot) stops a session or forgets a tab that
   has none.
 - TABS-3: right-click a tab for Connect, Reconnect, Disconnect, Copy address,
-  Connection settings and Forget.
+  Connection settings and Forget. On a running or connecting tab, Reconnect
+  stops the active session while keeping the tab open and starts a fresh
+  session once the old session finishes closing; repeated clicks before it
+  closes start one replacement session.
 - TABS-4: `Ctrl+Alt+PageDown`, `Ctrl+Alt+PageUp` and `Ctrl+Alt+1` through `9`
   (the defaults) select the expected tab; hidden sessions keep acking;
   reconnect starts a fresh session.
@@ -42,7 +45,11 @@ targets, recognizably different sizes or pictures.
   The host test covers that. The loopback journey for a click during
   whole-window close was not run for this change.
 - Chords: switch by next, previous and jump; record the shown session after
-  each. Reconnect from the tab menu; no stale session should stay on screen.
+  each. Reconnect from the tab menu on a running tab and confirm the client
+  log records the old session ending and a fresh session starting; no stale
+  session should stay on screen. Host tests cover running-tab reconnect,
+  idempotent double-click, and closing while restart is pending; the native
+  Windows run for this fix has not yet been executed.
 - Regression: `gwin-verify.exe tabs` with three authorized targets. It uses
   a fresh config, sends real switch chords, and takes over the keyboard and
   mouse after a countdown. Never unattended. See `docs/gwin-verify.md`.
