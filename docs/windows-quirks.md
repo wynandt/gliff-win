@@ -293,6 +293,11 @@ Every way the value could be left on has a way back:
   `--super-l` mode and whatever the switches say. So a crash, or a kill that
   takes the helper too (ending the whole process tree), leaves the setting on
   only until the next start or `--restore-lock-policy`;
+- a marker whose owner is still running is left alone. While this window wants
+  locking off (it has the keyboard and the switch is on), it looks again, at
+  most once a second, and takes the setting once that window has gone. The
+  menu message then goes away by itself. A registry error leaves the route off
+  for this window until restart;
 - a value that was already 1 with no marker of ours is not ours and is never
   cleared;
 - `gliff-windows.exe --restore-lock-policy` does the same by hand.
@@ -304,9 +309,9 @@ goes ahead without the mutex, so a holder that never lets go cannot block a
 restore. When the mutex cannot be created, or the wait fails, that look is
 not done: the error is returned, nothing is read or written, and the caller
 does not treat the look as a success. A turn-on that fails this way leaves
-the registry route off for this window (the menu says the registry refused
-it, and the log has the error). A restore that fails this way keeps the
-marker and tries again.
+the registry route off for this window until restart (the menu says the
+registry refused it, and the log has the error). A restore that fails this
+way keeps the marker and tries again.
 
 The helper is the same program, with no console window, and with
 `CREATE_BREAKAWAY_FROM_JOB` so it sits outside the client's job when that job
