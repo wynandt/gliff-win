@@ -5,8 +5,8 @@ desktop for Hyprland. gliff-win shows the Hyprland session of another machine
 in a normal, resizable Windows window, with one tab for each machine. All it
 needs between the two machines is ssh: no open ports, no accounts, no relay.
 
-This is version 0.4. It works and is used daily, and has been tried on one
-set of hardware. See [Not in 0.4](#not-in-04) and
+This is version 0.5. It works and is used daily, and has been tried on one
+set of hardware. See [Not in 0.5](#not-in-05) and
 [Verification](#verification).
 
 ## Status and contributing
@@ -34,6 +34,9 @@ privately through the Security tab, see [SECURITY.md](SECURITY.md).
   the picture keeps its shape. `--headless` asks the server for a private
   screen that follows your window instead, and `--output` mirrors a named
   screen.
+- **Own screen scale, per machine.** *Auto* follows the Windows display
+  scale; 125%, 160% and 200% stay fixed. The choice is greyed out while the
+  tab mirrors the remote screen.
 - **Sharp video.** H.264 decoded on the GPU by default and presented with Direct3D 11 at
   vsync. *Sharp colour*, a choice per machine, asks for full-resolution
   colour (4:4:4), so coloured text stays crisp. *GPU decode*, another choice
@@ -373,7 +376,7 @@ remote desktop's own display settings is not supported and blanks the picture
 for 10 seconds or more
 ([details](docs/settings.md#scale)).
 
-## Not in 0.4
+## Not in 0.5
 
 - **System tray.** The window is the only place the client lives. A tray
   needs its own design for what closing the window means.

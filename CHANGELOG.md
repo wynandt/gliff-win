@@ -7,28 +7,27 @@ release, see [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
 ## [Unreleased]
 
-- Picking *Scale* on a tab with a live *Own screen* session applies at once.
-  The client sends a Resize on that session, so the remote output and the
-  windows on it stay. A hidden tab takes the new scale when it is shown next.
-  *Reconnect now to apply* is not offered for a Scale-only change. *Show as*,
-  *Sharp colour* and *GPU decode* still need *Reconnect*. Hyprland may round
-  the scale, and the output size so the scale divides it. Changing the scale
-  in the remote desktop's own display settings is still not supported.
+## [0.5.0]
+
+- Added a per-machine *Scale* setting for *Own screen* (`scale` in
+  `[overrides."user@host"]`, accepting `"auto"` as the default or fixed `1.25`,
+  `1.6`, or `2`). A tab's *Connection settings* submenu offers four radio
+  choices (`Auto`, `125%`, `160%`, `200%`), which are greyed out and ignored
+  in *Mirror* mode. On a tab with a live *Own screen* session a pick applies
+  at once: the client sends a Resize on the running session, so the remote
+  output and the windows on it stay. A hidden tab takes the new scale when it
+  is shown next, and *Reconnect now to apply* is not offered for a
+  Scale-only change. *Show as*, *Sharp colour* and *GPU decode* still need
+  *Reconnect*. Hyprland may round the scale, and the output size so the
+  scale divides it. Changing the scale in the remote desktop's own display
+  settings is still not supported. (Part of [#3](https://github.com/wynandt/gliff-win/issues/3))
 - Choosing *Reconnect* or *Reconnect now to apply* on a tab that already had
   a running or connecting session did nothing, and turning *Share clipboard*
   on for a session that started without it did not reconnect the tab.
   *Reconnect* now stops the active session while keeping the tab open and
   starts a fresh session with the current saved choices once the old session
   finishes closing.
-- Added a per-machine *Scale* setting for *Own screen* (`scale` in
-  `[overrides."user@host"]`, accepting `"auto"` as the default or fixed `1.25`,
-  `1.6`, or `2`). A tab's *Connection settings* submenu offers four radio
-  choices (`Auto`, `125%`, `160%`, `200%`), which are greyed out and ignored
-  in *Mirror* mode. On a live Own screen tab a change applies at once with a
-  Resize on the running session: no reconnect, and the remote output and its
-  windows stay. A hidden tab takes it when next shown. *Reconnect now to
-  apply* is not offered for a Scale-only change. *Show as*, *Sharp colour*
-  and *GPU decode* still need *Reconnect*. (Part of [#3](https://github.com/wynandt/gliff-win/issues/3))
+- A window that could not use *Send Win+L to this machine* because another gliff window held the Windows lock setting now takes it over once that window has gone, without a restart. (Part of [#114](https://github.com/wynandt/gliff-win/issues/114))
 - Listing a GPU's outputs ends only when Windows reports there are no more.
   Any other failure stops Direct3D setup instead of skipping that GPU or
   reporting that it does not drive the window's monitor.
