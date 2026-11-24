@@ -30,8 +30,10 @@ pub enum Command {
     /// Choose how the machine is shown. The window saves the choice; the
     /// model of the tabs has nothing to change.
     ShowAs(Screen),
-    /// Choose the Own screen display scale. Saved at once; applies at the next
-    /// session start or when the window moves to another screen.
+    /// Choose the Own screen display scale. Saved at once. On a live Own
+    /// screen session it is sent as a Resize on that session; a hidden tab
+    /// uses it the next time it is shown. A tab with no session uses it at
+    /// the next connect.
     Scale(Scale),
     /// Choose whether the machine's clipboard is shared. The value is the
     /// new choice.
@@ -244,8 +246,8 @@ pub fn dot_command(status: &Status) -> Command {
 
 /// Runs a command on the tabs; the effects are for the caller to carry out.
 /// `CopyAddress`, `ShowAs`, `Scale`, `ShareClipboard`, `SharpColour`,
-/// `GpuDecode` and `SendWinL` have none:
-/// the caller reads the address or saves the choice.
+/// `GpuDecode` and `SendWinL` have none: the caller saves the choice, and
+/// for Scale sends it on a live Own screen session.
 pub fn run(command: Command, id: TabId, tabs: &mut Tabs) -> Vec<crate::tabs::Effect> {
     match command {
         Command::Connect | Command::Reconnect => tabs.reconnect(id),

@@ -33,17 +33,16 @@ point a check at the person's real config folder.
   that overrides it, then a colliding chord (exit 2).
 - Connection settings: change Show as, Scale (in Own screen mode; verify
   the four Scale radios are greyed out in Mirror mode), Share clipboard,
-  Sharp colour, GPU decode and Send Win+L; record what is saved and, for
-  Reconnect-class rows (including Scale on a live Own screen session), that
-  *Reconnect now to apply* appears when a session is live, that picking a
-  Scale radio triggers no live rescale on the same screen, and that
-  *Reconnect now to apply* restarts that tab with the newly saved choice
-  (and turning *Share clipboard* on for a session started without it
+  Sharp colour, GPU decode and Send Win+L; record what is saved. A Scale
+  pick on a shown live Own screen session sends a Resize on that session
+  and does not offer *Reconnect now to apply*. A hidden Own screen tab
+  sends nothing until it is shown. Show as, Sharp colour and GPU decode
+  still offer *Reconnect now to apply* and restart that tab with the saved
+  choice (and turning *Share clipboard* on for a session started without it
   restarts the tab with clipboard sharing). Start with `--headless` or
   `--no-clipboard` and check the matching row is greyed. Host tests cover
-  picking up every Reconnect-class choice on restart and immediate
-  application for live choices; the native Windows run for this fix has not
-  yet been executed.
+  the live Scale decision and picking up every Reconnect-class choice on
+  restart; the native Windows run for this fix has not yet been executed.
 
 Host companions (not native proof):
 

@@ -15,9 +15,10 @@ new size, and the picture follows without a stretched or stale frame.
   the client's resync (the `reload` fault on the fake server).
 - RESIZE-4: per-machine Own screen `Scale` (`Auto`, `125%`, `160%`, `200%`,
   saved as `scale` in `[overrides."user@host"]`) sends physical pixel size
-  with the chosen scale at session start and when the window moves to
-  another screen; picking a radio causes no live mid-session rescale on the
-  same screen, and Mirror mode greys out the radios and ignores the setting.
+  with the chosen scale at session start, when the window moves to another
+  screen, and when a Scale radio is picked on a live Own screen tab (a Resize
+  on the running session, no reconnect). A hidden tab sends nothing until it
+  is shown. Mirror mode greys out the radios and ignores the setting.
 
 Fullscreen geometry is [Fullscreen](fullscreen.md). The readout at narrow
 sizes is [Stats](stats.md).
@@ -47,13 +48,16 @@ Preconditions: the parent skill's loopback launch and a passing doctor.
 
 - **Own screen Scale (RESIZE-4).** In Own screen mode (`--headless` or
   `Show as -> Own screen`), pick each radio (`Auto`, `125%`, `160%`,
-  `200%`) in Connection settings. Pass: picking a radio sends no live
-  `resize` line on the same screen and saves `scale` in `config.toml`;
-  reconnecting (or moving the window to another screen) sends `resize` with
-  the physical client size and the chosen scale (`dpi / 96`, `1.25`, `1.6`,
-  or `2.0`) and `StreamConfig` reports the matching `scale_milli`. In
-  Mirror mode, the four Scale radios are greyed out and Mirror sessions
-  ignore any saved `scale`.
+  `200%`) in Connection settings. Pass: on a shown tab, picking a radio
+  sends a `resize` on the same session (no second `hello`) with the
+  physical client size and the chosen scale (`dpi / 96`, `1.25`, `1.6`,
+  or `2.0`), saves `scale` in `config.toml`, and `StreamConfig` reports
+  the matching `scale_milli`. The remote output stays. A hidden tab sends
+  no `resize` until it is shown. *Reconnect now to apply* does not appear
+  for a Scale-only change. *Show as*, *Sharp colour* and *GPU decode* still
+  show it and still reconnect. In Mirror mode, the four Scale radios are
+  greyed out and Mirror sessions ignore any saved `scale`. Hyprland may
+  round the scale and the output size so the scale divides it.
 
 Host companions (not native proof):
 
