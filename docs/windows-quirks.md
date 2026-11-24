@@ -671,7 +671,7 @@ that equals its record, and recovers on one that differs
 
 Own screen sizes the remote screen to the window and gives it the client's scale (the Windows display scale, `dpi / 96`). A scale chosen in the remote desktop's own display settings does not stick. The likely cause is that the desktop's scale menu rewrites its monitor config and the compositor reloads it, which discards the mode the server set (the reload failure above); the remote's own logs were not read. The picture goes black until the client resyncs, which takes at least 3 inputs, 3 s of silence and the 30 s gap between resyncs. The resync then sends the client's scale, so the remote screen is back at the Windows scale. In the log, every stream config after each resync says the Windows scale, and the client sends no Resize of its own.
 
-To change the scale, change the Windows display scale and reconnect. A client setting that sends a chosen scale is in the backlog (see [KNOWN-ISSUES.md](../KNOWN-ISSUES.md)). Not tried: whether the pointer and the layout are right with a remote scale that differs from the Windows scale.
+To change the scale, set *Scale* for that machine's Own screen (`Auto`, `125%`, `160%` or `200%`); see [docs/settings.md](settings.md#scale). `Auto` follows the Windows display scale. Not tried: whether the pointer and the layout are right with a remote scale that differs from the Windows scale.
 
 ## Known limitations
 
