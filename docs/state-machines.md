@@ -358,24 +358,26 @@ SuperL, input, WinOwed, and ledger tests cover these paths. [Hover gesture][supe
 
 ### Win+L registry transaction and crash recovery
 
-Hybrid. The explicit `lock_policy::State` names Idle, Held, AlreadyOff, Disabled.
-Additional state is `clear_at: Option<u32>`, `restore_failed: bool`, `stray_marker:
-bool`, and `LockGate { open: bool, wish: Want }`. Persistent state includes `Marker {
-owner: Owner, prior: Prior }`, with owner PID plus process start time. Process-global
-`EXITING: AtomicBool` prevents later reactivation.
+Hybrid. The explicit `lock_policy::State` names Idle, Held, AlreadyOff, and Disabled
+(another window's live marker, or a registry failure). Additional state is
+`clear_at: Option<u32>`, `recheck_at: Option<u32>`, `restore_failed: bool`,
+`stray_marker: bool`, and `LockGate { open: bool, wish: Want }`. Persistent state
+includes `Marker { owner: Owner, prior: Prior }`, with owner PID plus process start
+time. Process-global `EXITING: AtomicBool` prevents later reactivation.
 
 `Idle --On / write marker before value--> Held`; `Held --Off--> clear pending --300
 ms--> restore prior`. On cancels the delay; closing the gate restores immediately.
 Failed restore retains the marker and schedules retry. Partial marker-write cleanup has
-its own obligation. Startup repairs dead owners, refuses a live foreign owner, and
-distinguishes an already-disabled-by-user lock setting. A watchdog must start before
-enabling the setting. Normal exit, panic, console exit, end-session, and watchdog
-converge on owned restoration.
+its own obligation. Startup repairs dead owners, refuses a live foreign owner and
+looks again later, and distinguishes an already-disabled-by-user lock setting. A
+watchdog must start before enabling the setting. Normal exit, panic, console exit,
+end-session, and watchdog converge on owned restoration.
 
 Invariant: do not restore another process's setting or erase the user's pre-existing
 value. A mutex wait that fails, or a mutex that cannot be created, is returned and
 that step does not read or write. A wait that reaches its limit still proceeds, so a
-stuck holder cannot block a restore. A failed turn-on disables the route. A failed
+stuck holder cannot block a restore. A failed turn-on disables the route until
+restart, except one that finds a live foreign owner. A live foreign owner is refused and looked at again later. A failed
 restore keeps the marker and retries. The watchdog is started again without leaving
 the job only when the job refuses that flag. Any other failure to start it is
 returned and the setting stays off. This is a real explicit machine with implicit
