@@ -601,12 +601,214 @@ fn reconnect_on_a_waiting_tab_starts_now_and_resets_the_count() {
 }
 
 #[test]
-fn reconnect_on_a_running_or_unknown_tab_does_nothing() {
+fn reconnect_on_an_unknown_tab_does_nothing() {
     let mut tabs = three();
-    let b = tab_of(&tabs, "b@x");
-    assert_eq!(tabs.reconnect(b), Vec::new());
     assert_eq!(tabs.reconnect(TabId(999)), Vec::new());
-    assert_eq!(status_of(&tabs, "b@x"), Status::Streaming);
+}
+
+#[test]
+fn reconnect_on_a_running_tab_stops_it_and_restarts_after_close() {
+    let mut tabs = three();
+    let a = tab_of(&tabs, "a@x");
+    let old = session_of(&tabs, "a@x");
+    assert_eq!(tabs.shown(), Some(a));
+
+    let effects = tabs.reconnect(a);
+    assert_eq!(
+        effects,
+        vec![
+            Effect::InputTo(None),
+            Effect::ReleaseInput(old),
+            Effect::ClipRevoke(old),
+            Effect::ClipCancel(old),
+            Effect::PresentNothing,
+            Effect::ClipGone(old),
+            Effect::Stop(old),
+        ]
+    );
+    assert_eq!(tabs.shown(), Some(a), "the tab stays shown");
+    assert_eq!(tabs.tab(a).and_then(|t| t.session()), None);
+    assert_eq!(status_of(&tabs, "a@x"), Status::Connecting);
+    assert!(tabs.tab_set().open().iter().any(|h| h.same(&host("a@x"))));
+    assert_eq!(tabs.tab_set().shown().map(HostTarget::as_str), Some("a@x"));
+
+    tabs.closed(SessionId::from_raw(4000));
+    assert_eq!(
+        tabs.tab(a).and_then(|t| t.session()),
+        None,
+        "an unrelated session id must not trigger the restart"
+    );
+
+    tabs.closed(old);
+    let new = session_of(&tabs, "a@x");
+    assert_ne!(new, old);
+    assert_eq!(status_of(&tabs, "a@x"), Status::Connecting);
+    assert_eq!(tabs.shown(), Some(a));
+}
+
+#[test]
+fn reconnect_on_a_connecting_tab_stops_it_and_restarts_after_close() {
+    let mut tabs = Tabs::new();
+    let old = started(&tabs.open(&host("a@x")));
+    let a = tab_of(&tabs, "a@x");
+    assert_eq!(status_of(&tabs, "a@x"), Status::Connecting);
+
+    let effects = tabs.reconnect(a);
+    assert_eq!(
+        effects,
+        vec![
+            Effect::InputTo(None),
+            Effect::ReleaseInput(old),
+            Effect::ClipRevoke(old),
+            Effect::ClipCancel(old),
+            Effect::PresentNothing,
+            Effect::ClipGone(old),
+            Effect::Stop(old),
+        ]
+    );
+    assert_eq!(tabs.shown(), Some(a));
+    assert_eq!(tabs.tab(a).and_then(|t| t.session()), None);
+
+    tabs.closed(old);
+    let new = session_of(&tabs, "a@x");
+    assert_ne!(new, old);
+    assert_eq!(status_of(&tabs, "a@x"), Status::Connecting);
+    assert_eq!(tabs.shown(), Some(a));
+}
+
+#[test]
+fn reconnect_twice_before_close_starts_one_replacement_session() {
+    let mut tabs = three();
+    let a = tab_of(&tabs, "a@x");
+    let old = session_of(&tabs, "a@x");
+
+    let first = tabs.reconnect(a);
+    assert!(first.contains(&Effect::Stop(old)));
+    let second = tabs.reconnect(a);
+    assert_eq!(
+        second,
+        Vec::new(),
+        "a second click while closing is a no-op"
+    );
+
+    tabs.closed(old);
+    let new = session_of(&tabs, "a@x");
+    assert_ne!(new, old);
+    assert_eq!(tabs.shown(), Some(a));
+
+    tabs.closed(old);
+    assert_eq!(
+        session_of(&tabs, "a@x"),
+        new,
+        "a repeated close notification starts no second session"
+    );
+}
+
+#[test]
+fn reconnect_on_a_stopped_tab_starts_immediately() {
+    let mut tabs = three();
+    let c = tab_of(&tabs, "c@x");
+    let old = session_of(&tabs, "c@x");
+    tabs.stop(c);
+    tabs.closed(old);
+    assert_eq!(status_of(&tabs, "c@x"), Status::Stopped);
+
+    let effects = tabs.reconnect(c);
+    let new = started(&effects);
+    assert_ne!(new, old);
+    assert_eq!(status_of(&tabs, "c@x"), Status::Connecting);
+    assert_eq!(tabs.shown(), Some(c));
+    assert!(effects.contains(&Effect::Persist));
+}
+
+#[test]
+fn closing_a_tab_while_restart_is_pending_cancels_the_restart() {
+    let mut tabs = three();
+    let a = tab_of(&tabs, "a@x");
+    let old_a = session_of(&tabs, "a@x");
+    tabs.reconnect(a);
+    tabs.stop(a);
+    tabs.closed(old_a);
+    assert_eq!(tabs.tab(a).and_then(|t| t.session()), None);
+    assert_eq!(status_of(&tabs, "a@x"), Status::Stopped);
+
+    let b = tab_of(&tabs, "b@x");
+    let old_b = session_of(&tabs, "b@x");
+    tabs.reconnect(b);
+    tabs.forget(b);
+    tabs.closed(old_b);
+    assert!(tabs.tab(b).is_none());
+
+    let c = tab_of(&tabs, "c@x");
+    let old_c = session_of(&tabs, "c@x");
+    tabs.reconnect(c);
+    tabs.on_window_close();
+    tabs.closed(old_c);
+    assert_eq!(tabs.tab(c).and_then(|t| t.session()), None);
+}
+
+#[test]
+fn switching_tabs_while_restart_is_pending_keeps_the_active_tab() {
+    let mut tabs = three();
+    let a = tab_of(&tabs, "a@x");
+    let b = tab_of(&tabs, "b@x");
+    let old_a = session_of(&tabs, "a@x");
+    let b_session = session_of(&tabs, "b@x");
+
+    tabs.reconnect(a);
+    tabs.click(b);
+    assert_eq!(tabs.shown(), Some(b));
+    assert_eq!(tabs.shown_session(), Some(b_session));
+
+    tabs.closed(old_a);
+    let new_a = session_of(&tabs, "a@x");
+    assert_ne!(new_a, old_a);
+    assert_eq!(tabs.shown(), Some(b), "must not steal focus from b");
+    assert_eq!(tabs.shown_session(), Some(b_session));
+}
+
+#[test]
+fn reconnect_on_a_background_running_tab_keeps_the_shown_tab() {
+    let mut tabs = three();
+    let a = tab_of(&tabs, "a@x");
+    let b = tab_of(&tabs, "b@x");
+    let a_session = session_of(&tabs, "a@x");
+    let old_b = session_of(&tabs, "b@x");
+
+    let effects = tabs.reconnect(b);
+    assert_eq!(effects, vec![Effect::ClipGone(old_b), Effect::Stop(old_b)]);
+    assert_eq!(tabs.shown(), Some(a));
+    assert_eq!(tabs.shown_session(), Some(a_session));
+
+    tabs.closed(old_b);
+    let new_b = session_of(&tabs, "b@x");
+    assert_ne!(new_b, old_b);
+    assert_eq!(tabs.shown(), Some(a));
+    assert_eq!(tabs.shown_session(), Some(a_session));
+}
+
+#[test]
+fn reconnect_on_a_retrying_tab_with_active_attempt_resets_backoff_and_restarts() {
+    let mut tabs = three();
+    let c = tab_of(&tabs, "c@x");
+    let s1 = session_of(&tabs, "c@x");
+    tabs.ended(s1, End::Error("lost".into()), at(0));
+    let s2 = retry_started(&tabs.due(at(1_500))).expect("a retry");
+    tabs.ended(s2, End::Error("lost".into()), at(1_500));
+    let s3 = retry_started(&tabs.due(at(4_500))).expect("second retry");
+    assert_eq!(tabs.tab(c).map(|t| t.retries()), Some(2));
+    assert_eq!(tabs.tab(c).and_then(|t| t.session()), Some(s3));
+
+    let effects = tabs.reconnect(c);
+    assert_eq!(effects, vec![Effect::ClipGone(s3), Effect::Stop(s3)]);
+    assert_eq!(status_of(&tabs, "c@x"), Status::Connecting);
+    assert_eq!(tabs.tab(c).map(|t| t.retries()), Some(0));
+
+    tabs.closed(s3);
+    let fresh = session_of(&tabs, "c@x");
+    assert_ne!(fresh, s3);
+    tabs.ended(fresh, End::Error("lost".into()), at(5_000));
+    assert_eq!(tabs.tab(c).map(|t| t.retries()), Some(1));
 }
 
 #[test]

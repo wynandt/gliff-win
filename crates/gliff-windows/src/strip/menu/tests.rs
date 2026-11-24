@@ -530,6 +530,64 @@ fn the_reconnect_row_does_what_the_reconnect_item_does() {
 }
 
 #[test]
+fn reconnect_now_to_apply_restarts_the_running_session() {
+    let mut tabs = Tabs::new();
+    let open = tabs.open(&"u@one".parse().expect("a host"));
+    let id = tabs.iter().next().expect("a tab").id();
+    let old = tabs.tab(id).expect("tab").session().expect("a session");
+    tabs.connected(old, std::time::Instant::now());
+    assert!(open.iter().any(|e| matches!(e, Effect::Start { .. })));
+    assert_eq!(tabs.tab(id).expect("tab").status(), &Status::Streaming);
+
+    let entries = tab_menu(
+        tabs.tab(id).expect("tab").status(),
+        &own_screen(),
+        Some(&started_like_plain()),
+        None,
+    );
+    let reconnect = entries
+        .into_iter()
+        .find_map(|e| match e {
+            Entry::Submenu { rows, .. } => rows.into_iter().last(),
+            _ => None,
+        })
+        .expect("a reconnect row");
+    let Entry::Item {
+        command,
+        label: "Reconnect now to apply",
+    } = reconnect
+    else {
+        panic!("expected Reconnect now to apply row, got {reconnect:?}");
+    };
+
+    let effects = run(command, id, &mut tabs);
+    assert_eq!(
+        effects,
+        vec![
+            Effect::InputTo(None),
+            Effect::ReleaseInput(old),
+            Effect::ClipRevoke(old),
+            Effect::ClipCancel(old),
+            Effect::PresentNothing,
+            Effect::ClipGone(old),
+            Effect::Stop(old),
+        ]
+    );
+    assert_eq!(tabs.shown(), Some(id));
+    assert_eq!(tabs.tab(id).expect("tab").session(), None);
+
+    tabs.closed(old);
+    let new = tabs
+        .tab(id)
+        .expect("tab")
+        .session()
+        .expect("a fresh session after close");
+    assert_ne!(new, old);
+    assert_eq!(tabs.tab(id).expect("tab").status(), &Status::Connecting);
+    assert_eq!(tabs.shown(), Some(id));
+}
+
+#[test]
 fn with_nothing_pending_the_static_line_stays() {
     let rows = rows_for(&Status::Streaming, &plain(), Some(&started_like_plain()));
     assert_eq!(
