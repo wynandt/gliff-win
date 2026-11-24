@@ -13,6 +13,13 @@ release, see [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
   *Reconnect* now stops the active session while keeping the tab open and
   starts a fresh session with the current saved choices once the old session
   finishes closing.
+- Added a per-machine *Scale* setting for *Own screen* (`scale` in
+  `[overrides."user@host"]`, accepting `"auto"` as the default or fixed `1.25`,
+  `1.6`, or `2`). A tab's *Connection settings* submenu offers four radio
+  choices (`Auto`, `125%`, `160%`, `200%`), which are greyed out and ignored
+  in *Mirror* mode. A change takes effect at the next session start or when
+  the window moves to another screen, with no live rescale when picking a
+  radio. (Part of [#3](https://github.com/wynandt/gliff-win/issues/3))
 - Listing a GPU's outputs ends only when Windows reports there are no more.
   Any other failure stops Direct3D setup instead of skipping that GPU or
   reporting that it does not drive the window's monitor.

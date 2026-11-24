@@ -11,7 +11,8 @@ Connection settings menu.
   session; a chord that collides with another exits 2.
 - SET-2: `recent-hosts.toml` keeps valid targets in order and drops a
   hostile line; at most ten hosts.
-- SET-3: right-click a tab, Connection settings: Show as, Share clipboard,
+- SET-3: right-click a tab, Connection settings: Show as, Scale (`Auto`,
+  `125%`, `160%`, `200%`, greyed out in Mirror mode), Share clipboard,
   Sharp colour, GPU decode, and Send Win+L to this machine. A flag that
   applies to every machine greys the row and names the reason.
 - SET-4: checks use their own config folder and do not write the registry
@@ -30,15 +31,19 @@ point a check at the person's real config folder.
 
 - `--print-settings` with a temporary folder: a file value, then a flag
   that overrides it, then a colliding chord (exit 2).
-- Connection settings: change Show as, Share clipboard, Sharp colour, GPU
-  decode and Send Win+L; record what is saved and, for Reconnect-class
-  rows, that *Reconnect now to apply* appears when a session is live and
-  restarts that tab with the newly saved choice (and turning *Share
-  clipboard* on for a session started without it restarts the tab with
-  clipboard sharing). Start with `--headless` or `--no-clipboard` and check
-  the matching row is greyed. Host tests cover picking up every Reconnect-class
-  choice on restart and immediate application for live choices; the native
-  Windows run for this fix has not yet been executed.
+- Connection settings: change Show as, Scale (in Own screen mode; verify
+  the four Scale radios are greyed out in Mirror mode), Share clipboard,
+  Sharp colour, GPU decode and Send Win+L; record what is saved and, for
+  Reconnect-class rows (including Scale on a live Own screen session), that
+  *Reconnect now to apply* appears when a session is live, that picking a
+  Scale radio triggers no live rescale on the same screen, and that
+  *Reconnect now to apply* restarts that tab with the newly saved choice
+  (and turning *Share clipboard* on for a session started without it
+  restarts the tab with clipboard sharing). Start with `--headless` or
+  `--no-clipboard` and check the matching row is greyed. Host tests cover
+  picking up every Reconnect-class choice on restart and immediate
+  application for live choices; the native Windows run for this fix has not
+  yet been executed.
 
 Host companions (not native proof):
 

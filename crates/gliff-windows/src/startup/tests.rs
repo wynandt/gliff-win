@@ -185,6 +185,7 @@ fn the_report_shows_each_machines_saved_choice_and_where_it_came_from() {
         connection["me@a"],
         serde_json::json!({
             "screen": {"value": "own", "source": "machine", "locked": false},
+            "scale": {"value": "auto", "source": "default", "locked": false},
             "share_clipboard": {"value": false, "source": "machine", "locked": false},
             "sharp_colour": {"value": true, "source": "machine", "locked": false},
             "gpu_decode": {"value": true, "source": "machine", "locked": false},
@@ -195,6 +196,7 @@ fn the_report_shows_each_machines_saved_choice_and_where_it_came_from() {
         connection["me@b"],
         serde_json::json!({
             "screen": {"value": "mirror", "source": "default", "locked": false},
+            "scale": {"value": "auto", "source": "default", "locked": false},
             "share_clipboard": {"value": true, "source": "default", "locked": false},
             "sharp_colour": {"value": false, "source": "default", "locked": false},
             "gpu_decode": {"value": true, "source": "default", "locked": false},
@@ -227,5 +229,46 @@ fn a_flag_shows_as_the_source_and_locks_the_machines_choice_in_the_report() {
         fs::read_to_string(dir.path().join("config.toml")).expect("read"),
         TWO_MACHINES,
         "reading changes nothing"
+    );
+}
+
+#[test]
+fn the_report_shows_per_machine_scale_and_defaults_to_auto() {
+    let dir = TestDir::new();
+    let text = concat!(
+        "machines = [\"me@auto\", \"me@s125\", \"me@s160\", \"me@s200i\", \"me@s200f\", \"me@absent\"]\n",
+        "[overrides.\"me@auto\"]\nscale = \"auto\"\n",
+        "[overrides.\"me@s125\"]\nscale = 1.25\n",
+        "[overrides.\"me@s160\"]\nscale = 1.6\n",
+        "[overrides.\"me@s200i\"]\nscale = 2\n",
+        "[overrides.\"me@s200f\"]\nscale = 2.0\n",
+    );
+    fs::write(dir.path().join("config.toml"), text).expect("write");
+    let report = load(&args(&dir, &["--print-settings"])).report();
+    assert_eq!(report["notes"], serde_json::json!([]));
+    let connection = &report["connection"];
+    assert_eq!(
+        connection["me@auto"]["scale"],
+        serde_json::json!({"value": "auto", "source": "machine", "locked": false})
+    );
+    assert_eq!(
+        connection["me@s125"]["scale"],
+        serde_json::json!({"value": 1.25, "source": "machine", "locked": false})
+    );
+    assert_eq!(
+        connection["me@s160"]["scale"],
+        serde_json::json!({"value": 1.6, "source": "machine", "locked": false})
+    );
+    assert_eq!(
+        connection["me@s200i"]["scale"],
+        serde_json::json!({"value": 2, "source": "machine", "locked": false})
+    );
+    assert_eq!(
+        connection["me@s200f"]["scale"],
+        serde_json::json!({"value": 2, "source": "machine", "locked": false})
+    );
+    assert_eq!(
+        connection["me@absent"]["scale"],
+        serde_json::json!({"value": "auto", "source": "default", "locked": false})
     );
 }

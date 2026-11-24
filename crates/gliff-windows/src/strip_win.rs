@@ -952,11 +952,9 @@ unsafe fn build_tab(menu: HMENU, entries: &[Entry], commands: &mut Vec<Command>)
             .chain(Some(0))
             .collect()
     };
-    let mut radios: Vec<u32> = Vec::new();
-    let mut picked: Option<u32> = None;
     // SAFETY: the caller's menu; the strings outlive each call.
     unsafe {
-        for (place, entry) in (0u32..).zip(entries) {
+        for entry in entries {
             match entry {
                 Entry::Item { command, label } => {
                     commands.push(*command);
@@ -986,15 +984,8 @@ unsafe fn build_tab(menu: HMENU, entries: &[Entry], commands: &mut Vec<Command>)
                     } else {
                         flags |= MF_GRAYED;
                     }
-                    match mark {
-                        Mark::Check if *selected => flags |= MF_CHECKED,
-                        Mark::Check => {}
-                        Mark::Radio => {
-                            radios.push(place);
-                            if *selected {
-                                picked = Some(place);
-                            }
-                        }
+                    if matches!(mark, Mark::Check) && *selected {
+                        flags |= MF_CHECKED;
                     }
                     let _ = AppendMenuW(menu, flags, id, PCWSTR(label.as_ptr()));
                 }
@@ -1007,7 +998,7 @@ unsafe fn build_tab(menu: HMENU, entries: &[Entry], commands: &mut Vec<Command>)
                 }
             }
         }
-        if let (Some(&first), Some(&last), Some(picked)) = (radios.first(), radios.last(), picked) {
+        for (first, last, picked) in crate::strip::menu::radio_groups(entries) {
             let _ = CheckMenuRadioItem(menu, first, last, picked, MF_BYPOSITION.0);
         }
     }

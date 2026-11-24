@@ -3,9 +3,9 @@
 //!
 //! Pure: no Win32, no files. [`crate::config`] reads and writes the file.
 //!
-//! Five settings can be chosen per machine, from the tab's menu: `screen`
-//! (Show as), `share_clipboard`, `sharp_colour`, `gpu_decode` and
-//! `send_win_l`. A choice is kept in `config.toml` as
+//! Six settings can be chosen per machine, from the tab's menu: `screen`
+//! (Show as), `scale` (Own screen only), `share_clipboard`, `sharp_colour`,
+//! `gpu_decode` and `send_win_l`. A choice is kept in `config.toml` as
 //! `[overrides."user@host"]`. The order for a
 //! machine is: a flag, the machine's choice, the `[settings]` table, the
 //! default. A flag applies to every machine, so it locks the choice: the
@@ -29,10 +29,87 @@ use crate::settings::Settings;
 use crate::settings::Source;
 use crate::settings::Sources;
 
+/// The remote display scale for Own screen, chosen per machine.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Scale {
+    /// Follow the Windows display scale (`dpi / 96`).
+    #[default]
+    Auto,
+    /// Fixed 125% (`1.25`).
+    Percent125,
+    /// Fixed 160% (`1.6`).
+    Percent160,
+    /// Fixed 200% (`2`).
+    Percent200,
+}
+
+impl Scale {
+    /// The four menu choices, in display order.
+    pub const ALL: [Self; 4] = [
+        Self::Auto,
+        Self::Percent125,
+        Self::Percent160,
+        Self::Percent200,
+    ];
+
+    /// Parses `"auto"`, `1.25`, `1.6`, or `2` (integer or float `2.0`).
+    pub fn from_toml(value: &toml::Value) -> Option<Self> {
+        match value {
+            toml::Value::String(text) if text == "auto" => Some(Self::Auto),
+            toml::Value::Integer(2) => Some(Self::Percent200),
+            toml::Value::Float(v) if *v == 1.25 => Some(Self::Percent125),
+            toml::Value::Float(v) if *v == 1.6 => Some(Self::Percent160),
+            toml::Value::Float(v) if *v == 2.0 => Some(Self::Percent200),
+            _ => None,
+        }
+    }
+
+    /// The canonical `config.toml` value (`"auto"`, `1.25`, `1.6`, or `2`).
+    pub fn to_toml(self) -> toml::Value {
+        match self {
+            Self::Auto => toml::Value::String("auto".to_owned()),
+            Self::Percent125 => toml::Value::Float(1.25),
+            Self::Percent160 => toml::Value::Float(1.6),
+            Self::Percent200 => toml::Value::Integer(2),
+        }
+    }
+
+    /// The `--print-settings` JSON value (`"auto"`, `1.25`, `1.6`, or `2`).
+    pub fn to_json(self) -> serde_json::Value {
+        match self {
+            Self::Auto => serde_json::json!("auto"),
+            Self::Percent125 => serde_json::json!(1.25),
+            Self::Percent160 => serde_json::json!(1.6),
+            Self::Percent200 => serde_json::json!(2),
+        }
+    }
+
+    /// The Connection settings menu label for this choice.
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Auto => "Auto",
+            Self::Percent125 => "125%",
+            Self::Percent160 => "160%",
+            Self::Percent200 => "200%",
+        }
+    }
+
+    /// The scale factor sent in `Resize` for a window at `dpi`.
+    pub fn factor(self, dpi: u32) -> f32 {
+        match self {
+            Self::Auto => crate::layout::protocol_scale(dpi),
+            Self::Percent125 => 1.25,
+            Self::Percent160 => 1.6,
+            Self::Percent200 => 2.0,
+        }
+    }
+}
+
 /// What one machine's table holds: only the choices made.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Choice {
     pub screen: Option<Screen>,
+    pub scale: Option<Scale>,
     pub share_clipboard: Option<bool>,
     pub sharp_colour: Option<bool>,
     pub gpu_decode: Option<bool>,
@@ -89,6 +166,15 @@ impl Choices {
                     ("screen", toml::Value::String(text)) if text == "mirror" => {
                         machine.choice.screen = Some(Screen::Mirror);
                     }
+                    ("scale", value) => match Scale::from_toml(value) {
+                        Some(scale) => machine.choice.scale = Some(scale),
+                        None => {
+                            notes.push(format!(
+                                "scale in overrides.\"{name}\" is ignored: expected \"auto\", 1.25, 1.6, or 2"
+                            ));
+                            machine.kept.insert(key.clone(), value.clone());
+                        }
+                    },
                     ("share_clipboard", toml::Value::Boolean(share)) => {
                         machine.choice.share_clipboard = Some(*share);
                     }
@@ -137,6 +223,10 @@ impl Choices {
         self.machine(machine).choice.screen = Some(screen);
     }
 
+    pub fn set_scale(&mut self, machine: &HostTarget, scale: Scale) {
+        self.machine(machine).choice.scale = Some(scale);
+    }
+
     pub fn set_share_clipboard(&mut self, machine: &HostTarget, share: bool) {
         self.machine(machine).choice.share_clipboard = Some(share);
     }
@@ -173,6 +263,9 @@ impl Choices {
                     Screen::Own => "own",
                 };
                 own.insert("screen".to_owned(), word.into());
+            }
+            if let Some(scale) = machine.choice.scale {
+                own.insert("scale".to_owned(), scale.to_toml());
             }
             if let Some(share) = machine.choice.share_clipboard {
                 own.insert("share_clipboard".to_owned(), share.into());
@@ -313,9 +406,21 @@ impl Locks {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Running {
     pub screen: Screen,
+    pub scale: Scale,
     pub share_clipboard: bool,
     pub sharp_colour: bool,
     pub gpu_decode: bool,
+}
+
+impl Running {
+    /// The scale choice active for this session: the session's scale in Own
+    /// screen mode, and [`Scale::Auto`] in Mirror mode.
+    pub fn effective_scale(&self) -> Scale {
+        match self.screen {
+            Screen::Own => self.scale,
+            Screen::Mirror => Scale::Auto,
+        }
+    }
 }
 
 /// What one machine runs with, and what the menu shows for it.
@@ -324,6 +429,10 @@ pub struct Connection {
     pub screen: Screen,
     pub screen_origin: Origin,
     pub screen_lock: Option<String>,
+    /// Own screen scale choice; defaults to [`Scale::Auto`], nothing locks it,
+    /// ignored and greyed out in Mirror mode.
+    pub scale: Scale,
+    pub scale_origin: Origin,
     pub share_clipboard: bool,
     pub share_origin: Origin,
     pub share_lock: Option<String>,
@@ -360,6 +469,10 @@ impl Connection {
                 (from_settings(), sources.of(key).into(), None)
             }
         };
+        let (scale, scale_origin) = match choice.scale {
+            Some(scale) => (scale, Origin::Machine),
+            None => (Scale::Auto, Origin::Default),
+        };
         let (share_clipboard, share_origin, share_lock) =
             match (&locks.share_clipboard, choice.share_clipboard) {
                 (Some(lock), _) => (lock.value, lock.origin, Some(lock.reason.clone())),
@@ -392,6 +505,8 @@ impl Connection {
             screen,
             screen_origin,
             screen_lock,
+            scale,
+            scale_origin,
             share_clipboard,
             share_origin,
             share_lock,
@@ -409,9 +524,19 @@ impl Connection {
     pub fn running(&self) -> Running {
         Running {
             screen: self.screen,
+            scale: self.effective_scale(),
             share_clipboard: self.share_clipboard,
             sharp_colour: self.sharp_colour,
             gpu_decode: self.gpu_decode,
+        }
+    }
+
+    /// The scale choice in effect for this connection: the machine's choice
+    /// in Own screen mode, and [`Scale::Auto`] in Mirror mode.
+    pub fn effective_scale(&self) -> Scale {
+        match self.screen {
+            Screen::Own => self.scale,
+            Screen::Mirror => Scale::Auto,
         }
     }
 
@@ -425,10 +550,12 @@ impl Connection {
     /// cannot change from the menu.
     pub fn pending(&self, live: &Running) -> bool {
         let screen = self.screen_lock.is_none() && self.screen != live.screen;
+        let scale =
+            self.screen == Screen::Own && live.screen == Screen::Own && self.scale != live.scale;
         let share = self.share_lock.is_none() && self.share_clipboard != live.share_clipboard;
         let sharp = self.sharp_colour != live.sharp_colour;
         let gpu = self.gpu_decode != live.gpu_decode;
-        screen || share || sharp || gpu
+        screen || scale || share || sharp || gpu
     }
 
     /// The `--print-settings` form: each choice with its value, where it
@@ -439,6 +566,11 @@ impl Connection {
                 "value": match self.screen { Screen::Mirror => "mirror", Screen::Own => "own" },
                 "source": self.screen_origin.name(),
                 "locked": self.screen_lock.is_some(),
+            },
+            "scale": {
+                "value": self.scale.to_json(),
+                "source": self.scale_origin.name(),
+                "locked": false,
             },
             "share_clipboard": {
                 "value": self.share_clipboard,

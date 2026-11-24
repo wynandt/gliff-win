@@ -665,14 +665,15 @@ press/release; native drawing/input remain unverified. See
 ### Resize settlement and DPI propagation
 
 Implicit. `ResizeGate { pending: Option<(ResizeReq, Instant)>, seen: Option<ResizeReq>,
-requested: ResizeReq, view: Option<(u32, u32)> }` remembers whether a resize is waiting,
-sent, superseded, or already represented by the server view.
+requested: ResizeReq, scale: Scale }` remembers whether a resize is waiting,
+sent, superseded, or already requested, together with the session's active `Scale`.
 
 Free resize waits 200 ms at the new size; another distinct size restarts settlement, the
-same size does not. Dragging clears pending settlement and sends at drag end. DPI sends
-immediately and supersedes pending work. Minimum dimensions/even protocol dimensions and
-current-view/last-request comparisons guard sends. Minimized zero-size window messages
-keep existing view state.
+same size does not. Dragging clears pending settlement and sends at drag end. Moving to
+another screen (`WM_DPICHANGED`, or a monitor change at drag end) adopts the machine's
+saved `Scale` for Own screen (Mirror stays `Auto`), sends immediately, and supersedes
+pending work. Minimum dimensions/even protocol dimensions and last-request comparisons
+guard sends. Minimized zero-size window messages keep existing view state.
 
 Invariant: repeated WM_SIZE does not flood requests, but changing only scale can still
 require one. Resize-gate tests cover all of those guards and drag/DPI ordering.
@@ -829,13 +830,15 @@ writer][config-atomic].
 ### Saved choice versus running session capability
 
 Implicit. `Rules.book: ChoiceBook`, `Connection`, `SessionView.running: Running {
-screen, share_clipboard, sharp_colour, gpu_decode }`, and `started_sharing: bool`
+screen, scale, share_clipboard, sharp_colour, gpu_decode }`, and `started_sharing: bool`
 distinguish desired, active, pending-reconnect, and capability-not-created states.
 
 Choice changes update memory and attempt save. Save failure logs without undoing the
 in-memory choice. Win+L applies live. Clipboard can toggle live only if its engine was
 created at session start; enabling when no engine exists reconnects. Screen/chroma/GPU
-changes affect the next connection. The menu derives pending from desired choices versus
+changes affect the next connection. Scale affects the next session start or a move to
+another screen (Own screen only; greyed out and ignored in Mirror mode) and never rescales
+a live session on the same screen. The menu derives pending from desired choices versus
 the running snapshot, respecting locked settings.
 
 Invariant: a saved preference is not evidence that the live session has that capability.

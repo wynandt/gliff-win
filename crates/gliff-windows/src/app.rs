@@ -61,7 +61,7 @@ use crate::lockreg;
 use crate::lockreg::LockGuard;
 use crate::machine_choices::Rules;
 use crate::present::Presenter;
-use crate::resize_gate::request_for;
+use crate::resize_gate::request_for_scale;
 use crate::route::InputRoute;
 use crate::session::driver::Options;
 use crate::session::driver::SessionHandle;
@@ -342,7 +342,11 @@ fn starter(
             log_tag: Some(launch.session.get()),
         };
         validate(&spec).map_err(std::io::Error::other)?;
-        let initial = request_for(window::picture_size(hwnd), window::window_dpi(hwnd));
+        let initial = request_for_scale(
+            window::picture_size(hwnd),
+            window::window_dpi(hwnd),
+            connection.effective_scale(),
+        );
         let keymap = KeymapTracker::default().start(&current_klid().unwrap_or_default());
         let waker = Arc::new(PostWaker::new(hwnd, launch.session));
         let opts = Options {

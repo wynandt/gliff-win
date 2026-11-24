@@ -6,7 +6,7 @@ The client reads its settings from three places. For each setting the first of t
 2. the `[settings]` table of `config.toml`,
 3. the built-in default.
 
-The same rule holds for every setting, with one addition: `screen` and `share_clipboard` can also be chosen for one machine, in that machine's tab menu, `send_win_l` is the per-machine form of `super_l = "registry"`, and `sharp_colour` and `gpu_decode` are chosen there only. A machine's choice sits between the flag and the `[settings]` table (see [Connection choices for one machine](#connection-choices-for-one-machine)). The client writes `config.toml` when the tab set changes and when a connection choice is made in a tab menu. Every other setting is edited by hand.
+The same rule holds for every setting, with one addition: `screen` and `share_clipboard` can also be chosen for one machine, in that machine's tab menu, `send_win_l` is the per-machine form of `super_l = "registry"`, and `scale`, `sharp_colour` and `gpu_decode` are chosen there only. A machine's choice sits between the flag and the `[settings]` table (see [Connection choices for one machine](#connection-choices-for-one-machine)). The client writes `config.toml` when the tab set changes and when a connection choice is made in a tab menu. Every other setting is edited by hand.
 
 ## The config folder
 
@@ -104,26 +104,28 @@ shown = "user@two"
 - **`--headless` beats the file.** It also overrides an `output` in the file. It cannot be combined with `--output` on the same command line.
 - **What differs while mirroring.** The remote screen's own size and scale decide the picture, not the window. The first picture is the remote screen's size (a private screen starts at most 1920x1080), and the server follows the focused screen on its own, so there is nothing to recover when the remote compositor reloads and the client does not run its resync. A window larger than the remote screen shows it zoomed.
 - **Edge case: `auto` can pick a leftover private screen.** The server's `auto` is the focused real output, else the leftmost enabled one, and it does not skip a private screen (`gliff-` and a number) that an earlier session left behind. That happens when a server is killed instead of ending cleanly, because the private screen is removed only when the server exits on its own. If the window shows an empty screen, name the display with `--output NAME` or `output = "NAME"` (the names are the remote compositor's, such as `DP-1` or `HDMI-A-1`), or use `--headless`. The client does not work around this; a fix belongs in the server.
-- **Own screen follows the Windows display scale.** The client asks for a private screen at the size of the window and at the scale of the Windows display (200% is a scale of 2). So the scale of that screen is set on Windows: change the Windows display scale, then reconnect. Changing the scale of that screen in the remote desktop's own display settings (for example a scale menu in the desktop environment) is not supported. The remote compositor reloads its config, the picture goes black for 10 seconds or more, and the next resync puts the client's scale back. Choosing a scale in the client is not built yet (see [KNOWN-ISSUES.md](../KNOWN-ISSUES.md)). The client was tried at 200% and 150% only; see [windows-quirks](windows-quirks.md#pointer-and-dpi). Mirror has none of this: the remote screen keeps its own scale.
+- **Own screen scale defaults to the Windows display scale, with a per-machine override.** By default (`scale = "auto"`), the client asks for a private screen at the window's physical pixel size and the Windows display scale (200% is a scale of 2). A machine can instead choose a fixed scale (`1.25`, `1.6`, or `2`) in `Connection settings` or in its `[overrides."user@host"]` table ([below](#scale)); a change takes effect at the next session start or when the window moves to another screen. Changing the scale of that screen in the remote desktop's own display settings (for example a scale menu in the desktop environment) is not supported: the remote compositor reloads its config, the picture goes black for 10 seconds or more, and the next resync puts the client's scale back. The client was tried at 200% and 150% only; see [windows-quirks](windows-quirks.md#pointer-and-dpi). Mirror has none of this: the remote screen keeps its own scale, and the Scale radios are greyed out.
 - **The tab menu offers the same choice per machine**, as **Connection settings, Show as: Mirror or Own screen** (below). The flag and the file keys still work, and the flag beats the menu.
 
 ## Connection choices for one machine
 
-Right-click a tab and open **Connection settings**. It holds five choices for that machine only:
+Right-click a tab and open **Connection settings**. It holds six choices for that machine only:
 
 - **Show as:** *Mirror the remote screen* or *Own screen*. This is the `screen` setting.
+- **Scale:** *Auto*, *125%*, *160%* or *200%*, defaulting to *Auto*. This is the `scale` key, which exists only in a machine's table ([below](#scale)). It applies to *Own screen* only and is greyed out while *Show as* is *Mirror the remote screen*.
 - **Share clipboard:** ticked or not. This is the `share_clipboard` setting.
 - **Sharp colour:** ticked or not, off by default. This is the `sharp_colour` key, which exists only in a machine's table ([below](#sharp-colour)).
 - **GPU decode:** ticked or not, on by default. This is the `gpu_decode` key, which exists only in a machine's table ([below](#gpu-decode)).
 - **Send Win+L to this machine:** ticked or not, off by default. This is the `send_win_l` key ([below](#send-winl-to-this-machine)).
 
-A choice is saved at once. **Send Win+L to this machine** applies at once and never needs a reconnect. **Share clipboard** applies at once to the tab's session: turned off, nothing is copied or pasted either way, and if what that machine copied is still on the Windows clipboard it is taken off (anything copied on Windows since is left alone); turned back on, sharing resumes in the same session. A session that started without sharing has no clipboard to resume, so ticking it reconnects that tab. **Show as**, **Sharp colour** and **GPU decode** are Reconnect-class: they apply the next time the tab connects, and the menu says so under the choices. If the tab has a session and a saved Show as, Sharp colour or GPU decode choice differs from what that session started with, the line is replaced by **Reconnect now to apply**, which does what **Reconnect** does: it ends the session and starts a new one with the saved choices. A row that a flag or the file has locked never counts as a change. If you change a choice and then change it back, the line stays as it was. A tab with no session (stopped, waiting to retry, or given up) keeps the line, because its next connect applies the choice anyway. There is no settings window and no OK button.
+A choice is saved at once. **Send Win+L to this machine** applies at once and never needs a reconnect. **Share clipboard** applies at once to the tab's session: turned off, nothing is copied or pasted either way, and if what that machine copied is still on the Windows clipboard it is taken off (anything copied on Windows since is left alone); turned back on, sharing resumes in the same session. A session that started without sharing has no clipboard to resume, so ticking it reconnects that tab. **Show as**, **Sharp colour** and **GPU decode** are Reconnect-class: they apply the next time the tab connects, and the menu says so under the choices. **Scale** applies at the next session start or when the window moves to another screen; picking a radio never rescales a live session on the same screen. If the tab has a session and a saved Show as, Scale (for a live Own screen session), Sharp colour or GPU decode choice differs from what that session is running with, the line is replaced by **Reconnect now to apply**, which does what **Reconnect** does: it ends the session and starts a new one with the saved choices. A row that a flag or the file has locked never counts as a change. If you change a choice and then change it back, the line stays as it was. A tab with no session (stopped, waiting to retry, or given up) keeps the line, because its next connect applies the choice anyway. There is no settings window and no OK button.
 
 **Where it is saved.** In `config.toml`, in one table per machine, named by the target as it is written in `machines`:
 
 ```toml
 [overrides."user@host"]
 screen = "own"
+scale = 1.6
 share_clipboard = false
 sharp_colour = true
 gpu_decode = true
@@ -159,6 +161,16 @@ The reason is one plain sentence, one of these:
 - `Locked: this window was started with --super-l, which applies to every machine.`
 
 A locked row changes nothing and saves nothing. A choice saved earlier stays in the file and applies again when the flag is not given. `output = "NAME"` in `[settings]` does not lock: choosing *Mirror* for a machine mirrors that named screen, and choosing *Own screen* gives a private screen.
+
+## Scale
+
+With **Own screen**, **Scale** sets the remote display scale factor the client sends in `Resize`, per machine. The window's physical pixel dimensions and the scale factor are sent together, so Hyprland creates a sharp output at native physical resolution with a logical desktop of `width / scale` by `height / scale` (for example, a 2880x1800 picture area at `200%` gives a 1440x900 logical desktop rendered at 2880x1800, and at `160%` gives 1800x1125 rendered at 2880x1800).
+
+- **Values.** `"auto"` (the default when absent), `1.25`, `1.6`, or `2` in `[overrides."user@host"]`. Both integer `2` and float `2.0` parse as 200%; the client writes `2`. Any other value (such as `1.5`, `"2"`, or `0`) is ignored with a load note and kept untouched in `config.toml` until a valid choice is saved.
+- **In the menu.** Four radio items under **Scale**: `Auto`, `125%`, `160%`, and `200%`. In **Mirror** mode the four radios are greyed out, and any saved `scale` is kept in `config.toml` but ignored by Mirror sessions.
+- **When a change applies.** A change is saved at once and takes effect at the next session start or when the window moves to another screen. Picking a radio does not rescale a live session on the same screen; the menu offers **Reconnect now to apply** while a live Own screen session is still running with a different scale.
+- **With `Auto`.** The client sends `dpi / 96` (the Windows display scale of the screen holding the window), unchanged from when the key is absent.
+- **No flag and no `[settings]` key.** The choice is per machine only, and no flag locks it.
 
 ## Send Win+L to this machine
 
@@ -212,7 +224,7 @@ The message names both chords, where each value came from (a flag, the file or t
 
 ## `--print-settings`
 
-`gliff-windows --print-settings` prints the settings as JSON and exits. It starts no session, so it takes no target, and it changes nothing on disk or in Windows. The JSON holds the config folder (and whether it is the default one), each setting with its value, where the value came from (`flag`, `file` or `default`) and its class, the machine lists (`machines`, `open`, `shown`), the saved connection choices, the recent hosts, and the notes from loading. Its keys are `config_dir`, `config_dir_is_default`, `settings` (each key holding `value`, `source` and `class`), `machines`, `open`, `shown`, `connection`, `recent_hosts` and `notes`. `connection` has one entry for each machine that is listed or has a saved choice, named by its target. Each entry has `screen`, `share_clipboard`, `sharp_colour`, `gpu_decode` and `send_win_l`, each with the `value` that machine runs with, its `source` (`flag`, `machine`, `file` or `default`) and `locked` (`true` when a flag, or `share_clipboard = false` in the file, decides it for every machine); a saved choice shows as source `machine`. Chords print in lowercase, such as `ctrl+alt+pagedown`. The client is a Windows program without a console: redirect the output to a file or a pipe to read it.
+`gliff-windows --print-settings` prints the settings as JSON and exits. It starts no session, so it takes no target, and it changes nothing on disk or in Windows. The JSON holds the config folder (and whether it is the default one), each setting with its value, where the value came from (`flag`, `file` or `default`) and its class, the machine lists (`machines`, `open`, `shown`), the saved connection choices, the recent hosts, and the notes from loading. Its keys are `config_dir`, `config_dir_is_default`, `settings` (each key holding `value`, `source` and `class`), `machines`, `open`, `shown`, `connection`, `recent_hosts` and `notes`. `connection` has one entry for each machine that is listed or has a saved choice, named by its target. Each entry has `screen`, `scale`, `share_clipboard`, `sharp_colour`, `gpu_decode` and `send_win_l`, each with the `value` that machine runs with, its `source` (`flag`, `machine`, `file` or `default`) and `locked` (`true` when a flag, or `share_clipboard = false` in the file, decides it for every machine); a saved choice shows as source `machine`. Chords print in lowercase, such as `ctrl+alt+pagedown`. The client is a Windows program without a console: redirect the output to a file or a pipe to read it.
 
 ## Recent hosts
 

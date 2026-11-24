@@ -5,6 +5,7 @@ use super::RecentChoice;
 use super::RecentRow;
 use super::chevron_list;
 use super::dot_command;
+use super::radio_groups;
 use super::recent_menu;
 use super::run;
 use super::tab_menu;
@@ -13,6 +14,7 @@ use crate::history::HostTarget;
 use crate::machine_choices::Connection;
 use crate::machine_choices::Origin;
 use crate::machine_choices::Running;
+use crate::machine_choices::Scale;
 use crate::strip::DotState;
 use crate::tabs::Effect;
 use crate::tabs::Status;
@@ -32,6 +34,8 @@ fn plain() -> Connection {
         screen: Screen::Mirror,
         screen_origin: Origin::Default,
         screen_lock: None,
+        scale: Scale::Auto,
+        scale_origin: Origin::Default,
         share_clipboard: true,
         share_origin: Origin::Default,
         share_lock: None,
@@ -213,7 +217,11 @@ fn commands_become_calls_on_the_tabs() {
     assert_eq!(tabs.tab(second).expect("tab").status(), &Status::Connecting);
 
     assert!(run(Command::CopyAddress, first, &mut tabs).is_empty());
-    for command in [Command::ShowAs(Screen::Own), Command::ShareClipboard(false)] {
+    for command in [
+        Command::ShowAs(Screen::Own),
+        Command::Scale(Scale::Percent160),
+        Command::ShareClipboard(false),
+    ] {
         assert!(run(command, first, &mut tabs).is_empty(), "{command:?}");
     }
     assert_eq!(tabs.len(), 2, "a choice does not touch the tabs");
@@ -349,6 +357,12 @@ fn the_submenu_shows_the_machines_choices_and_when_they_apply() {
             "(o) Mirror the remote screen",
             "( ) Own screen",
             "-",
+            "# Scale",
+            "~(o) Auto",
+            "~( ) 125%",
+            "~( ) 160%",
+            "~( ) 200%",
+            "-",
             "[x] Share clipboard",
             "[ ] Sharp colour",
             "[ ] GPU decode",
@@ -362,6 +376,8 @@ fn the_submenu_shows_the_machines_choices_and_when_they_apply() {
     let own = Connection {
         screen: Screen::Own,
         screen_origin: Origin::Machine,
+        scale: Scale::Percent160,
+        scale_origin: Origin::Machine,
         share_clipboard: false,
         share_origin: Origin::Machine,
         sharp_colour: true,
@@ -373,9 +389,14 @@ fn the_submenu_shows_the_machines_choices_and_when_they_apply() {
     let rows = connection_rows(&own);
     assert_eq!(rows[1], "( ) Mirror the remote screen");
     assert_eq!(rows[2], "(o) Own screen");
-    assert_eq!(rows[4], "[ ] Share clipboard");
-    assert_eq!(rows[5], "[x] Sharp colour");
-    assert_eq!(rows[6], "[x] GPU decode");
+    assert_eq!(rows[4], "# Scale");
+    assert_eq!(rows[5], "( ) Auto");
+    assert_eq!(rows[6], "( ) 125%");
+    assert_eq!(rows[7], "(o) 160%");
+    assert_eq!(rows[8], "( ) 200%");
+    assert_eq!(rows[10], "[ ] Share clipboard");
+    assert_eq!(rows[11], "[x] Sharp colour");
+    assert_eq!(rows[12], "[x] GPU decode");
 }
 
 #[test]
@@ -385,6 +406,10 @@ fn a_row_asks_for_the_other_value_than_the_one_it_shows() {
         [
             Command::ShowAs(Screen::Mirror),
             Command::ShowAs(Screen::Own),
+            Command::Scale(Scale::Auto),
+            Command::Scale(Scale::Percent125),
+            Command::Scale(Scale::Percent160),
+            Command::Scale(Scale::Percent200),
             Command::ShareClipboard(false),
             Command::SharpColour(true),
             Command::GpuDecode(true),
@@ -395,7 +420,7 @@ fn a_row_asks_for_the_other_value_than_the_one_it_shows() {
         share_clipboard: false,
         ..plain()
     };
-    assert_eq!(choice_commands(&off)[2], Command::ShareClipboard(true));
+    assert_eq!(choice_commands(&off)[6], Command::ShareClipboard(true));
 }
 
 #[test]
@@ -404,6 +429,8 @@ fn a_locked_row_is_greyed_and_gives_its_reason() {
         screen: Screen::Own,
         screen_origin: Origin::Flag,
         screen_lock: Some("Locked: this window was started with --headless, which applies to every machine.".to_owned()),
+        scale: Scale::Auto,
+        scale_origin: Origin::Default,
         share_clipboard: false,
         share_origin: Origin::Flag,
         share_lock: Some("Locked: this window was started with --no-clipboard, which turns the clipboard off for every machine.".to_owned()),
@@ -425,6 +452,12 @@ fn a_locked_row_is_greyed_and_gives_its_reason() {
             "~( ) Mirror the remote screen",
             "~(o) Own screen",
             "# Locked: this window was started with --headless, which applies to every machine.",
+            "-",
+            "# Scale",
+            "(o) Auto",
+            "( ) 125%",
+            "( ) 160%",
+            "( ) 200%",
             "-",
             "~[ ] Share clipboard",
             "# Locked: this window was started with --no-clipboard, which turns the clipboard off for every machine.",
@@ -629,5 +662,138 @@ fn a_tab_with_no_live_session_keeps_the_static_line() {
     assert_eq!(
         rows.last().map(String::as_str),
         Some("# Applies the next time this tab connects")
+    );
+}
+
+#[test]
+fn scale_radios_are_enabled_in_own_screen_mode_and_greyed_out_in_mirror_mode() {
+    let mirror_rows = connection_rows(&plain());
+    assert!(
+        mirror_rows.windows(5).any(|w| {
+            w == [
+                "# Scale",
+                "~(o) Auto",
+                "~( ) 125%",
+                "~( ) 160%",
+                "~( ) 200%",
+            ]
+        }),
+        "expected four greyed-out Scale radios in Mirror mode: {mirror_rows:?}"
+    );
+
+    let mirror_saved = Connection {
+        scale: Scale::Percent160,
+        scale_origin: Origin::Machine,
+        ..plain()
+    };
+    let mirror_saved_rows = connection_rows(&mirror_saved);
+    assert!(
+        mirror_saved_rows.windows(5).any(|w| {
+            w == [
+                "# Scale",
+                "~( ) Auto",
+                "~( ) 125%",
+                "~(o) 160%",
+                "~( ) 200%",
+            ]
+        }),
+        "expected saved Scale to stay marked but greyed out in Mirror mode: {mirror_saved_rows:?}"
+    );
+
+    for (scale, expected) in [
+        (
+            Scale::Auto,
+            ["# Scale", "(o) Auto", "( ) 125%", "( ) 160%", "( ) 200%"],
+        ),
+        (
+            Scale::Percent125,
+            ["# Scale", "( ) Auto", "(o) 125%", "( ) 160%", "( ) 200%"],
+        ),
+        (
+            Scale::Percent160,
+            ["# Scale", "( ) Auto", "( ) 125%", "(o) 160%", "( ) 200%"],
+        ),
+        (
+            Scale::Percent200,
+            ["# Scale", "( ) Auto", "( ) 125%", "( ) 160%", "(o) 200%"],
+        ),
+    ] {
+        let own = Connection {
+            scale,
+            scale_origin: Origin::Machine,
+            ..own_screen()
+        };
+        let rows = connection_rows(&own);
+        assert!(
+            rows.windows(5).any(|w| w == expected),
+            "scale {scale:?}: {rows:?}"
+        );
+    }
+}
+
+#[test]
+fn a_changed_scale_offers_reconnect_in_own_screen_but_not_in_mirror() {
+    let live_own = own_screen().running();
+    let changed_own = Connection {
+        scale: Scale::Percent160,
+        scale_origin: Origin::Machine,
+        ..own_screen()
+    };
+    let rows = rows_for(&Status::Streaming, &changed_own, Some(&live_own));
+    assert_eq!(
+        rows.last().map(String::as_str),
+        Some("=> Reconnect now to apply")
+    );
+
+    let live_mirror = plain().running();
+    let mirror_with_saved_scale = Connection {
+        scale: Scale::Percent200,
+        scale_origin: Origin::Machine,
+        ..plain()
+    };
+    let rows = rows_for(
+        &Status::Streaming,
+        &mirror_with_saved_scale,
+        Some(&live_mirror),
+    );
+    assert_eq!(
+        rows.last().map(String::as_str),
+        Some("# Applies the next time this tab connects")
+    );
+}
+
+#[test]
+fn radio_groups_identifies_show_as_and_scale_independently() {
+    let submenu_rows = |connection: &Connection| -> Vec<Entry> {
+        tab_menu(&Status::Streaming, connection, None, None)
+            .into_iter()
+            .find_map(|e| match e {
+                Entry::Submenu {
+                    label: "Connection settings",
+                    rows,
+                } => Some(rows),
+                _ => None,
+            })
+            .expect("Connection settings submenu")
+    };
+    let own = Connection {
+        scale: Scale::Percent160,
+        scale_origin: Origin::Machine,
+        ..own_screen()
+    };
+    assert_eq!(
+        radio_groups(&submenu_rows(&own)),
+        vec![(1, 2, 2), (5, 8, 7)]
+    );
+
+    let locked = Connection {
+        screen_lock: Some("Locked: --headless".to_owned()),
+        scale: Scale::Percent200,
+        scale_origin: Origin::Machine,
+        ..own_screen()
+    };
+    assert_eq!(
+        radio_groups(&submenu_rows(&locked)),
+        vec![(1, 2, 2), (6, 9, 9)]
     );
 }
