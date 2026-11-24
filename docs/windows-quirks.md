@@ -422,9 +422,10 @@ on Windows and pasted on Linux). See
 - Tested at 200% and 150% only. A scale change while the client runs has not been
   tried.
 - **With Own screen, the remote scale defaults to the Windows scale (`Auto`)
-  and can be set per machine to `125%`, `160%`, or `200%`.** A change takes
-  effect at the next session start or when the window moves to another screen;
-  see [docs/settings.md](settings.md#scale). Changing the scale of the private
+  and can be set per machine to `125%`, `160%`, or `200%`.** A Scale pick on
+  a live Own screen tab applies at once with a Resize on the running session;
+  a hidden tab takes it when next shown.
+  See [docs/settings.md](settings.md#scale). Changing the scale of the private
   screen in the remote desktop's own display settings is still not supported;
   see [The remote compositor reloads](#the-remote-compositor-reloads).
 
@@ -655,7 +656,11 @@ up, except the 1 key(s) held`; it never names a key.
   for under a second (a terminal may reflow by a column or two) and a decoder
   reset. It is rate limited so that cannot repeat.
 - A stalled stream is re-synced, not reconnected: a new session would remove the
-  headless output and move every window on it. A session that died is retried
+  headless output and move every window on it. For the same reason a Scale pick
+  on a live Own screen tab is sent as a Resize on the running session (the server
+  sets the existing output's mode and scale in place, `Session::resize` /
+  `set_monitor_mode` in upstream gliff-server at the pinned revision) instead of
+  reconnecting. A session that died is retried
   (see Reconnect in architecture.md). If a resync does not help (the log shows
   `resync` lines and still no pictures), close and reopen the client.
 - The fix for the cause is in the server (watch the output's real mode and
@@ -669,9 +674,9 @@ that equals its record, and recovers on one that differs
 
 ### Scale picked on the remote
 
-Own screen sizes the remote screen to the window and gives it the client's scale (the Windows display scale, `dpi / 96`). A scale chosen in the remote desktop's own display settings does not stick. The likely cause is that the desktop's scale menu rewrites its monitor config and the compositor reloads it, which discards the mode the server set (the reload failure above); the remote's own logs were not read. The picture goes black until the client resyncs, which takes at least 3 inputs, 3 s of silence and the 30 s gap between resyncs. The resync then sends the client's scale, so the remote screen is back at the Windows scale. In the log, every stream config after each resync says the Windows scale, and the client sends no Resize of its own.
+Own screen sizes the remote screen to the window and gives it the scale the client sends (`Auto` is the Windows display scale, `dpi / 96`). A scale chosen in the remote desktop's own display settings does not stick. The likely cause is that the desktop's scale menu rewrites its monitor config and the compositor reloads it, which discards the mode the server set (the reload failure above); the remote's own logs were not read. The picture goes black until the client resyncs, which takes at least 3 inputs, 3 s of silence and the 30 s gap between resyncs. The resync then sends the scale the client last asked for, so the remote screen is back at that scale. In the log, every stream config after each resync says that scale, and the client sends no Resize of its own beyond the resync.
 
-To change the scale, change the Windows display scale and reconnect. A client setting that sends a chosen scale is in the backlog (see [KNOWN-ISSUES.md](../KNOWN-ISSUES.md)). Not tried: whether the pointer and the layout are right with a remote scale that differs from the Windows scale.
+To change the scale, pick *Scale* on the tab. On a live Own screen session that applies at once with a Resize on the running session. Changing the scale in the remote desktop's own display settings is still not supported. Not tried: whether the pointer and the layout are right with a remote scale that differs from the Windows scale.
 
 ## Known limitations
 

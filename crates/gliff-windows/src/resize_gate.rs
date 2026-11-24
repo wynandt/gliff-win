@@ -7,13 +7,17 @@
 //! Windows the window tells us instead of being polled: a drag ends with
 //! `WM_EXITSIZEMOVE` (send once, at once), other size changes (maximise,
 //! snap, F11) settle for the same 200 ms, and `WM_DPICHANGED` sends after
-//! the window takes the suggested rect. Sizes are client pixels `& !1` at the
+//! the window takes the suggested rect. A Scale pick on a shown Own screen
+//! session sends at once the same way; a hidden one stores the scale for its
+//! next resize. Sizes are client pixels `& !1` at the
 //! session's [`Scale`](crate::machine_choices::Scale)
 //! ([`protocol_scale`](crate::layout::protocol_scale) for [`Scale::Auto`]).
 
 use std::time::Duration;
 use std::time::Instant;
 
+use crate::cli::Screen;
+use crate::machine_choices::Running;
 use crate::machine_choices::Scale;
 use crate::session::ResizeReq;
 
@@ -46,7 +50,8 @@ pub struct ResizeGate {
     seen: Option<ResizeReq>,
     /// The last request sent (the Hello-time one to begin with).
     requested: ResizeReq,
-    /// The scale choice active for this session until a screen move or reconnect.
+    /// The scale choice active for this session until a Scale pick, a screen
+    /// move, or a reconnect.
     scale: Scale,
 }
 
@@ -72,8 +77,8 @@ impl ResizeGate {
         self.scale
     }
 
-    /// Updates the active scale choice for a hidden session after a screen
-    /// move without sending a resize yet.
+    /// Stores `scale` for a hidden session. The next resize uses it. Nothing
+    /// is sent now.
     pub fn set_scale(&mut self, scale: Scale) {
         self.scale = scale;
     }
@@ -110,8 +115,8 @@ impl ResizeGate {
         self.now(client, dpi)
     }
 
-    /// `WM_DPICHANGED` (after `SetWindowPos` to the suggested rect) or a drag
-    /// that ended on another monitor: adopts `scale` and sends at once.
+    /// Adopts `scale` and sends the client size at once. A move to another
+    /// screen and a Scale pick on the shown session both use this.
     pub fn on_dpi_changed(
         &mut self,
         client: (u32, u32),
@@ -175,6 +180,40 @@ pub fn request_for_scale(client: (u32, u32), dpi: u32, scale: Scale) -> ResizeRe
 /// Client pixels to a request: even sides, the protocol scale (`Scale::Auto`).
 pub fn request_for(client: (u32, u32), dpi: u32) -> ResizeReq {
     request_for_scale(client, dpi, Scale::Auto)
+}
+
+/// Applies a Scale menu pick to one live session.
+///
+/// `is_tab_session` is false for a session that is not the tab's. Nothing
+/// changes in that case. An Own screen session whose scale differs adopts
+/// `scale`. When `shown`, the result is the window size at that scale, sent
+/// at once, the same request a move to another screen sends. A hidden
+/// session returns nothing; the gate keeps `scale` for its next resize. A
+/// Mirror session and a scale the session already runs return nothing and
+/// change nothing.
+///
+/// Upstream: `Session::resize` calls `set_monitor_mode` on the existing
+/// headless output at 58c7424, so the output is not recreated. The output
+/// is removed only when the session ends (`remove_output`).
+pub fn apply_live_scale(
+    is_tab_session: bool,
+    running: &mut Running,
+    gate: &mut ResizeGate,
+    shown: bool,
+    client: (u32, u32),
+    dpi: u32,
+    scale: Scale,
+) -> Option<ResizeReq> {
+    if !is_tab_session || running.screen != Screen::Own || running.scale == scale {
+        return None;
+    }
+    running.scale = scale;
+    if shown {
+        gate.on_dpi_changed(client, dpi, scale)
+    } else {
+        gate.set_scale(scale);
+        None
+    }
 }
 
 #[cfg(test)]

@@ -123,6 +123,7 @@ use crate::present_log::PresentOutcome;
 use crate::resize_gate::Moving;
 use crate::resize_gate::ResizeGate;
 use crate::resize_gate::Settled;
+use crate::resize_gate::apply_live_scale;
 use crate::resize_gate::request_for_scale;
 use crate::session::Geometry;
 use crate::session::Picture;
@@ -1277,12 +1278,13 @@ impl App {
 
     /// A choice from the Connection settings submenu: kept for the tab's
     /// machine and saved at once. The screen, the colour and the decoder
-    /// apply at the next connect; Scale applies at the next session start or
-    /// when the window moves to another screen (no live rescale on pick); the
-    /// clipboard applies to the tab's session at once, and so does Send Win+L
-    /// when the tab is shown. A row a flag has locked (or Scale in Mirror
-    /// mode) is greyed in the menu and cannot get here; if it did, the rules
-    /// would still ignore it.
+    /// apply at the next connect. Scale on a live Own screen session is sent
+    /// as a Resize on that session at once (a hidden tab keeps it until the
+    /// tab is shown); a tab with no session uses it at the next connect.
+    /// The clipboard applies to the tab's session at once, and so does Send
+    /// Win+L when the tab is shown. A row a flag has locked (or Scale in
+    /// Mirror mode) is greyed in the menu and cannot get here; if it did,
+    /// the rules would still ignore it.
     fn choose(&mut self, command: MenuCommand, id: crate::tabs::TabId) {
         let Some(machine) = self.tabs.tab(id).map(|tab| tab.target().clone()) else {
             return;
@@ -1313,7 +1315,54 @@ impl App {
                 self.share_now(id, self.rules.shares_clipboard(&machine));
             }
             MenuCommand::SendWinL(_) => self.sync_win_l(),
+            MenuCommand::Scale(_) => self.scale_now(id, &machine),
             _ => {}
+        }
+    }
+
+    /// A Scale pick on this tab's live Own screen session. The shown session
+    /// sends a Resize now; a hidden one keeps the scale for when it is shown.
+    /// Another tab's session is left as it is. A tab with no session has
+    /// nothing to send; the saved choice is used at the next connect.
+    fn scale_now(&mut self, id: crate::tabs::TabId, machine: &HostTarget) {
+        let Some(tab_session) = self.tabs.tab(id).and_then(|tab| tab.session()) else {
+            return;
+        };
+        let scale = self.rules.connection(machine).scale;
+        let (client, dpi, shown) = (self.client, self.dpi, self.shown);
+        let mut sent = None;
+        let mut applied_to = None;
+        for (&session, view) in &mut self.views {
+            let before = view.running.scale;
+            let screen = view.running.screen;
+            let req = apply_live_scale(
+                session == tab_session,
+                &mut view.running,
+                &mut view.gate,
+                shown == Some(session),
+                client,
+                dpi,
+                scale,
+            );
+            if session == tab_session
+                && screen == crate::cli::Screen::Own
+                && before != view.running.scale
+            {
+                applied_to = Some(session);
+            }
+            if let Some(req) = req {
+                sent = Some(req);
+            }
+        }
+        if let Some(session) = applied_to {
+            crate::logging::line(&format!(
+                "scale: live rescale to {} on session {}",
+                scale.label(),
+                session.get()
+            ));
+        }
+        if let Some(req) = sent {
+            self.send_resize(req);
         }
     }
 
