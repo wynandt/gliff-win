@@ -942,3 +942,6 @@ pub(crate) fn tap_mask() {
     // one INPUT, as SendInput requires.
     let _ = unsafe { SendInput(&inputs, std::mem::size_of::<INPUT>() as i32) };
 }
+
+#[cfg(test)]
+mod tests;

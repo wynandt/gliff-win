@@ -764,3 +764,6 @@ fn move_to_work_area_corner(hwnd: HWND) {
         )
     };
 }
+
+#[cfg(test)]
+mod tests;
