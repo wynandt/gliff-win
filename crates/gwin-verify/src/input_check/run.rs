@@ -35,6 +35,9 @@ pub struct Seen {
     pub foreground_is_client: bool,
     pub notepad_text: Option<String>,
     pub input: Option<InputInfo>,
+    /// The stats file was not rewritten after the case, so `input` is not
+    /// read: what it showed is older than the case.
+    pub stats_stale: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -145,6 +148,7 @@ fn try_case(h: &mut impl Harness, case: &Case) -> (CaseResult, bool) {
         foreground_is_client: seen.foreground_is_client,
         notepad_text: seen.notepad_text,
         input: seen.input,
+        stats_stale: seen.stats_stale,
     };
     let reached = !observed.remote.is_empty() && observed.foreground_is_client;
     let result = CaseResult {

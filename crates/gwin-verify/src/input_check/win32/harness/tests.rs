@@ -4,7 +4,8 @@
 use super::*;
 
 /// A stats file the client wrote before the case began, showing the
-/// keyboard grabbed, and not rewritten since.
+/// keyboard grabbed, and not rewritten since. Returns once the file's time
+/// is in the past.
 fn stale_stats(name: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("gwin-harness-{}-{name}", std::process::id()));
     std::fs::create_dir_all(&dir).expect("the folder is created");
@@ -16,7 +17,6 @@ fn stale_stats(name: &str) -> PathBuf {
     stats.input.hook = "grab".to_owned();
     stats.input.grab = true;
     std::fs::write(&path, stats.to_json()).expect("the stats file is written");
-    // The file's time must be before the moment `read_seen` asks.
     std::thread::sleep(Duration::from_millis(50));
     path
 }
@@ -59,9 +59,22 @@ fn a_stats_file_older_than_the_case_is_not_read() {
         waited >= STATS_FRESH,
         "the wait ended after {waited:?}, before its timeout"
     );
+    assert!(seen.stats_stale, "the stale stats file was not flagged");
     assert!(
         seen.input.is_none(),
         "the stats file was not rewritten, yet its input (grab = {:?}) was returned",
         seen.input.map(|i| i.grab)
+    );
+}
+
+/// No window has the handle used here, so the move fails.
+#[test]
+fn a_failed_window_move_is_an_error() {
+    let err = move_to_work_area_corner(HWND(std::ptr::without_provenance_mut(0x7fff_fff0)))
+        .expect_err("moving a window that does not exist must fail");
+    let text = format!("{err:#}");
+    assert!(
+        text.contains("GetMonitorInfoW") || text.contains("SetWindowPos"),
+        "the error does not say which call failed: {text}"
     );
 }

@@ -22,6 +22,8 @@ use std::thread::JoinHandle;
 use std::time::Duration;
 use std::time::Instant;
 
+use windows::Win32::Foundation::ERROR_INVALID_THREAD_ID;
+use windows::Win32::Foundation::ERROR_NOT_ENOUGH_QUOTA;
 use windows::Win32::Foundation::HWND;
 use windows::Win32::Foundation::LPARAM;
 use windows::Win32::Foundation::LRESULT;
@@ -587,18 +589,51 @@ impl HookThread {
     }
 }
 
-impl Drop for HookThread {
-    fn drop(&mut self) {
-        // SAFETY: PostThreadMessageW takes any thread id.
-        let _ = unsafe { PostThreadMessageW(self.thread_id, WM_QUIT, WPARAM(0), LPARAM(0)) };
+impl HookThread {
+    /// Asks the thread to quit and waits for it up to [`STOP_WAIT`], then
+    /// detaches it. Returns the lines to log: a refused quit post, named by
+    /// its Windows error, and a thread that did not stop in time. A second
+    /// call does nothing.
+    fn stop(&mut self) -> Vec<String> {
+        let mut lines = Vec::new();
         let Some(join) = self.join.take() else {
-            return;
+            return lines;
         };
+        // SAFETY: PostThreadMessageW takes any thread id.
+        if let Err(e) = unsafe { PostThreadMessageW(self.thread_id, WM_QUIT, WPARAM(0), LPARAM(0)) }
+        {
+            lines.push(format!(
+                "PostThreadMessageW(WM_QUIT) failed: {} ({e})",
+                win32_error_name(&e)
+            ));
+        }
         if crate::bounded_wait::ended_within(&self.ended, STOP_WAIT) {
             let _ = join.join();
         } else {
-            crate::logging::line("keyboard hook thread did not stop in time; not waiting for it");
+            lines.push("keyboard hook thread did not stop in time; not waiting for it".to_owned());
         }
+        lines
+    }
+}
+
+impl Drop for HookThread {
+    fn drop(&mut self) {
+        for line in self.stop() {
+            crate::logging::line(&line);
+        }
+    }
+}
+
+/// The name of the Windows error `PostThreadMessageW` returns for a refused
+/// post, or its HRESULT for any other error.
+fn win32_error_name(e: &windows::core::Error) -> String {
+    let code = e.code();
+    if code == ERROR_NOT_ENOUGH_QUOTA.to_hresult() {
+        "ERROR_NOT_ENOUGH_QUOTA".to_owned()
+    } else if code == ERROR_INVALID_THREAD_ID.to_hresult() {
+        "ERROR_INVALID_THREAD_ID".to_owned()
+    } else {
+        format!("HRESULT {:#010x}", code.0)
     }
 }
 
