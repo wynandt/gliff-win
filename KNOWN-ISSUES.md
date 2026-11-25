@@ -105,7 +105,8 @@ The client has run on one Windows machine. Not tried yet
   ([#53](https://github.com/wynandt/gliff-win/issues/53)). The server starts
   with Num Lock and Caps Lock off, and the client does not send its lock
   state. With Num Lock on in Windows, keypad digits reach the remote as
-  Home, End, arrows and Page keys. Reproduced with stock gliff-server 0.4.3.
+  Home, End, arrows and Page keys. Reproduced on 18 November 2026 with stock
+  gliff-server 0.4.3.
   The fix is blocked on upstream
   [omacom/gliff#143](https://github.com/omacom/gliff/pull/143).
 - **The client reconnects when the host ends the session on purpose**
