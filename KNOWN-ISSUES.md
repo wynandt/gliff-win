@@ -17,9 +17,7 @@ settings*. All are off by default except *GPU decode*, which is on, and
   live Own screen tab a change applies at once with a Resize on the running
   session; a hidden tab takes it when next shown. *Show as*, *Sharp colour*
   and *GPU decode* still need a reconnect. See
-  [docs/settings.md](docs/settings.md#scale). Part of
-  [#3](https://github.com/wynandt/gliff-win/issues/3) (native Windows check
-  pending).
+  [docs/settings.md](docs/settings.md#scale).
 - **Sharp colour.** Without it the client asks for a 4:2:0 stream, so coloured
   text is a little soft. A server that encodes on the CPU still sends 4:2:0
   unless it runs with `--full-chroma`; see
@@ -48,10 +46,6 @@ settings*. All are off by default except *GPU decode*, which is on, and
   text are built but not proven on real machines. See
   [docs/clipboard.md](docs/clipboard.md#known-gaps).
 - **Touch and pen input.**
-- **The reason a session or the client ended, in one log line**
-  ([#2](https://github.com/wynandt/gliff-win/issues/2)). Connect failures and
-  session ends are logged, but the client's exit and the end of ssh's error
-  output are not.
 - **An installer.** Releases are a zip of the programs, with no installer.
   Releases from 0.2.1 on are code-signed.
 - **Automatic updates**
@@ -110,9 +104,10 @@ The client has run on one Windows machine. Not tried yet
 - **Keypad keys can arrive as arrow keys**
   ([#53](https://github.com/wynandt/gliff-win/issues/53)). The server starts
   with Num Lock and Caps Lock off, and the client does not send its lock
-  state. With Num Lock on in Windows, keypad digits can reach the remote as
-  Home, End, arrows and Page keys. Not reproduced yet. The fix waits for an
-  upstream protocol message.
+  state. With Num Lock on in Windows, keypad digits reach the remote as
+  Home, End, arrows and Page keys. Reproduced with stock gliff-server 0.4.3.
+  The fix is blocked on upstream
+  [omacom/gliff#143](https://github.com/omacom/gliff/pull/143).
 - **The client reconnects when the host ends the session on purpose**
   ([#19](https://github.com/wynandt/gliff-win/issues/19)). Upstream is adding
   an error code for this. Until the client knows it, it treats that end like
