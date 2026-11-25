@@ -136,11 +136,5 @@ The client has run on one Windows machine. Not tried yet
   starts; see [docs/clipboard.md](docs/clipboard.md#known-gaps).
 - **The release chord cannot be turned off.** `--release-chord none` is refused
   at start.
-- **The client can keep running after the window closes**
-  ([#85](https://github.com/wynandt/gliff-win/issues/85)). If a process left
-  over from a session still holds that session's link, the window goes away
-  but the process stays in the background until the leftover process ends.
-  Seen with a test server that never exits. Not yet seen with a real ssh
-  setup.
 
 gliff-win needs `gliff-server` 0.4.1 or later on the remote machine.

@@ -67,16 +67,21 @@ Option<UnboundedSender<_>>`, `engine: Option<EngineThread>`, `reason:
 Option<EndReason>`, decoder, clocks, and the locally owned SSH child/reader/writer tasks
 encode several lifetimes.
 
-`Unstarted -> decoder ready -> SSH spawned -> reader/writer running -> command loop ->
-session sender dropped -> clipboard engine stopped -> writer finished -> inbound EOF drained
-and SSH reaped -> joined`. Spawn failure and link loss choose different reporting paths.
+`Unstarted -> decoder ready -> SSH spawned and taken into its process tree ->
+reader/writer running -> command loop -> session sender dropped -> clipboard engine
+stopped -> writer finished -> inbound EOF drained and SSH reaped -> runtime closed ->
+joined`. Spawn failure and link loss choose different reporting paths.
 Join consumes the handle and reports panic or an already-joined handle. Whole-message
 reads live in a dedicated task because partial reads are not cancellation-safe.
 
 Invariant: all sender owners must disappear before stdin can close; EOF must be drained
-so the remote writer cannot block shutdown. The five-second timeout covers the
-finishing/drain/child-wait section, **not the preceding writer await**. An Ended
-notification is not the same as a reaped process. Driver tests cover command coalescing,
+so the remote writer cannot block shutdown. One deadline, `EXIT_WAIT` (5 s) after Bye,
+covers the writer await and the drain/child-wait section. When it passes, the driver
+ends SSH's whole process tree (on Windows a job object, so a `ProxyCommand` or other
+helper holding the pipes ends too), then kills and reaps SSH. Closing the runtime waits
+at most `RUNTIME_CLOSE_WAIT` (1 s) for blocking work and records anything left behind
+in the session's errors, so the thread joins about six seconds after Bye at most. An
+Ended notification is not the same as a reaped process. Driver tests cover command coalescing,
 clocks, and clean-exit classification; full OS teardown is not established by those
 tests. [Handle and launch][driver-finish]; [loop and finish][driver-finish]; [link-loss
 handling][driver-finish].
@@ -699,7 +704,8 @@ messages may use default handling rather than queueing.
 `Open --close--> Closing / disable routes, stop retries, retire sessions -> window
 destroyed when drained or three-second timer fires -> final synchronous joins -> process
 exit`. Repeated close is ignored. **The three-second window-close timer does not bound
-the entire process**, because final finish still joins remaining sessions.
+the entire process**, because final finish still joins remaining sessions. Each join is
+bounded by the session thread's own `EXIT_WAIT` plus `RUNTIME_CLOSE_WAIT`.
 
 Invariant: resource restoration and deferred messages must survive Win32 reentrancy.
 Modal kind is explicit, but there is no general modal-depth machine. Arbitrary nesting

@@ -5,7 +5,9 @@ use std::time::Instant;
 
 use super::COALESCE_LIMIT;
 use super::KeyClock;
+use super::RUNTIME_CLOSE_WAIT;
 use super::SessionEnd;
+use super::close_runtime;
 use super::coalesce_motion;
 use super::run_was_clean;
 use crate::altgr::AltGrFilter;
@@ -165,4 +167,43 @@ fn a_session_that_never_started_or_ended_badly_is_not_clean() {
     assert!(!run_was_clean(1, &[]));
     assert!(!run_was_clean(0, &[ended(Some(EndReason::Bye), Some(255))]));
     assert!(!run_was_clean(0, &[ended(None, None)]));
+}
+
+#[test]
+fn a_blocking_read_that_never_returns_cannot_hold_the_session_thread() {
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("a runtime");
+    let (_held, never) = std::sync::mpsc::channel::<()>();
+    runtime.spawn_blocking(move || never.recv_timeout(Duration::from_secs(20)));
+    let started = Instant::now();
+    let left = close_runtime(runtime);
+    let took = started.elapsed();
+    assert!(
+        took < RUNTIME_CLOSE_WAIT + Duration::from_secs(1),
+        "closing the runtime waited {took:?} for a blocked read"
+    );
+    assert!(
+        left.as_deref()
+            .is_some_and(|left| left.contains("still running")),
+        "the session end says something was left running: {left:?}"
+    );
+}
+
+#[test]
+fn closing_an_idle_runtime_is_quick_and_reports_nothing() {
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("a runtime");
+    runtime.block_on(async {});
+    let started = Instant::now();
+    let left = close_runtime(runtime);
+    let took = started.elapsed();
+    assert_eq!(left, None, "nothing was left running");
+    assert!(
+        took < Duration::from_millis(200),
+        "an idle runtime closes at once, not after {took:?}"
+    );
 }
