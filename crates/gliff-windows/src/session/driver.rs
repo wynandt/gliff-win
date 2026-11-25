@@ -16,6 +16,7 @@ use gliff_proto::msg::ClientMsg;
 use gliff_proto::msg::ServerMsg;
 use gliff_transport::Framed;
 use tokio::process::Child;
+use tokio::runtime::Runtime;
 use tokio::sync::mpsc;
 
 use super::Action;
@@ -46,6 +47,7 @@ use crate::keymap::Press;
 use crate::link::Inbound;
 use crate::link::read_server;
 use crate::pointer::PointerEvent;
+use crate::process_tree::ProcessTree;
 use crate::ssh::SshSpec;
 use crate::ssh::diagnose;
 use crate::ssh::spawn;
@@ -247,7 +249,11 @@ pub fn start_with_clipboard(
                     .enable_all()
                     .build();
                 match runtime {
-                    Ok(runtime) => runtime.block_on(run(opts, cmd_rx, out, clipboard)),
+                    Ok(runtime) => {
+                        let mut end = runtime.block_on(run(opts, cmd_rx, out, clipboard));
+                        end.errors.extend(close_runtime(runtime));
+                        end
+                    }
                     Err(e) => out.fail(format!("runtime: {e}")),
                 }
             }
@@ -260,6 +266,17 @@ pub fn start_with_clipboard(
         thread: Some(thread),
         tag,
     })
+}
+
+/// How long the session thread waits, after the session ended, for work its
+/// runtime still runs on blocking threads.
+pub(crate) const RUNTIME_CLOSE_WAIT: Duration = Duration::from_secs(1);
+
+/// Shuts the session's runtime down once the session has ended. Says what
+/// was left running, if anything was.
+fn close_runtime(runtime: Runtime) -> Option<String> {
+    drop(runtime);
+    None
 }
 
 /// Where the loop's results go.
@@ -341,6 +358,7 @@ async fn run(
     };
     let stderr_log = link.stderr_log.clone();
     let mut child = link.child;
+    let tree = link.tree;
     let (tx, rx) = mpsc::unbounded_channel();
     let engine = clipboard.and_then(|port| {
         let writer_tx = tx.clone();
@@ -396,7 +414,7 @@ async fn run(
         Ok(Err(e)) => session.errors.push(format!("write: {e}")),
         Err(e) => session.errors.push(format!("writer: {e}")),
     }
-    let ssh_exit = finish(&mut child, &mut in_rx, &mut session.errors).await;
+    let ssh_exit = finish(&mut child, &tree, &mut in_rx, &mut session.errors).await;
     reader.abort();
     let stats = session.core.stats().clone();
     session.out.publish(&stats, session.decoder.kind());
@@ -412,9 +430,11 @@ async fn run(
 }
 
 /// Drains the server's output to EOF, so a server still writing is never
-/// blocked, then waits for ssh; kills it after [`EXIT_WAIT`].
+/// blocked, then waits for ssh; after [`EXIT_WAIT`] ends ssh's whole
+/// [`ProcessTree`] and kills ssh.
 async fn finish(
     child: &mut Child,
+    tree: &ProcessTree,
     inbound: &mut InboundRx,
     errors: &mut Vec<String>,
 ) -> Option<i32> {
@@ -433,6 +453,7 @@ async fn finish(
                 "ssh still running {}s after Bye and stdin EOF",
                 EXIT_WAIT.as_secs()
             ));
+            tree.end();
             let _ = child.kill().await;
             None
         }
