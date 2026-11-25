@@ -215,6 +215,18 @@ impl Win32Harness {
         ClientStats::from_json(&text).ok()
     }
 
+    /// What the end of a case left: the foreground window, Notepad's text
+    /// and the client's input stats, read after the stats file is rewritten.
+    /// Sends no input.
+    pub(super) fn read_seen(&self) -> Seen {
+        wait_modified_after(&self.launch.stats_out, SystemTime::now(), STATS_FRESH);
+        Seen {
+            foreground_is_client: self.foreground_is_client(),
+            notepad_text: self.sink.as_ref().map(Sink::text),
+            input: self.stats().map(|s| s.input),
+        }
+    }
+
     /// Starts the client and waits for its window and a first picture.
     pub(super) fn launch_client(&mut self, flags: &[String]) -> anyhow::Result<()> {
         self.stop();
@@ -710,12 +722,7 @@ impl Harness for Win32Harness {
     }
 
     fn observe(&mut self) -> Seen {
-        wait_modified_after(&self.launch.stats_out, SystemTime::now(), STATS_FRESH);
-        let seen = Seen {
-            foreground_is_client: self.foreground_is_client(),
-            notepad_text: self.sink.as_ref().map(Sink::text),
-            input: self.stats().map(|s| s.input),
-        };
+        let seen = self.read_seen();
         input::release_modifiers("a case");
         seen
     }
