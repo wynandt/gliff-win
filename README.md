@@ -268,6 +268,14 @@ before a window exists. A second start while a client is already running
 still adds a target to the open window, or brings that window forward when
 there is no target.
 
+After you close the window, the client exits within about six seconds, even
+when a link has stopped answering. Each session gives the server and ssh 5
+seconds to exit after Bye. Then the client ends ssh together with every helper
+ssh started from your ssh config, such as a `ProxyCommand`, the ssh behind a
+`ProxyJump`, or a `LocalCommand`, so no helper outlives the session. That
+session's line then has `errors: ssh still running 5s after Bye and stdin
+EOF`.
+
 A session that ends on its own for a reason that can pass (the server exits,
 ssh drops) is tried again by itself, up to five times with a growing wait. A
 failure a retry cannot fix, such as a refused key or a changed host key, is

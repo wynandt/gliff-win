@@ -20,6 +20,7 @@ use crate::connect::Phase;
 use crate::connect::SshFailure;
 use crate::connect::classify;
 use crate::history::HostTarget;
+use crate::process_tree::ProcessTree;
 
 /// Everything needed to start the server over ssh.
 #[derive(Debug, Clone)]
@@ -61,6 +62,8 @@ pub enum SpecError {
 /// The spawned ssh process and its piped stdio.
 pub struct SshLink {
     pub child: Child,
+    /// ssh and the helpers it starts; end it with the child.
+    pub tree: ProcessTree,
     /// Drop it after writing Bye.
     pub stdin: ChildStdin,
     pub stdout: ChildStdout,
@@ -145,7 +148,8 @@ pub(crate) fn invocation(spec: &SshSpec, remote: &[&str]) -> Vec<OsString> {
 }
 
 /// Validates the spec, then starts ssh with piped stdio, stderr to the
-/// log file, no console window on Windows, and kill-on-drop.
+/// log file, no console window on Windows, and kill-on-drop, and takes it
+/// into a [`ProcessTree`] (logged if Windows refuses).
 pub fn spawn(spec: &SshSpec) -> std::io::Result<SshLink> {
     validate(spec).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
     std::fs::create_dir_all(&spec.log_dir)?;
@@ -160,10 +164,17 @@ pub fn spawn(spec: &SshSpec) -> std::io::Result<SshLink> {
     #[cfg(windows)]
     cmd.creation_flags(crate::win32::CREATE_NO_WINDOW);
     let mut child = cmd.spawn()?;
+    let (tree, refused) = ProcessTree::adopt(&child);
+    if let Some(why) = refused {
+        crate::logging::line(&format!(
+            "ssh: no process tree, helpers can outlive ssh: {why}"
+        ));
+    }
     let stdin = child.stdin.take().expect("stdin was set to piped");
     let stdout = child.stdout.take().expect("stdout was set to piped");
     Ok(SshLink {
         child,
+        tree,
         stdin,
         stdout,
         stderr_log,
@@ -232,7 +243,8 @@ fn printed(stdout: &str, stderr: &str) -> String {
 
 /// Runs a fixed command on the target over its own ssh, with stdin closed
 /// and no console window; for `hyprctl` queries next to a live session.
-/// The child is killed if `timeout` passes first.
+/// The child, and on Windows any helper it started, is killed if `timeout`
+/// passes first.
 pub async fn exec(
     spec: &SshSpec,
     command: &'static str,
@@ -249,6 +261,7 @@ pub async fn exec(
     #[cfg(windows)]
     cmd.creation_flags(crate::win32::CREATE_NO_WINDOW);
     let child = cmd.spawn().map_err(ExecError::Spawn)?;
+    let (_tree, _) = ProcessTree::adopt(&child);
     let output = match tokio::time::timeout(timeout, child.wait_with_output()).await {
         Ok(result) => result.map_err(ExecError::Spawn)?,
         Err(_) => return Err(ExecError::Timeout(timeout)),

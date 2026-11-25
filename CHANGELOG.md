@@ -7,6 +7,13 @@ release, see [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
 ## [Unreleased]
 
+- With an ssh helper such as a `ProxyCommand` or `ProxyJump` in the ssh
+  config, closing the window while a link had stopped answering hid the
+  window, but the client kept running in the background until the helper
+  ended, which could be never. The client now ends ssh together with the
+  helpers it started, 5 s after Bye, and exits within about six seconds of
+  the close. A helper also no longer outlives a `hyprctl` query that timed
+  out. (Addresses [#85](https://github.com/wynandt/gliff-win/issues/85))
 - When Windows refuses the message that stops the keyboard hook's thread,
   the client log names the refused post and the Windows error, such as
   `ERROR_NOT_ENOUGH_QUOTA`. Closing still waits at most 500 ms for that

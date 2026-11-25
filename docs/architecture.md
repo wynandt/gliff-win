@@ -67,7 +67,9 @@ server.
    and its answers come back into the same writer.
 8. Closing the window sends `Bye`, stops the clipboard engine, closes the ssh
    child's stdin and waits for the server and ssh to exit. The window waits up
-   to 3 s for this, then closes anyway.
+   to 3 s for this, then closes anyway. A session that is not done 5 s after
+   Bye ends ssh's whole process tree, and the process exits about a second
+   after that at most.
 
 ## Crates and modules
 
@@ -309,10 +311,18 @@ perform, in order: `Send`, `Decode`, `ResetDecoder`, `Present` and `Ui`.
 
 `session::driver` owns the I/O: a writer task fed by a channel, a reader task
 that reads whole messages, the decoder, the 150 ms idle drain (`IDLE_DRAIN`),
-and the Bye sequence (Bye, then stdin EOF, then a 5 s wait for ssh,
-`EXIT_WAIT`). `gwin-verify stream` keeps its own instrumented copy of this
-loop and uses that same `IDLE_DRAIN` and that same `EXIT_WAIT`. The placement
-probe keeps its own timeout.
+and the Bye sequence (Bye, then stdin EOF, then a wait for ssh that ends
+`EXIT_WAIT`, 5 s, after Bye). `ssh::spawn` takes ssh into a
+`process_tree::ProcessTree`, on Windows a job object that ends its processes
+when it closes. A helper ssh starts, such as a `ProxyCommand`, inherits ssh's
+ends of the pipes, so killing ssh alone leaves the reader waiting for an end
+of file that never comes. When `EXIT_WAIT` passes, the driver ends the whole
+tree, then kills and reaps ssh. The session thread then shuts its runtime down
+with `RUNTIME_CLOSE_WAIT` (1 s), so a read that still blocks a runtime thread
+is left behind and noted in the session's errors instead of holding the
+thread. `gwin-verify stream` keeps its own instrumented copy of this loop and
+uses that same `IDLE_DRAIN` and that same `EXIT_WAIT`. The placement probe
+keeps its own timeout.
 
 ## Decode and present
 
