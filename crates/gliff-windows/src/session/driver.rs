@@ -275,8 +275,14 @@ pub(crate) const RUNTIME_CLOSE_WAIT: Duration = Duration::from_secs(1);
 /// Shuts the session's runtime down once the session has ended. Says what
 /// was left running, if anything was.
 fn close_runtime(runtime: Runtime) -> Option<String> {
-    drop(runtime);
-    None
+    let started = Instant::now();
+    runtime.shutdown_timeout(RUNTIME_CLOSE_WAIT);
+    (started.elapsed() >= RUNTIME_CLOSE_WAIT).then(|| {
+        format!(
+            "session runtime: blocking work still running {}s after the session ended, left behind",
+            RUNTIME_CLOSE_WAIT.as_secs()
+        )
+    })
 }
 
 /// Where the loop's results go.
@@ -409,12 +415,25 @@ async fn run(
     if let Some(engine) = session.engine.take() {
         let _ = tokio::task::spawn_blocking(move || engine.stop()).await;
     }
-    match writer.await {
-        Ok(Ok(())) => {}
-        Ok(Err(e)) => session.errors.push(format!("write: {e}")),
-        Err(e) => session.errors.push(format!("writer: {e}")),
-    }
-    let ssh_exit = finish(&mut child, &tree, &mut in_rx, &mut session.errors).await;
+    let deadline = tokio::time::Instant::now() + EXIT_WAIT;
+    let ssh_exit = match tokio::time::timeout_at(deadline, writer).await {
+        Ok(written) => {
+            match written {
+                Ok(Ok(())) => {}
+                Ok(Err(e)) => session.errors.push(format!("write: {e}")),
+                Err(e) => session.errors.push(format!("writer: {e}")),
+            }
+            finish(&mut child, &tree, &mut in_rx, deadline, &mut session.errors).await
+        }
+        Err(_) => {
+            session.errors.push(format!(
+                "ssh still not taking input {}s after Bye",
+                EXIT_WAIT.as_secs()
+            ));
+            end_ssh(&mut child, &tree).await;
+            None
+        }
+    };
     reader.abort();
     let stats = session.core.stats().clone();
     session.out.publish(&stats, session.decoder.kind());
@@ -430,19 +449,20 @@ async fn run(
 }
 
 /// Drains the server's output to EOF, so a server still writing is never
-/// blocked, then waits for ssh; after [`EXIT_WAIT`] ends ssh's whole
-/// [`ProcessTree`] and kills ssh.
+/// blocked, then waits for ssh; at `deadline` ([`EXIT_WAIT`] after Bye) ends
+/// ssh and its helpers with [`end_ssh`].
 async fn finish(
     child: &mut Child,
     tree: &ProcessTree,
     inbound: &mut InboundRx,
+    deadline: tokio::time::Instant,
     errors: &mut Vec<String>,
 ) -> Option<i32> {
     let drain = async {
         while inbound.recv().await.is_some() {}
         child.wait().await
     };
-    match tokio::time::timeout(EXIT_WAIT, drain).await {
+    match tokio::time::timeout_at(deadline, drain).await {
         Ok(Ok(status)) => status.code(),
         Ok(Err(e)) => {
             errors.push(format!("wait: {e}"));
@@ -453,11 +473,17 @@ async fn finish(
                 "ssh still running {}s after Bye and stdin EOF",
                 EXIT_WAIT.as_secs()
             ));
-            tree.end();
-            let _ = child.kill().await;
+            end_ssh(child, tree).await;
             None
         }
     }
+}
+
+/// Ends ssh's whole [`ProcessTree`], so no helper keeps its pipes open, then
+/// kills and reaps ssh.
+async fn end_ssh(child: &mut Child, tree: &ProcessTree) {
+    tree.end();
+    let _ = child.kill().await;
 }
 
 async fn write_loop(

@@ -4,24 +4,125 @@
 //! `ProxyJump`, a `LocalCommand`. A helper inherits ssh's ends of the
 //! client's pipes, so while it runs, the client's reads from ssh never reach
 //! end of file, even after ssh itself has been killed.
+//!
+//! On Windows the tree is a job object with
+//! `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`: ending it, dropping it, or the
+//! client's own exit ends ssh and every helper in it. A process the child
+//! started before [`ProcessTree::adopt`] ran is not in the tree, so adopt
+//! right after the spawn. On other hosts the tree is empty and ending it
+//! does nothing.
 
 use tokio::process::Child;
 
 /// The processes a child started; see the module docs.
 #[derive(Debug)]
-pub struct ProcessTree {}
+pub struct ProcessTree {
+    #[cfg(windows)]
+    job: Option<win::Job>,
+}
 
 impl ProcessTree {
     /// Takes in `child` and every process it starts from now on. The `String`
     /// says why Windows refused, if it did; the tree then holds only the child.
+    #[cfg(windows)]
+    pub fn adopt(child: &Child) -> (Self, Option<String>) {
+        match win::Job::with(child) {
+            Ok(job) => (Self { job: Some(job) }, None),
+            Err(why) => (Self { job: None }, Some(why)),
+        }
+    }
+
+    /// Takes in `child` and every process it starts from now on. The `String`
+    /// says why Windows refused, if it did; the tree then holds only the child.
+    #[cfg(not(windows))]
     pub fn adopt(child: &Child) -> (Self, Option<String>) {
         let _ = child;
         (Self {}, None)
     }
 
-    /// Ends every process still in the tree. The child itself is left for
-    /// its owner to kill and reap.
-    pub fn end(&self) {}
+    /// Ends every process still in the tree, the child too. Its owner still
+    /// reaps the child.
+    pub fn end(&self) {
+        #[cfg(windows)]
+        if let Some(job) = &self.job {
+            job.end();
+        }
+    }
+}
+
+#[cfg(windows)]
+mod win {
+    use windows::Win32::Foundation::CloseHandle;
+    use windows::Win32::Foundation::HANDLE;
+    use windows::Win32::System::JobObjects::AssignProcessToJobObject;
+    use windows::Win32::System::JobObjects::CreateJobObjectW;
+    use windows::Win32::System::JobObjects::JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+    use windows::Win32::System::JobObjects::JOBOBJECT_EXTENDED_LIMIT_INFORMATION;
+    use windows::Win32::System::JobObjects::JobObjectExtendedLimitInformation;
+    use windows::Win32::System::JobObjects::SetInformationJobObject;
+    use windows::Win32::System::JobObjects::TerminateJobObject;
+    use windows::core::PCWSTR;
+
+    use tokio::process::Child;
+
+    /// The exit code a process ended through its tree gets.
+    const ENDED: u32 = 1;
+
+    /// A job object that ends its processes when it is closed.
+    #[derive(Debug)]
+    pub(super) struct Job {
+        handle: HANDLE,
+    }
+
+    // SAFETY: a job handle is a kernel handle, usable from any thread.
+    unsafe impl Send for Job {}
+    // SAFETY: the job's calls are thread-safe kernel calls on the handle.
+    unsafe impl Sync for Job {}
+
+    impl Job {
+        pub(super) fn with(child: &Child) -> Result<Self, String> {
+            let process = child
+                .raw_handle()
+                .ok_or_else(|| "the child has already been reaped".to_owned())?;
+            // SAFETY: no security attributes and no name.
+            let handle = unsafe { CreateJobObjectW(None, PCWSTR::null()) }
+                .map_err(|e| format!("CreateJobObjectW: {e}"))?;
+            let job = Self { handle };
+            let mut limits = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
+            limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+            let size = u32::try_from(std::mem::size_of_val(&limits))
+                .expect("the job limit structure fits in a u32");
+            // SAFETY: `limits` is the structure the information class names
+            // and outlives the call.
+            unsafe {
+                SetInformationJobObject(
+                    job.handle,
+                    JobObjectExtendedLimitInformation,
+                    std::ptr::from_ref(&limits).cast(),
+                    size,
+                )
+            }
+            .map_err(|e| format!("SetInformationJobObject: {e}"))?;
+            // SAFETY: both handles are open; the process handle stays owned
+            // by `child`.
+            unsafe { AssignProcessToJobObject(job.handle, HANDLE(process)) }
+                .map_err(|e| format!("AssignProcessToJobObject: {e}"))?;
+            Ok(job)
+        }
+
+        pub(super) fn end(&self) {
+            // SAFETY: the handle is open until `drop`.
+            let _ = unsafe { TerminateJobObject(self.handle, ENDED) };
+        }
+    }
+
+    impl Drop for Job {
+        fn drop(&mut self) {
+            // SAFETY: the handle `CreateJobObjectW` returned, closed once,
+            // here; closing the last handle ends the job's processes.
+            let _ = unsafe { CloseHandle(self.handle) };
+        }
+    }
 }
 
 #[cfg(all(test, windows))]
