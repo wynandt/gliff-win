@@ -403,6 +403,13 @@ A chord Windows could open a window for is dismissed afterwards. The text sink
 is focused and Escape is sent there, so Escape is not sent to the client. When
 that dismiss fails, the failure stays on that case and the case fails.
 
+At start the client window is moved to the top-left corner of its monitor's
+work area. If Windows refuses the move, the check stops with the reason. After
+each case the harness waits for the client to rewrite its stats file, up to
+2.5 times the client's one-second interval. If the file is not rewritten in
+time, a case that checks the client's grab, keymap or hook reinstalls fails as
+inconclusive instead of being judged from the older copy.
+
 Run order for a hardware gate:
 
 1. On the remote machine: `scripts/remote/gwin-pattern follow`, then
@@ -442,7 +449,9 @@ On Linux, `cargo test -p gwin-verify` runs the case list, the judges, the fake
 harnesses and the `gwin-keys` script against the fake `hyprctl`.
 `crates/gwin-verify/src/input_check/judge/fixtures/run1-remote.log` is a real
 remote log from the first hardware run; its judge tests replay it. Win32 code is
-checked by `cargo xwin clippy -D warnings` only. Bind names that depend on
+checked by `cargo xwin clippy -D warnings`. On Windows, `cargo test -p gwin-verify`
+also runs the Win32 tests that need no client or input: the stats-file read and
+the window move. Bind names that depend on
 Hyprland's key naming (`MOD5+Q` for AltGr, the `wheel:left` and `wheel:right`
 binds) are settled by the first remote machine run; a wrong name fails its case with the
 log shown.

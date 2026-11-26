@@ -21,6 +21,8 @@ pub struct Observed {
     pub foreground_is_client: bool,
     pub notepad_text: Option<String>,
     pub input: Option<InputInfo>,
+    /// The client's stats file was not rewritten after the case.
+    pub stats_stale: bool,
 }
 
 /// An entry matches a name when it is that name, or the name followed by
@@ -199,6 +201,14 @@ fn judge_clicks(whats: &[&str], targets: &[(f64, f64)], tolerance: f64, reasons:
 fn judge_client(expect: &Expect, seen: &Observed, reasons: &mut Vec<String>) {
     let want = &expect.client;
     if want.grab.is_none() && want.keymap_contains.is_empty() && want.min_hook_reinstalls == 0 {
+        return;
+    }
+    if seen.stats_stale {
+        reasons.push(
+            "inconclusive: the client's stats file was not rewritten after the case, so its \
+             input section is older than the case"
+                .to_owned(),
+        );
         return;
     }
     let Some(input) = &seen.input else {

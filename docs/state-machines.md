@@ -248,7 +248,8 @@ restores it. A legacy key while both desired and hook modes say Grab, without a 
 pass note, is evidence for silent-hook recovery. Overtaken legacy messages are discarded
 using physical timestamps. Recovery forwards the legacy event as appropriate, records
 its ownership, drops/reinstalls the hook, seeds held keys, and repairs unheld modifiers.
-Drop waits 500 ms before detaching a slow hook thread.
+Drop posts WM_QUIT and logs a refused post with the Windows error's name; it then
+waits at most 500 ms before detaching a slow hook thread.
 
 Invariant: desired mode is not proof that an OS hook still exists. Own injected events
 must pass locally without being forwarded again. There is no general periodic hook

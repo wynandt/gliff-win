@@ -24,6 +24,7 @@ fn seen(whats: &[&str]) -> Observed {
         foreground_is_client: true,
         notepad_text: Some(String::new()),
         input: None,
+        stats_stale: false,
     }
 }
 
@@ -190,6 +191,23 @@ fn a_stall_that_never_unhooked_is_inconclusive_not_a_pass() {
         ..InputInfo::default()
     });
     assert!(judge(&expect, &s).is_empty(), "one reinstall satisfies it");
+}
+
+#[test]
+fn a_stale_stats_file_makes_the_grab_verdict_inconclusive() {
+    let mut expect = exactly(&[]);
+    expect.client = ClientExpect {
+        grab: Some(false),
+        ..ClientExpect::default()
+    };
+    let mut s = seen(&[]);
+    s.stats_stale = true;
+    let reasons = judge(&expect, &s);
+    assert_eq!(reasons.len(), 1, "{reasons:?}");
+    assert!(
+        reasons[0].starts_with("inconclusive:") && reasons[0].contains("not rewritten"),
+        "a stale stats file must not decide the grab: {reasons:?}"
+    );
 }
 
 fn with_keys(whats: &[&str], sent: &[u16]) -> Observed {

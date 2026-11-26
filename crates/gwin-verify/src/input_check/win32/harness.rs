@@ -15,6 +15,7 @@ use gliff_windows::session::Geometry;
 use gliff_windows::stats_out::ClientStats;
 use gliff_windows::strip_win::height_of;
 use gliff_windows::window::CLASS_NAME;
+use gliff_windows::window::STATS_EVERY;
 use windows::Win32::Foundation::HWND;
 use windows::Win32::Foundation::LPARAM;
 use windows::Win32::Foundation::POINT;
@@ -130,9 +131,9 @@ pub struct Launch {
     pub prompt_enter: bool,
 }
 
-/// How long `observe` waits for a stats file written after it asked: a bit
-/// more than the client's one second between writes.
-const STATS_FRESH: Duration = Duration::from_millis(2500);
+/// How long `read_seen` waits for a stats file written after it asked: two
+/// and a half times the client's time between writes.
+const STATS_FRESH: Duration = Duration::from_millis(STATS_EVERY.as_millis() as u64 * 5 / 2);
 
 /// How long the pointer stays where `pointer` put it before the next act: the
 /// client learns of a leave or an enter from window messages Windows sends
@@ -215,6 +216,25 @@ impl Win32Harness {
         ClientStats::from_json(&text).ok()
     }
 
+    /// What the end of a case left: the foreground window, Notepad's text
+    /// and the client's input stats, read after the stats file is rewritten.
+    /// If it is not rewritten within [`STATS_FRESH`], the copy on disk is
+    /// older than the case: no input is read and `stats_stale` is set.
+    /// Sends no input.
+    pub(super) fn read_seen(&self) -> Seen {
+        let fresh = wait_modified_after(&self.launch.stats_out, SystemTime::now(), STATS_FRESH);
+        Seen {
+            foreground_is_client: self.foreground_is_client(),
+            notepad_text: self.sink.as_ref().map(Sink::text),
+            input: if fresh {
+                self.stats().map(|s| s.input)
+            } else {
+                None
+            },
+            stats_stale: !fresh,
+        }
+    }
+
     /// Starts the client and waits for its window and a first picture.
     pub(super) fn launch_client(&mut self, flags: &[String]) -> anyhow::Result<()> {
         self.stop();
@@ -251,8 +271,8 @@ impl Win32Harness {
             if let Some(hwnd) = self.hwnd
                 && shown
             {
-                move_to_work_area_corner(hwnd);
-                std::thread::sleep(Duration::from_millis(500));
+                move_to_work_area_corner(hwnd)
+                    .context("moving the client window to the work area's corner")?;
                 self.save_remote_diag("remote-diag-after-start");
                 return Ok(());
             }
@@ -710,12 +730,7 @@ impl Harness for Win32Harness {
     }
 
     fn observe(&mut self) -> Seen {
-        wait_modified_after(&self.launch.stats_out, SystemTime::now(), STATS_FRESH);
-        let seen = Seen {
-            foreground_is_client: self.foreground_is_client(),
-            notepad_text: self.sink.as_ref().map(Sink::text),
-            input: self.stats().map(|s| s.input),
-        };
+        let seen = self.read_seen();
         input::release_modifiers("a case");
         seen
     }
@@ -731,8 +746,10 @@ impl Harness for Win32Harness {
 }
 
 /// Moves the window, size and stacking unchanged, to the top-left corner of
-/// the work area of the monitor it is on (best effort).
-fn move_to_work_area_corner(hwnd: HWND) {
+/// the work area of the monitor it is on. A case run with the window
+/// elsewhere would click and point at the wrong place, so a failure is an
+/// error.
+fn move_to_work_area_corner(hwnd: HWND) -> anyhow::Result<()> {
     let mut info = MONITORINFO {
         cbSize: size_of::<MONITORINFO>() as u32,
         ..MONITORINFO::default()
@@ -742,10 +759,10 @@ fn move_to_work_area_corner(hwnd: HWND) {
         unsafe { GetMonitorInfoW(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST), &mut info) }
             .as_bool();
     if !ok {
-        return;
+        bail!("GetMonitorInfoW failed for the window's monitor");
     }
     // SAFETY: a live window.
-    let _ = unsafe {
+    unsafe {
         SetWindowPos(
             hwnd,
             None,
@@ -755,5 +772,9 @@ fn move_to_work_area_corner(hwnd: HWND) {
             0,
             SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE,
         )
-    };
+    }
+    .context("SetWindowPos failed")
 }
+
+#[cfg(test)]
+mod tests;

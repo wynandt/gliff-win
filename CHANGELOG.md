@@ -14,6 +14,21 @@ release, see [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
   helpers it started, 5 s after Bye, and exits within about six seconds of
   the close. A helper also no longer outlives a `hyprctl` query that timed
   out. (Addresses [#85](https://github.com/wynandt/gliff-win/issues/85))
+- When Windows refuses the message that stops the keyboard hook's thread,
+  the client log names the refused post and the Windows error, such as
+  `ERROR_NOT_ENOUGH_QUOTA`. Closing still waits at most 500 ms for that
+  thread. Before, the log said only that the thread did not stop in time.
+  ([#65](https://github.com/wynandt/gliff-win/issues/65))
+- The keys and pointer checks stop at start, with the reason, when Windows
+  refuses to move the client window to the corner of its monitor's work area.
+  Before, the cases ran with the window wherever it was.
+  ([#65](https://github.com/wynandt/gliff-win/issues/65))
+- When the client does not rewrite its stats file within 2.5 times its
+  one-second interval after a case, a keys case that checks the client's
+  grab, keymap or hook reinstalls fails as inconclusive. Before, it was
+  judged from the older copy of the file. The wait now follows the client's
+  interval, and the 500 ms pause after the client window appeared is gone.
+  ([#67](https://github.com/wynandt/gliff-win/issues/67))
 
 ## [0.5.0]
 
