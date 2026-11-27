@@ -444,6 +444,33 @@ fn a_file_list_round_trips_through_the_hdrop_layout() {
     assert_eq!(parse_hdrop(&bytes), Some(paths), "the same paths");
 }
 
+/// The hand-built header is byte for byte the SDK's `DROPFILES`.
+#[cfg(windows)]
+#[test]
+fn the_hdrop_header_is_the_sdk_dropfiles() {
+    use windows::Win32::UI::Shell::DROPFILES;
+
+    let sdk = DROPFILES {
+        pFiles: size_of::<DROPFILES>() as u32,
+        fWide: true.into(),
+        ..Default::default()
+    };
+    // SAFETY: DROPFILES is a repr(C) struct of four-byte integers with no
+    // padding, so all its bytes are initialised; the slice ends with `sdk`.
+    let sdk_bytes = unsafe {
+        std::slice::from_raw_parts(
+            std::ptr::from_ref(&sdk).cast::<u8>(),
+            size_of::<DROPFILES>(),
+        )
+    };
+    let bytes = hdrop_bytes(&[PathBuf::from("a")]);
+    assert_eq!(
+        &bytes[..size_of::<DROPFILES>()],
+        sdk_bytes,
+        "the CF_HDROP header matches the SDK layout (wide names right after it)"
+    );
+}
+
 #[test]
 fn a_bad_hdrop_is_refused() {
     assert_eq!(parse_hdrop(&[0; 10]), None, "shorter than the header");

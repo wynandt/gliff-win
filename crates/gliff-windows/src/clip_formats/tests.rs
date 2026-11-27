@@ -294,6 +294,46 @@ fn png_to_dibv5_has_a_v5_header_and_bottom_up_bgra() {
     );
 }
 
+/// The hand-built header is byte for byte the SDK's `BITMAPV5HEADER`.
+#[cfg(windows)]
+#[test]
+fn png_to_dibv5_header_is_the_sdk_bitmapv5header() {
+    use windows::Win32::Graphics::Gdi::BI_BITFIELDS;
+    use windows::Win32::Graphics::Gdi::BITMAPV5HEADER;
+
+    let png = make_png(png::ColorType::Rgba, 3, 2, &[9; 3 * 2 * 4]);
+    let dib = png_to_dibv5(&png).expect("convert");
+    let sdk = BITMAPV5HEADER {
+        bV5Size: size_of::<BITMAPV5HEADER>() as u32,
+        bV5Width: 3,
+        bV5Height: 2,
+        bV5Planes: 1,
+        bV5BitCount: 32,
+        bV5Compression: BI_BITFIELDS,
+        bV5SizeImage: 3 * 2 * 4,
+        bV5RedMask: 0x00FF_0000,
+        bV5GreenMask: 0x0000_FF00,
+        bV5BlueMask: 0x0000_00FF,
+        bV5AlphaMask: 0xFF00_0000,
+        bV5CSType: 0x7352_4742,
+        bV5Intent: 4,
+        ..Default::default()
+    };
+    // SAFETY: BITMAPV5HEADER is a repr(C) struct of integers with no
+    // padding, so all its bytes are initialised; the slice ends with `sdk`.
+    let sdk_bytes = unsafe {
+        std::slice::from_raw_parts(
+            std::ptr::from_ref(&sdk).cast::<u8>(),
+            size_of::<BITMAPV5HEADER>(),
+        )
+    };
+    assert_eq!(
+        &dib[..size_of::<BITMAPV5HEADER>()],
+        sdk_bytes,
+        "the header written for CF_DIBV5 matches the SDK layout (sRGB, LCS_GM_IMAGES)"
+    );
+}
+
 #[test]
 fn png_to_dibv5_expands_gray_and_rgb() {
     let gray = png_to_dibv5(&make_png(png::ColorType::Grayscale, 1, 1, &[7])).expect("gray");

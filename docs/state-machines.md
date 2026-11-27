@@ -429,10 +429,11 @@ Hybrid. `RemoteCursor { desktop: Desktop, pointer: Pointer, shape: Option<HICON>
 LogGate }` combines explicit pointer selection with implicit handle ownership. Connected
 resets selection to default. A usable shape creates a new icon; if the old icon is
 active, Windows receives the replacement before the old icon is destroyed. Creation
-failure selects default. Drop destroys the owned shape.
+failure selects default. Drop destroys the owned shape, and sets the system arrow first
+when that shape is the active cursor.
 
-Invariant: replacement ordering matters because destroying the active cursor during
-replacement is unsafe. Pure cursor-image validation is separate from native icon
+Invariant: ordering matters because destroying the active cursor, on replacement or on
+drop, is unsafe. Pure cursor-image validation is separate from native icon
 replacement. [Cursor lifetime][cursor].
 
 ## Clipboard ownership, promises, and transfers
