@@ -37,5 +37,9 @@ windows.workspace = true
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread", "test-util"] }
 
+# DROPFILES, for the test that checks the CF_HDROP header against it.
+[target.'cfg(windows)'.dev-dependencies]
+windows = { workspace = true, features = ["Win32_UI_Shell"] }
+
 [build-dependencies]
 embed-resource = "3"
