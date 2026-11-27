@@ -7,6 +7,10 @@ release, see [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
 
 ## [Unreleased]
 
+- When the client exits while the remote pointer shape is showing, it now
+  puts the system arrow back before it frees that shape. Before, it freed
+  the cursor Windows was still using, which Windows leaves undefined.
+  ([#68](https://github.com/wynandt/gliff-win/issues/68))
 - With an ssh helper such as a `ProxyCommand` or `ProxyJump` in the ssh
   config, closing the window while a link had stopped answering hid the
   window, but the client kept running in the background until the helper

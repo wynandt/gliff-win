@@ -105,14 +105,6 @@ impl RemoteCursor {
         unsafe { SetCursor(cursor) };
         true
     }
-
-    fn drop_shape(&mut self) {
-        if let Some(icon) = self.shape.take() {
-            // SAFETY: made by CreateIconIndirect and owned here alone. A
-            // cursor still set is replaced on the next WM_SETCURSOR.
-            let _ = unsafe { DestroyIcon(icon) };
-        }
-    }
 }
 
 impl Default for RemoteCursor {
@@ -123,7 +115,21 @@ impl Default for RemoteCursor {
 
 impl Drop for RemoteCursor {
     fn drop(&mut self) {
-        self.drop_shape();
+        let Some(icon) = self.shape.take() else {
+            return;
+        };
+        // Platform: destroying the cursor on screen is undefined, so the system arrow goes in first.
+        // SAFETY: GetCursor only reads the thread's cursor.
+        let active = unsafe { GetCursor() };
+        if active.0 == icon.0 {
+            // SAFETY: IDC_ARROW is a system cursor; no module handle.
+            let arrow = unsafe { LoadCursorW(None, IDC_ARROW) }.ok();
+            // SAFETY: a system cursor or none.
+            unsafe { SetCursor(arrow) };
+        }
+        // SAFETY: made by CreateIconIndirect, owned here alone, and no
+        // longer the active cursor.
+        let _ = unsafe { DestroyIcon(icon) };
     }
 }
 
