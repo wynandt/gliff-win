@@ -176,3 +176,62 @@ fn make_cursor(image: &CursorImage) -> windows::core::Result<HICON> {
     }
     icon
 }
+
+#[cfg(test)]
+mod tests {
+    use bytes::Bytes;
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::UI::WindowsAndMessaging::DestroyIcon;
+    use windows::Win32::UI::WindowsAndMessaging::GetCursor;
+
+    use super::RemoteCursor;
+    use crate::cursor_image::CursorImage;
+    use crate::cursor_image::Desktop;
+
+    /// A 2x2 shape with one opaque pixel, which `CursorImage::usable` accepts.
+    fn usable_image() -> CursorImage {
+        let mut argb = vec![0u8; 2 * 2 * 4];
+        argb[3] = 0xFF;
+        CursorImage {
+            id: 1,
+            width: 2,
+            height: 2,
+            hot: (0, 0),
+            argb: Bytes::from(argb),
+        }
+    }
+
+    #[test]
+    fn drop_never_destroys_the_active_cursor() {
+        let mut cursor = RemoteCursor::new();
+        cursor.connected(Desktop::Mirror);
+        cursor.shape(&usable_image());
+        let icon = cursor.shape.expect("a usable image makes a cursor");
+        assert!(
+            cursor.on_set_cursor(HWND::default()),
+            "WM_SETCURSOR is handled"
+        );
+        // SAFETY: GetCursor only reads the thread's cursor.
+        let before = unsafe { GetCursor() };
+        assert_eq!(
+            before.0, icon.0,
+            "the shape is the thread's cursor before the drop"
+        );
+
+        drop(cursor);
+
+        // SAFETY: GetCursor only reads the thread's cursor.
+        let after = unsafe { GetCursor() };
+        assert_ne!(
+            after.0, icon.0,
+            "the drop left the icon it destroys as the thread's cursor"
+        );
+        // SAFETY: the handle is no longer owned by anything; a second
+        // DestroyIcon on a destroyed icon fails without side effects.
+        let again = unsafe { DestroyIcon(icon) };
+        assert!(
+            again.is_err(),
+            "the drop destroyed the icon, so a second DestroyIcon fails"
+        );
+    }
+}
